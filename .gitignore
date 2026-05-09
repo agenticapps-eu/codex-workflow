@@ -13,3 +13,4 @@ venv/
 .vscode/
 .planning/cache/
 .planning/state/
+session-handoff.md
