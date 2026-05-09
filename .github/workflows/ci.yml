@@ -1,0 +1,16 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  phase-0:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Phase 0 — bootstrap-only
+        run: |
+          echo "phase-0: trivial CI placeholder; real checks land in Phase 7"
+          exit 0
