@@ -1,0 +1,130 @@
+# ADR-0003 — GSD entry points are skills, not prompts
+
+- Status: Accepted
+- Date: 2026-05-09
+- Phase: 0 (research)
+- Implements (eventual) spec: `agenticapps-workflow-core` v0.1.0
+- Supersedes: —
+- Superseded by: —
+
+## Context
+
+The `codex-workflow-prompt.md` hand-off plans a `prompts/` directory at
+the repo root containing five GSD entry-point templates:
+`gsd-discuss-phase`, `gsd-plan-phase`, `gsd-execute-phase`, `gsd-quick`,
+`gsd-debug`. Users would invoke them as `/prompts:gsd-discuss-phase {N}`,
+mirroring Claude Code's slash-command surface.
+
+This assumed Codex has a native `prompts/` idiom analogous to Claude
+Code's `~/.claude/skills/<skill>/` plus the harness's slash-command
+expansion. Phase 0 research confirms it does not.
+
+## Findings
+
+1. **Codex has no separate `prompts/` directory.** Skills live in
+   `$CODEX_HOME/skills/`; there is no peer directory the loader
+   inspects for prompt templates.
+
+2. **The functional analog is a skill with `policy.allow_implicit_invocation: false`.**
+   From `~/.codex/skills/.system/skill-creator/references/openai_yaml.md`
+   line 47–49:
+
+   > `policy.allow_implicit_invocation`: When false, the skill is not
+   > injected into the model context by default, but can still be
+   > invoked explicitly via `$skill`. Defaults to true.
+
+   This is exactly the semantics the codex-workflow prompt wanted:
+   user types `$gsd-discuss-phase`, the skill activates, the templated
+   prompt runs. No background context cost when not invoked.
+
+3. **`default_prompt` in `agents/openai.yaml` provides the templated
+   prompt body.** From the same reference, line 41:
+
+   > `interface.default_prompt`: Default prompt snippet inserted when
+   > invoking the skill.
+
+   So `default_prompt: "Use $gsd-discuss-phase to run the GSD discuss
+   step for phase {N}…"` becomes the user's starting prompt when they
+   invoke the skill.
+
+4. **Five skills > one skill with five modes.** A unified
+   `gsd-orchestrator` skill with a `mode` argument was considered. It
+   was rejected because Codex's invocation surface (`$skill-name`) is
+   simplest when each user-facing verb maps to its own skill: typing
+   `$gsd-debug` is more discoverable than `$gsd-orchestrator
+   --mode=debug`, and the description-routed loader can be more
+   precise about when each is appropriate.
+
+## Decision
+
+**GSD entry points ship as five skills under `skills/gsd-*/`.**
+
+| Skill | Frontmatter `name` | `policy.allow_implicit_invocation` | Notes |
+|---|---|---|---|
+| Discuss | `gsd-discuss-phase` | `false` | Surfaces open questions; produces `CONTEXT.md` |
+| Plan | `gsd-plan-phase` | `false` | Produces `PLAN.md`, `RESEARCH.md`, optionally `UI-SPEC.md` |
+| Execute | `gsd-execute-phase` | `false` | Heavyweight; orchestrates wave-based execution |
+| Quick | `gsd-quick` | `false` | Tiny/small tasks bypassing full phase planning |
+| Debug | `gsd-debug` | `false` | Auto-invokes `codex-systematic-debugging` |
+
+All five carry `agents/openai.yaml` with `default_prompt` that names
+the skill (per the openai.yaml reference's "must explicitly mention
+the skill as `$skill-name`" rule).
+
+The repo's top-level `prompts/` directory is **not created**.
+
+## Consequences
+
+- **Phase 7 verification block.** The original prompt's verification
+  expects `test "$(ls prompts/*.md 2>/dev/null | wc -l)" -ge 4`. Per
+  this ADR, that line is replaced with:
+  `test "$(ls -d skills/gsd-*/SKILL.md 2>/dev/null | wc -l)" -ge 5`
+  Documented in `CHANGELOG.md`'s Phase 7 entry when the verification
+  block runs.
+
+- **Trigger skill body.** The `agentic-apps-workflow` trigger skill's
+  Step 2 (route to entry point) references `$gsd-discuss-phase` etc.
+  rather than `/prompts:gsd-discuss-phase`. This matches Codex's
+  native invocation idiom.
+
+- **Single uniform surface.** All twenty-or-so artifacts in the
+  scaffolder (1 trigger + 13 gate skills + 5 GSD entry-point skills +
+  2 lifecycle skills) are skills. The repo's `skills/` tree is the
+  one place to look. Easier to reason about, easier to install,
+  easier to grep for conformance.
+
+- **Policy field requires `agents/openai.yaml`.** Each GSD entry-point
+  skill must include a minimal `agents/openai.yaml` with at least:
+
+  ```yaml
+  interface:
+    default_prompt: "Use $<skill-name> to <action>."
+  policy:
+    allow_implicit_invocation: false
+  ```
+
+  The 13 gate-fulfilling skills do NOT need this — they want implicit
+  invocation (the trigger skill should auto-invoke them). Only the GSD
+  entry-points need explicit-only invocation, because they are
+  user-typed slash-command-equivalents.
+
+## Verification
+
+- `~/.codex/skills/.system/skill-creator/references/openai_yaml.md`
+  lines 7–14 (full example with `interface.default_prompt`),
+  lines 47–49 (`policy.allow_implicit_invocation` semantics).
+- `~/.codex/skills/.system/skill-creator/SKILL.md` lines 82–90
+  (agents/openai.yaml is recommended, generated by `init_skill.py`,
+  validated against `references/openai_yaml.md`).
+
+## Open follow-ups
+
+- **F1** — When Phase 2 authors `gsd-execute-phase`, verify whether
+  the heavy orchestration logic fits inside a SKILL.md or needs to
+  spread across `references/` files. The skill-creator pattern (lean
+  SKILL.md + reference files for variants) suggests the latter.
+- **F2** — Confirm during dogfood (Phase 6) that
+  `policy.allow_implicit_invocation: false` actually prevents Codex
+  from auto-loading the GSD skills' contexts in unrelated sessions.
+  If implicit invocation still leaks through, document the workaround
+  in a follow-up ADR.
