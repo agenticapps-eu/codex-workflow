@@ -45,14 +45,34 @@ in every shipped artifact's frontmatter.
     TDD commit pairs, Stage 2 evidence, per-`must_have` evidence,
     and `implements_spec` currency)
 
+- Phase 2 — 13 gate-fulfilling skills
+  - Each skill cites `implements_spec: 0.1.0` and an `implements_gate`
+    field naming the spec/02 gate(s) it satisfies. Codex's loader reads
+    only `name` and `description`; the extension fields are ignored at
+    load and read by conformance audits per ADR-0001 D6.
+  - **Every-phase skills** — `codex-tdd` (RED + GREEN commit pair),
+    `codex-verification` (refuses completion without `must_have`
+    evidence per spec/06), `codex-spec-review` (Stage 1 of the
+    two-stage review per spec/07), `codex-code-review` (Stage 2,
+    spawns independent reviewer via `codex exec` per ADR-0002)
+  - **Pre-phase + design** — `codex-brainstorming` (≥2 named
+    alternatives for UI or architecture per spec/02), `codex-design-shotgun`
+    (≥3 visual variants), `codex-design-critique` (impeccable-style
+    7-dimension scoring + 24-anti-pattern scan per ADR-0011)
+  - **Security + QA** — `codex-cso` (OWASP-aligned phase audit),
+    `codex-qa` (dual-mode: per-task `ui-preview` + post-phase
+    `qa`), `codex-impeccable-audit` (post-implementation visual
+    audit, blocks branch close on Red findings per ADR-0011),
+    `codex-database-sentinel-audit` (dual-mode: phase-scoped sub-gate
+    + pre-launch full-surface, blocks on Critical/High per ADR-0012)
+  - **Methodology + finishing** — `codex-systematic-debugging`
+    (Observe → Hypothesize → Test → Conclude four-phase protocol;
+    not bound to a spec gate, invoked by `$gsd-debug`),
+    `codex-finishing-branch` (composes PR description from phase
+    artifacts; opens PR via `gh`)
+
 ### Pending
 
-- Phase 2 — 13 gate-fulfilling skills (`codex-brainstorming`,
-  `codex-tdd`, `codex-verification`, `codex-spec-review`,
-  `codex-code-review`, `codex-design-shotgun`, `codex-design-critique`,
-  `codex-cso`, `codex-qa`, `codex-impeccable-audit`,
-  `codex-database-sentinel-audit`, `codex-systematic-debugging`,
-  `codex-finishing-branch`)
 - Phase 3 — 5 GSD entry-point skills (per ADR-0003: skills, not prompts)
 - Phases 4–7 — setup/update lifecycle, migration framework, install.sh,
   self-applied workflow, v0.1.0 release
