@@ -1,0 +1,102 @@
+{
+  "$schema": "https://github.com/agenticapps-eu/codex-workflow/blob/main/templates/config-hooks.schema.json",
+  "implements_spec": "0.1.0",
+  "host": "codex",
+  "hooks": {
+    "pre_phase": {
+      "brainstorm_ui": {
+        "skill": "codex-brainstorming",
+        "mode": "ui",
+        "fires_when": "phase has UI plan and CONTEXT.md lacks Design alternatives section"
+      },
+      "brainstorm_architecture": {
+        "skill": "codex-brainstorming",
+        "mode": "architecture",
+        "fires_when": "phase introduces new service/model/integration/data shape and CONTEXT.md or RESEARCH.md lacks Architecture alternatives section"
+      },
+      "design_shotgun": {
+        "skill": "codex-design-shotgun",
+        "fires_when": "phase has UI plan and no UI-SPEC.md exists for the surface",
+        "min_variants": 3
+      },
+      "design_critique": {
+        "skill": "codex-design-critique",
+        "fires_when": "UI plan has UI-SPEC.md before implementation, OR as filter step in design-shotgun",
+        "quality_bar": 90
+      }
+    },
+    "per_task": {
+      "tdd": {
+        "skill": "codex-tdd",
+        "fires_when": "task carries tdd=\"true\" marker",
+        "commit_pair": ["test(RED):", "feat(GREEN):"]
+      },
+      "ui_preview": {
+        "skill": "codex-qa",
+        "mode": "preview",
+        "fires_when": "task modifies a frontend component, route, or visual surface"
+      },
+      "verification": {
+        "skill": "codex-verification",
+        "fires_when": "always — before any task transitions to complete",
+        "permitted_evidence_shapes": [
+          "test_output",
+          "grep_result",
+          "curl_response",
+          "screenshot_path",
+          "file_existence",
+          "diff_snippet"
+        ]
+      }
+    },
+    "post_phase": {
+      "spec_review": {
+        "skill": "codex-spec-review",
+        "fires_when": "always — after all tasks complete, before phase verification",
+        "stage": 1
+      },
+      "code_review": {
+        "skill": "codex-code-review",
+        "fires_when": "always — after spec_review, in independent agent context",
+        "stage": 2,
+        "mechanism": "codex exec child process",
+        "reviewer_model_env_var": "REVIEWER_MODEL"
+      },
+      "security": {
+        "skill": "codex-cso",
+        "fires_when": "diff touches auth, storage, request handling, secrets, LLM trust boundaries",
+        "sub_gates": [
+          {
+            "skill": "codex-database-sentinel-audit",
+            "mode": "phase-scoped",
+            "fires_when": "scope matches supabase|postgres|mongodb|firebase|mysql",
+            "blocking_severity": ["Critical", "High"]
+          }
+        ]
+      },
+      "qa": {
+        "skill": "codex-qa",
+        "mode": "phase-qa",
+        "fires_when": "phase ships user-visible behavior AND dev server reachable on local port"
+      },
+      "impeccable_audit": {
+        "skill": "codex-impeccable-audit",
+        "fires_when": "diff modifies visual surface of shipping UI",
+        "blocking_severity": ["Red"]
+      }
+    },
+    "finishing": {
+      "db_pre_launch_audit": {
+        "skill": "codex-database-sentinel-audit",
+        "mode": "pre-launch",
+        "fires_when": "before first production launch, after major DB migration",
+        "scope": "full-surface",
+        "blocking_severity": ["Critical", "High"]
+      },
+      "branch_close": {
+        "skill": "codex-finishing-branch",
+        "fires_when": "feature branch ready to merge"
+      }
+    }
+  }
+}

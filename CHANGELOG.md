@@ -136,9 +136,39 @@ in every shipped artifact's frontmatter.
     stable scaffolder path; idempotent; refuses to clobber non-symlink
     directories; `--copy` and `--dry-run` flags
 
+- Phase 6 — Self-applied workflow + dogfood
+  - **Real `bash install.sh`** run against `~/.codex/skills/`. 22
+    entries created (21 skill symlinks + 1 templates symlink).
+    Idempotent re-run confirms 0 installed / 22 skipped.
+  - **AGENTS.md populated** — placeholder replaced with the
+    populated structure (Development Workflow, Workflow Enforcement
+    Hooks table marking which gates apply to the scaffolder vs which
+    don't, Skill routing, Session handoff)
+  - **`.planning/config.json`** seeded from
+    `templates/config-hooks.json`
+  - **`.codex/workflow-config.md`** authored with substituted values
+    for codex-workflow's own metadata (project = codex-workflow,
+    no UI, no DB, no dev server — gates whose triggers can't fire
+    are documented as Spec Deltas in ENFORCEMENT-PLAN, NOT a
+    `partial` conformance claim per spec/09)
+  - **`.codex/workflow-version.txt`** = `0.1.0` (the durable record
+    that `update-codex-agenticapps-workflow` will read on future
+    upgrades)
+  - **`docs/decisions/README.md`** — index of the three Phase 0 ADRs
+  - **`docs/ENFORCEMENT-PLAN.md`** — gate-to-skill bindings for
+    codex-workflow's own development; explicitly enumerates the 8
+    gates that don't fire on this scaffolder (with rationale per
+    spec/09); claims `full` conformance
+  - **`docs/dogfood-2026-05-10.md`** — log of the Phase 6 self-apply
+    plus a walk-through of a `$gsd-quick` micro-cycle (the README
+    refresh that's part of this PR); records the open follow-ups
+    for the AGENTS.md root-down concat verification and the
+    `policy.allow_implicit_invocation: false` empirical check
+  - **README refresh** (the dogfood micro-cycle) — Status, What
+    ships, Layout, and Install sections updated to reflect the
+    actual shipped state
+
 ### Pending
 
-- Phase 6 — Self-applied workflow (codex-workflow's own AGENTS.md
-  populated; ENFORCEMENT-PLAN.md authored; dogfood log)
 - Phase 7 — v0.1.0 tag, repo flip to public, reference-implementations
   README update in core, follow-up issue in agenticapps-dashboard
