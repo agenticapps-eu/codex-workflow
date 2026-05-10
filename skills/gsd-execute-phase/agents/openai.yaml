@@ -1,0 +1,7 @@
+interface:
+  display_name: "GSD: Execute phase"
+  short_description: "Wave-execute PLAN.md with gates and verification"
+  default_prompt: "Use $gsd-execute-phase to wave-execute phase {N} from PLAN.md, fire all applicable spec/02 gates, and refuse task completion without verification evidence."
+
+policy:
+  allow_implicit_invocation: false

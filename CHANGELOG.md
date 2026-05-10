@@ -71,8 +71,32 @@ in every shipped artifact's frontmatter.
     `codex-finishing-branch` (composes PR description from phase
     artifacts; opens PR via `gh`)
 
+- Phase 3 — 5 GSD entry-point skills (per ADR-0003: skills, not prompts)
+  - Each skill ships as `skills/gsd-<verb>/SKILL.md` plus
+    `agents/openai.yaml` carrying
+    `policy.allow_implicit_invocation: false` and a
+    `default_prompt` that names the skill as `$gsd-<verb>` per the
+    Codex `openai_yaml.md` reference's explicit-mention rule.
+  - **`gsd-discuss-phase`** — surfaces open questions, writes
+    `CONTEXT.md` with resolved decisions; routes to
+    `codex-brainstorming` when a brainstorm gate fires
+  - **`gsd-plan-phase`** — reads `CONTEXT.md`, decomposes into
+    tasks with gate triggers and must_haves, authors `PLAN.md`
+    plus `RESEARCH.md` / `UI-SPEC.md` as needed; pre-flight checks
+    that every required `codex-*` skill is installed
+  - **`gsd-execute-phase`** — heavyweight wave executor; emits
+    commitment block per task, fires applicable spec/02 gates,
+    refuses task completion without `codex-verification` evidence,
+    runs the post-phase pipeline (spec-review → code-review →
+    security/qa/audits) and finishes with `codex-finishing-branch`
+  - **`gsd-quick`** — for tiny/small tasks; minimal commitment
+    block + direct route to `codex-tdd` / `codex-verification` /
+    `codex-finishing-branch`; refuses medium/large tasks and
+    routes to `gsd-discuss-phase` instead
+  - **`gsd-debug`** — thin user-facing entry that hands off to
+    `codex-systematic-debugging` (the four-phase protocol)
+
 ### Pending
 
-- Phase 3 — 5 GSD entry-point skills (per ADR-0003: skills, not prompts)
 - Phases 4–7 — setup/update lifecycle, migration framework, install.sh,
   self-applied workflow, v0.1.0 release

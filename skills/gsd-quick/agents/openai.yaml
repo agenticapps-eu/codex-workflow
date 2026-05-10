@@ -1,0 +1,7 @@
+interface:
+  display_name: "GSD: Quick task"
+  short_description: "Tiny/small task with discipline, no phase planning"
+  default_prompt: "Use $gsd-quick to run a tiny or small task — emit the commitment block, route to TDD/verification/branch-close, no full phase planning."
+
+policy:
+  allow_implicit_invocation: false

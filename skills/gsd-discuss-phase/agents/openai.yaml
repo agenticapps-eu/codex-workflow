@@ -1,0 +1,7 @@
+interface:
+  display_name: "GSD: Discuss phase"
+  short_description: "Surface open questions and write CONTEXT.md"
+  default_prompt: "Use $gsd-discuss-phase to run the GSD discuss step for phase {N} — surface open questions and write CONTEXT.md."
+
+policy:
+  allow_implicit_invocation: false
