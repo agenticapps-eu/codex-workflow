@@ -96,7 +96,49 @@ in every shipped artifact's frontmatter.
   - **`gsd-debug`** — thin user-facing entry that hands off to
     `codex-systematic-debugging` (the four-phase protocol)
 
+- Phases 4 + 5 — Lifecycle skills, migration framework, templates, install.sh
+  - **Templates** at `templates/` — five project-side artifacts that
+    setup copies into a fresh project:
+    - `agents-md-additions.md` — workflow sections for project AGENTS.md
+    - `workflow-config.md` — project-specific config with
+      `{{PLACEHOLDERS}}` (project name / repo / client / budget /
+      backend / frontend / database / LLM / quality bars / etc.)
+    - `config-hooks.json` — `.planning/config.json` template binding
+      every spec/02 gate to its `codex-*` skill
+    - `adr-db-security-acceptance.md` — ADR template for accepting
+      database-sentinel Critical/High findings (per ADR-0012)
+    - `global-agents-additions.md` — optional `~/.codex/AGENTS.md`
+      append for Option A install
+  - **Migration framework** at `migrations/` — implements the
+    declarative contract from
+    `agenticapps-workflow-core/spec/08-migration-format.md`:
+    - `README.md` — host-side manifestation of the migration format
+      contract, with Codex paths
+    - `0000-baseline.md` — six-step baseline migration (project
+      workflow-config, .planning/config.json, AGENTS.md sections,
+      docs/decisions/README.md, .codex/workflow-version.txt, optional
+      global AGENTS.md additions)
+    - `run-tests.sh` — fixture-based test harness; SKIPs the
+      interactive-only baseline; runs repo layout sanity checks
+    - `test-fixtures/README.md` — fixture contract (extract from git
+      refs rather than static fixture files)
+  - **Lifecycle skills** at `skills/`:
+    - `setup-codex-agenticapps-workflow` — apply baseline migration
+      to a fresh project; pre-flights Codex CLI + scaffolder install;
+      gathers placeholder values; refuses to re-run on installed
+      project
+    - `update-codex-agenticapps-workflow` — apply pending migrations
+      between project's recorded version and scaffolder version;
+      supports `--dry-run`, `--migration NNNN`, `--from VERSION`
+  - **`install.sh`** — symlinks every `skills/<name>/` into
+    `$CODEX_HOME/skills/<name>/` (default `~/.codex/skills/`) plus a
+    `templates/` symlink so migration apply steps can `cp` from a
+    stable scaffolder path; idempotent; refuses to clobber non-symlink
+    directories; `--copy` and `--dry-run` flags
+
 ### Pending
 
-- Phases 4–7 — setup/update lifecycle, migration framework, install.sh,
-  self-applied workflow, v0.1.0 release
+- Phase 6 — Self-applied workflow (codex-workflow's own AGENTS.md
+  populated; ENFORCEMENT-PLAN.md authored; dogfood log)
+- Phase 7 — v0.1.0 tag, repo flip to public, reference-implementations
+  README update in core, follow-up issue in agenticapps-dashboard
