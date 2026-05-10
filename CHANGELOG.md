@@ -9,7 +9,52 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
-### Added
+### Pending
+
+- v0.1.1 / v0.2.0 follow-ups
+  - Restructure `install.sh` symlink mode so it does not write a
+    secondary symlink inside the source tree (move templates into
+    `skills/setup-codex-agenticapps-workflow/templates/` permanently;
+    drop the secondary symlink step). See
+    `docs/dogfood-2026-05-10.md`.
+  - Empirical confirmation of `policy.allow_implicit_invocation: false`
+    on the five GSD entry-point skills (the Codex loader respects the
+    flag, but a fresh-session test has not yet run).
+  - Empirical confirmation of AGENTS.md root-down concat depth on
+    Codex 0.130.0 (per ADR-0001 appendix A2).
+  - Plugin packaging — re-evaluate after Donald uses codex-workflow
+    in the wild for a few cycles (per ADR-0001 F2).
+  - Cross-host Stage 2 review via Claude Code MCP (per ADR-0002
+    Option B; v0.1.0 ships `codex exec` only).
+
+## [0.1.0] — 2026-05-10
+
+Initial release. Full-conformance Codex CLI host implementation of
+[`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
+v0.1.0. Sibling of [`claude-workflow`](https://github.com/agenticapps-eu/claude-workflow)
+and [`pi-agentic-apps-workflow`](https://github.com/agenticapps-eu/pi-agentic-apps-workflow).
+
+### Inventory
+
+- 1 trigger skill — `agentic-apps-workflow` (canonical-prose blocks
+  byte-matched against spec/01, /03, /04, /05)
+- 13 gate-fulfilling skills — every spec/02 gate has a binding
+- 5 GSD entry-point skills — explicit-only via
+  `policy.allow_implicit_invocation: false`
+- 2 lifecycle skills — `setup-codex-agenticapps-workflow`,
+  `update-codex-agenticapps-workflow`
+- 5 project-side templates
+- Migration framework — `0000-baseline.md`, `run-tests.sh`,
+  `test-fixtures/`, `README.md` (implements
+  spec/08-migration-format.md)
+- `install.sh` — symlinks skills into `$CODEX_HOME/skills/`
+- 3 architecture decision records
+- `docs/ENFORCEMENT-PLAN.md` documenting `full` conformance with
+  Spec Deltas for gates whose triggers cannot occur on a UI-less
+  DB-less scaffolder (per spec/09)
+- `docs/dogfood-2026-05-10.md` — Phase 6 self-apply log
+
+### Phase-by-phase
 
 - Phase 0 — Repo bootstrap and Codex CLI research
   - README skeleton, MIT LICENSE, .gitignore, AGENTS.md placeholder
@@ -168,7 +213,12 @@ in every shipped artifact's frontmatter.
     ships, Layout, and Install sections updated to reflect the
     actual shipped state
 
-### Pending
-
-- Phase 7 — v0.1.0 tag, repo flip to public, reference-implementations
-  README update in core, follow-up issue in agenticapps-dashboard
+- Phase 7 — Release
+  - This CHANGELOG entry; final README pass
+  - `v0.1.0` git tag
+  - Repo flipped from private to public
+  - Sibling PR against `agenticapps-workflow-core` updating the
+    `reference-implementations/README.md` codex-workflow row from
+    "repo not yet created" to "v0.1.0 shipped, full-conformance"
+  - Follow-up issue opened against `agenticapps-dashboard` for
+    Codex host detection in HostAdapter
