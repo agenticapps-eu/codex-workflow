@@ -134,10 +134,13 @@ test_migration_0001() {
   fi
 
   # Mirror byte-identity vs core spec (only when the core spec repo is present).
+  # Extract the canonical block FENCE-RELATIVE (content between the two four-backtick
+  # fences) rather than by hardcoded line numbers — robust to spec edits that shift
+  # line numbers (e.g. core 10f2c96 added blank lines around the anti-pattern lists).
   local core="$REPO_ROOT/../agenticapps-workflow-core/spec/11-coding-discipline.md"
   if [ -f "$core" ]; then
-    if diff -q <(sed -n '27,101p' "$core") "$mirror" >/dev/null 2>&1; then
-      echo "  ${GREEN}PASS${RESET} mirror == core spec §11 canonical block (verbatim)"
+    if diff -q <(awk '/^````$/{f++; next} f==1{print}' "$core") "$mirror" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} mirror == core spec §11 canonical block (verbatim, fence-relative)"
       PASS=$((PASS+1))
     else
       echo "  ${RED}FAIL${RESET} mirror has drifted from core spec §11"
@@ -320,6 +323,39 @@ JSON
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0004 — Re-vendor §11 mirror (blank-line drift fix)
+# The live AGENTS.md §11 block MUST match the (corrected) mirror, and the mirror
+# MUST match current core §11 (checked fence-relative in test_migration_0001).
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0004() {
+  echo ""
+  echo "${YELLOW}=== Migration 0004 — Re-vendor §11 mirror ===${RESET}"
+  local mirror="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+
+  # The scaffolder's own AGENTS.md §11 block must be byte-identical to the
+  # corrected mirror (this is the post-0004 invariant + the idempotency check).
+  if awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' "$REPO_ROOT/AGENTS.md" \
+       | diff -q - "$mirror" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} AGENTS.md §11 block == corrected mirror (re-vendor applied)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} AGENTS.md §11 block differs from the corrected mirror"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The mirror must be the 79-line (post-10f2c96) shape, not the stale 75-line one.
+  local n; n=$(wc -l < "$mirror" | tr -d ' ')
+  if [ "$n" -ge 79 ]; then
+    echo "  ${GREEN}PASS${RESET} mirror is the current ($n-line) core §11 shape"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} mirror is the stale shape ($n lines; expected ≥79)"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -362,6 +398,7 @@ test_repo_layout() {
     migrations/0001-inject-spec-11-coding-discipline.md \
     migrations/0002-add-ts-declare-first-skill.md \
     migrations/0003-delegate-observability.md \
+    migrations/0004-revendor-spec-11.md \
     migrations/test-fixtures/README.md \
     vendor/agenticapps-shared/migrations/lib/helpers.sh \
     vendor/agenticapps-shared/migrations/lib/drift-test.sh \
@@ -401,6 +438,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0003" ]; then
   test_migration_0003
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0004" ]; then
+  test_migration_0004
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

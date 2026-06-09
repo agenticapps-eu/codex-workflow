@@ -9,15 +9,37 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
-### Pending
-
-- Land the `agenticapps-workflow-core` reference-implementations PR flipping the
-  codex-workflow row to spec 0.4.0 / full (cross-repo).
-
 ### Backlog (beyond conformance)
 
 - Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
 - Cross-host Stage 2 review via Claude Code MCP (ADR-0002 Option B).
+- Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
+  §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
+  Codex) would remove migration 0003's relocate round-trip.
+
+## [0.2.1] — 2026-06-09
+
+### Fixed
+- **§11 mirror byte-drift vs current core (migration `0004`).** The v0.2.0
+  mirror was vendored from a stale local checkout of `agenticapps-workflow-core`;
+  core `10f2c96` (merged via core #12) had added blank lines around the §11
+  anti-pattern lists (block 75 → 79 lines, fence 26–102 → 26–106), so the
+  shipped mirror + `AGENTS.md` block had drifted from the authoritative core
+  §11 — a canonical-prose conformance defect (§09 item 1). Migration `0004`
+  (`0.2.0 → 0.2.1`, additive to `implements_spec` which stays `0.4.0`)
+  re-vendors the mirror byte-identical to current core and re-injects the
+  corrected block into `AGENTS.md`.
+- **Harness hardened against recurrence.** `run-tests.sh` now extracts the
+  canonical block **fence-relative** (between the four-backtick fences) instead
+  of by hardcoded line numbers, so future spec line-shifts cannot silently
+  reintroduce the drift; `test_migration_0004` asserts the live `AGENTS.md`
+  block matches the corrected (79-line) mirror. `run-tests.sh`: PASS 46 / FAIL
+  0 / SKIP 1.
+
+### Changed
+- Scaffolder `version` `0.2.0 → 0.2.1` (trigger SKILL.md + `.codex/workflow-version.txt`).
+  `implements_spec` unchanged at `0.4.0` (10f2c96 is a markdown-clean patch, not
+  a spec version bump).
 
 ## [0.2.0] — 2026-06-09
 

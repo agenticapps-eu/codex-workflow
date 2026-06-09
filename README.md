@@ -10,16 +10,16 @@ as native Codex skills.
 
 ## Status
 
-**v0.2.0 / `agenticapps-workflow-core` spec 0.4.0 — catch-up complete
-(tag pending Phase 7).** Builds on v0.1.0 (full conformance to spec
-0.1.0) by absorbing the 0.2.0→0.4.0 spec deltas: **§11 Coding
-Discipline** (canonical prose in `AGENTS.md`), **§13 declare-first
-TypeScript** (`codex-ts-declare-first`), **§12 authoring conventions**
-(surgical Mermaid), and **§10 observability** (delegated to the
-standalone `agenticapps-observability` skill). The trigger skill, 14
+**v0.2.1 / `agenticapps-workflow-core` spec 0.4.0 — shipped.** Builds on
+v0.1.0 (full conformance to spec 0.1.0) by absorbing the 0.2.0→0.4.0 spec
+deltas: **§11 Coding Discipline** (canonical prose in `AGENTS.md`), **§13
+declare-first TypeScript** (`codex-ts-declare-first`), **§12 authoring
+conventions** (surgical Mermaid), and **§10 observability** (delegated to
+the standalone `agenticapps-observability` skill). The trigger skill, 14
 gate skills, 5 GSD entry-point skills, 2 lifecycle skills, migration
-framework (`0000`–`0003`), templates, and `install.sh` cite
-`implements_spec: 0.4.0`. The scaffolder self-applies its own workflow.
+chain (`0000`–`0004`), templates, and `install.sh` cite
+`implements_spec: 0.4.0`. (v0.2.1 patches a §11 mirror byte-drift vs
+current core — see CHANGELOG.) The scaffolder self-applies its own workflow.
 
 See `docs/decisions/` for architecture decisions, `docs/ENFORCEMENT-PLAN.md`
 for the gate-to-skill bindings on this scaffolder's own development,
@@ -49,7 +49,7 @@ and `CHANGELOG.md` for the artifact inventory at each tag.
   project's AGENTS.md / `.planning/` / `.codex/` configuration
 - **Migration framework** — implements
   `agenticapps-workflow-core/spec/08-migration-format.md`; ships
-  `0000-baseline.md` … `0003-delegate-observability.md` (contiguous
+  `0000-baseline.md` … `0004-revendor-spec-11.md` (contiguous
   chain), fixture-based test harness with a drift test, atomicity +
   idempotency contracts
 - **Templates** (under `skills/setup-codex-agenticapps-workflow/templates/`)
@@ -97,7 +97,7 @@ codex-workflow/
 ├── install.sh                  # symlinks skills/ into $CODEX_HOME/skills/
 ├── skills/                     # 1 trigger + 14 gate + 5 GSD + 2 lifecycle = 22
 │   └── setup-codex-agenticapps-workflow/templates/  # project-side templates + spec-mirrors
-├── migrations/                 # framework + 0000…0003 + run-tests.sh
+├── migrations/                 # framework + 0000…0004 + run-tests.sh
 ├── vendor/agenticapps-shared/  # submodule — shared migration test harness
 ├── docs/
 │   ├── ENFORCEMENT-PLAN.md     # gate bindings for this scaffolder's own dev
