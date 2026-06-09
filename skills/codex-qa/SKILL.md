@@ -1,7 +1,7 @@
 ---
 name: codex-qa
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: qa, ui-preview
 description: |
   Browser-driven QA in two modes. **ui-preview mode** (per-task,

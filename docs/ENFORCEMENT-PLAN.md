@@ -12,20 +12,34 @@ build-out (`docs/dogfood-2026-05-10.md`).
 ## Conformance claim
 
 `codex-workflow` claims **`full` conformance** to
-`agenticapps-workflow-core` v0.1.0 per spec/09 because:
+`agenticapps-workflow-core` v0.4.0 per spec/09 because:
 
-1. The trigger skill `agentic-apps-workflow` reproduces the four
-   canonical-prose blocks verbatim (byte-match verified during
-   Phase 1 — see PR #1).
-2. Every declarative-contract MUST in spec/02, /06, /07, /08 is
-   satisfied by some `codex-*` skill or by an `install.sh` /
-   migration-framework mechanism (see binding table below).
+1. The trigger skill `agentic-apps-workflow` reproduces the **five**
+   canonical-prose blocks verbatim — Step 0 Commitment Ritual,
+   Rationalization Table, Red Flags, Pressure-Test (spec/01,/03,/04,/05),
+   and **§11 Coding Discipline** (injected into `AGENTS.md` behind a
+   provenance anchor, byte-matched against the vendored mirror
+   `templates/spec-mirrors/11-coding-discipline-0.4.0.md`).
+2. Every declarative-contract MUST in spec/02, /06, /07, /08, **/10,
+   /12, /13** is satisfied by some `codex-*` skill, an `install.sh` /
+   migration-framework mechanism, or a delegation:
+   - **§10 (observability)** — delegated to the standalone
+     `agenticapps-observability` skill (see "§10 Observability —
+     delegated binding" below); a *satisfied* MUST per §09.
+   - **§12 (authoring conventions)** — branchy workflows newly
+     authored/edited at 0.4.0 render as Mermaid `flowchart`s
+     (`codex-ts-declare-first` refusals; trigger Step 2 routing).
+     Surgical scope per §12 (no bulk conversion required).
+   - **§13 (declare-first TS)** — `codex-ts-declare-first` skill
+     strengthens the `tdd` gate for new TS modules.
 3. Host-specific bindings exist for every gate **whose trigger
    condition can occur in this scaffolder's project type**. Gates
    whose triggers cannot occur are listed under "Spec Deltas" with
    the rationale per spec/09.
 4. `skills/agentic-apps-workflow/SKILL.md` carries
-   `implements_spec: 0.1.0` in frontmatter.
+   `implements_spec: 0.4.0` in frontmatter; the gate skills, GSD
+   entry-point skills, and lifecycle skills all cite
+   `implements_spec: 0.4.0`.
 5. Each phase produces CONTEXT.md / PLAN.md / VERIFICATION.md /
    REVIEW.md as well-formed, machine-discoverable artifacts. (For
    the build-out itself the artifacts live in PR descriptions and
@@ -41,6 +55,7 @@ build-out (`docs/dogfood-2026-05-10.md`).
 |---|---|---|---|
 | `brainstorm-architecture` | `codex-brainstorming` (architecture mode) | Adding a new skill, template, or migration | The Phase 0 ADR set is the reference shape |
 | `tdd` | `codex-tdd` | Any task adding logic to `install.sh` or `migrations/run-tests.sh` | Markdown content (skills, templates, ADRs) does not require TDD |
+| `tdd` (new TS module) | `codex-ts-declare-first` | A new TypeScript module's public API surface (spec §13) | Strengthens `tdd`: three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN). Does not fire on this markdown scaffolder; bound for downstream TS projects |
 | `verification` | `codex-verification` | Always — every PR | Evidence shapes here are typically grep results, file existence, and `run-tests.sh` output |
 | `spec-review` | `codex-spec-review` | Always — every PR | Stage 1 of two-stage review |
 | `code-review` | `codex-code-review` | Always — every PR | Stage 2; `codex exec` child process per ADR-0002 |
@@ -96,11 +111,6 @@ scaffolder): §10 *is* satisfied, by delegation.
 Setup/update guidance: `docs/observability-delegation.md`. Wiring:
 `migrations/0003-delegate-observability.md`. Cross-repo enabler:
 `agenticapps-observability` `install-codex.sh` (v0.12.0, PR #3).
-
-> Note: the "Conformance claim" section above still cites v0.1.0; the
-> claim is swept to 0.4.0 (with §11/§12/§13 rows) in Phase 5 of the
-> spec-0.4.0 catch-up. The trigger SKILL.md already carries
-> `implements_spec: 0.4.0` (Phase 1).
 
 ## Process notes
 

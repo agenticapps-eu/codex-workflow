@@ -1,7 +1,7 @@
 ---
 name: gsd-execute-phase
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   Heavyweight wave-based phase executor. Reads PLAN.md, walks tasks
   in wave order, fires the applicable spec/02 gates per task and per

@@ -20,3 +20,4 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0003](0003-gsd-entry-points-as-prompts.md) | GSD entry points are skills, not prompts | Accepted |
 | [0004](0004-observability-strategy.md) | §10 observability — delegate to agenticapps-observability via a Codex installer | Accepted |
 | [0005](0005-adopt-observability-architecture.md) | Adopt core ADR-0014 observability architecture (generator layer via delegation) | Accepted |
+| [0006](0006-secret-scanner-gitleaks.md) | Secret scanner: stay on gitleaks (adopt core ADR-0015) | Accepted |

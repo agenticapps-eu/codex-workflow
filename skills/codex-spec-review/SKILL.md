@@ -1,7 +1,7 @@
 ---
 name: codex-spec-review
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: spec-review
 description: |
   Stage 1 of the two-stage review: audit the phase's changeset against

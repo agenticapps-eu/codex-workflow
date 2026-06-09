@@ -1,6 +1,6 @@
 {
   "$schema": "https://github.com/agenticapps-eu/codex-workflow/blob/main/templates/config-hooks.schema.json",
-  "implements_spec": "0.1.0",
+  "implements_spec": "0.4.0",
   "host": "codex",
   "hooks": {
     "pre_phase": {

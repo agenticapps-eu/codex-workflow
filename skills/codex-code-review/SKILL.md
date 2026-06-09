@@ -1,7 +1,7 @@
 ---
 name: codex-code-review
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: code-review
 description: |
   Stage 2 of the two-stage review: spawn an independent reviewer in a

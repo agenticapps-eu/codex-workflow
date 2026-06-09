@@ -1,7 +1,7 @@
 ---
 name: codex-impeccable-audit
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: impeccable-audit
 description: |
   Post-implementation visual quality audit against the deployed

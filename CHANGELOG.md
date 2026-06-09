@@ -9,23 +9,67 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
-### Pending
+### Pending (Phase 6/7 of the 0.2.0 catch-up — still open at this entry)
 
-- v0.1.1 / v0.2.0 follow-ups
-  - Restructure `install.sh` symlink mode so it does not write a
-    secondary symlink inside the source tree (move templates into
-    `skills/setup-codex-agenticapps-workflow/templates/` permanently;
-    drop the secondary symlink step). See
-    `docs/dogfood-2026-05-10.md`.
-  - Empirical confirmation of `policy.allow_implicit_invocation: false`
-    on the five GSD entry-point skills (the Codex loader respects the
-    flag, but a fresh-session test has not yet run).
-  - Empirical confirmation of AGENTS.md root-down concat depth on
-    Codex 0.130.0 (per ADR-0001 appendix A2).
-  - Plugin packaging — re-evaluate after Donald uses codex-workflow
-    in the wild for a few cycles (per ADR-0001 F2).
-  - Cross-host Stage 2 review via Claude Code MCP (per ADR-0002
-    Option B; v0.1.0 ships `codex exec` only).
+- Restructure `install.sh` symlink mode so it does not write a secondary
+  symlink inside the source tree (Phase 6). See `docs/dogfood-2026-05-10.md`.
+- Record the two empirical checks (`policy.allow_implicit_invocation: false`
+  on a fresh Codex session; AGENTS.md root-down concat depth on Codex 0.130.0)
+  in the ADR appendices (Phase 6).
+- Adopt the `agenticapps-shared` submodule + unify the migration harness
+  (Phase 6).
+- Open the `agenticapps-workflow-core` reference-implementations PR flipping
+  the codex-workflow row to spec 0.4.0 / full (Phase 5 cross-repo / Phase 7).
+
+### Backlog (beyond conformance)
+
+- Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
+- Cross-host Stage 2 review via Claude Code MCP (ADR-0002 Option B).
+
+## [0.2.0] — 2026-06-09
+
+Catch-up to `agenticapps-workflow-core` **spec 0.4.0** (full conformance),
+from the 0.1.0 baseline. Feature-bearing minor: new canonical prose, a new
+skill, observability delegation, and surgical Mermaid. Migration chain
+`0001`–`0003` (contiguous; `0001` is the sole version/`implements_spec`
+bumper). `run-tests.sh`: PASS 41 / FAIL 0 / SKIP 1.
+
+### Added
+- **§11 Coding Discipline (canonical prose).** Reproduced verbatim in
+  `AGENTS.md` behind the provenance anchor
+  `<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->`; vendored
+  byte-identical mirror at `templates/spec-mirrors/11-coding-discipline-0.4.0.md`.
+  Migration `0001` (from 0.1.0 → 0.2.0) injects it and is the **sole bumper**
+  of `version` (→0.2.0) and `implements_spec` (→0.4.0). (Phase 1)
+- **§13 declare-first TypeScript.** New gate skill `codex-ts-declare-first`
+  (strengthens the `tdd` gate): three atomic commits
+  `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN), three refusals,
+  three separate phase templates. Bound in the trigger Step 3 gate table and
+  `config-hooks.json`. Migration `0002` (additive). (Phase 2)
+- **§12 authoring conventions (surgical Mermaid).** `flowchart` decision
+  skeletons for the newly authored/edited branchy workflows
+  (`codex-ts-declare-first` refusals; trigger Step 2 routing); criteria stay
+  in prose. No bulk conversion (§12 does not require it). (Phase 4)
+- **§10 observability (delegation).** Satisfied by delegating to the
+  standalone `agenticapps-observability` skill — installed on Codex via that
+  repo's new `install-codex.sh` (agenticapps-observability v0.12.0, PR #3) —
+  rather than re-owning a generator. Migration `0003` records the delegation,
+  relocates the §10.8 metadata block into `AGENTS.md`, and repoints a stale
+  skill ref (no auto-install; D-03 mirror). ADR-0004 (decision), ADR-0005
+  (adopt core ADR-0014), `docs/observability-delegation.md`. (Phase 3)
+- Drift test in `migrations/run-tests.sh` (`SKILL.md version` == latest
+  migration `to_version`); per-migration tests `0001`–`0003`.
+- ADR-0006 records the core ADR-0015 outcome (secret scanner **stays on
+  gitleaks**; no scanner code change here). (Phase 5)
+
+### Changed
+- `implements_spec: 0.4.0` across the trigger, 14 gate skills, 5 GSD
+  entry-point skills, 2 lifecycle skills, and `config-hooks.json`.
+- `.codex/workflow-version.txt` → `0.2.0`; trigger `SKILL.md` `version` → `0.2.0`.
+- `docs/ENFORCEMENT-PLAN.md` conformance claim 0.1.0 → 0.4.0 (+ §10 delegated
+  binding section, §13 binding row).
+- `.gitignore` narrowed (`skills/*/templates` → the setup skill only) so other
+  skills' template files are tracked.
 
 ## [0.1.0] — 2026-05-10
 

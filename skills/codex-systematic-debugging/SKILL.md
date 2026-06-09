@@ -1,7 +1,7 @@
 ---
 name: codex-systematic-debugging
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   Four-phase debugging protocol — Observe → Hypothesize → Test →
   Conclude — that refuses to propose a fix until a discriminating test

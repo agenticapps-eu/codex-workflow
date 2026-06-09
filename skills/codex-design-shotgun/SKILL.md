@@ -1,7 +1,7 @@
 ---
 name: codex-design-shotgun
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: design-shotgun
 description: |
   Generate at least three rendered visual variants of a UI surface and

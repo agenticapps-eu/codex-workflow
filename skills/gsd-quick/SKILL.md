@@ -1,7 +1,7 @@
 ---
 name: gsd-quick
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   Run a tiny or small task with GSD discipline but without full phase
   planning overhead. Emits a minimum commitment-ritual block, routes

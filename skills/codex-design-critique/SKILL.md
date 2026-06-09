@@ -1,7 +1,7 @@
 ---
 name: codex-design-critique
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: design-critique
 description: |
   Impeccable-style design critique against an existing UI-SPEC.md or

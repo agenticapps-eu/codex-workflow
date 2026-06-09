@@ -1,7 +1,7 @@
 ---
 name: codex-cso
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: security
 description: |
   Run an OWASP-aligned security audit at a phase boundary when the

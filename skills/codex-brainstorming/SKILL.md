@@ -1,7 +1,7 @@
 ---
 name: codex-brainstorming
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: brainstorm-ui, brainstorm-architecture
 description: |
   Surface at least two named alternatives with explicit trade-offs

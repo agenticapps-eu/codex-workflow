@@ -1,7 +1,7 @@
 ---
 name: setup-codex-agenticapps-workflow
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   Bootstrap a fresh project with the codex-workflow scaffolding —
   apply the baseline migration to install the trigger skill's
