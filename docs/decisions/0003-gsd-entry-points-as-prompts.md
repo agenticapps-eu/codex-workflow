@@ -128,3 +128,15 @@ The repo's top-level `prompts/` directory is **not created**.
   from auto-loading the GSD skills' contexts in unrelated sessions.
   If implicit invocation still leaks through, document the workaround
   in a follow-up ADR.
+
+  **F2 — RESULT (Phase 6, spec-0.4.0 catch-up, 2026-06-09; Codex
+  0.130.0): CONFIRMED honored.** Probe: `codex exec -s read-only` in an
+  unrelated temp dir asked the agent to list the `gsd-*` / `codex-*`
+  skills auto-available without explicit invocation. The result listed
+  **all 13 `codex-*` gate skills** (no `allow_implicit_invocation`
+  field → default true → auto-loaded) and **zero `gsd-*` entry-point
+  skills**. So Codex 0.130.0 respects `allow_implicit_invocation: false`:
+  the five GSD entry points (`gsd-discuss-phase`, `gsd-plan-phase`,
+  `gsd-execute-phase`, `gsd-quick`, `gsd-debug`) do **not** leak into
+  unrelated sessions and remain explicit-only (`$gsd-*`). No workaround
+  needed; the design holds. F2 resolved.

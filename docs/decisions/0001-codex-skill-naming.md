@@ -196,6 +196,27 @@ experiment with nested AGENTS.md files in Phase 6 dogfood and
 this ADR gets a follow-up note (or a new ADR-0004) once behavior is
 confirmed.
 
+#### A2 — RESULT (Phase 6, spec-0.4.0 catch-up, 2026-06-09; Codex 0.130.0)
+
+**Confirmed: Codex concatenates `AGENTS.md` from the git repo root down
+to the working directory — every level.** Experiment: a temp tree with
+sentinel `AGENTS.md` files at three nested levels (`SENTINEL_ROOT`,
+`SENTINEL_MID`, `SENTINEL_DEEP`), probed via
+`codex exec -s read-only -C <deepest>` asking the model to echo the
+sentinels it sees.
+
+- **Git repo:** all three sentinels returned (ROOT + MID + DEEP). So
+  nested per-directory `AGENTS.md` files DO load, anchored at the git
+  root and accumulating down to cwd.
+- **Non-git tree (`--skip-git-repo-check`):** only the cwd-level
+  sentinel (DEEP) returned — without a git root there is no anchor for
+  the upward walk, so only the working dir's `AGENTS.md` is read.
+
+Implication: per-phase nested `AGENTS.md` reminders ARE viable in a git
+project. The scaffolder's single-root `AGENTS.md` remains correct and
+sufficient; nested files are an available enhancement, not required.
+F3 resolved.
+
 ## Open follow-ups
 
 - **F1** — Confirm during Phase 5 whether `install.sh` should symlink or
