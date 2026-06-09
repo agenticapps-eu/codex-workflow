@@ -114,6 +114,107 @@ test_migration_0000() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0001 — Inject spec §11 Coding Discipline
+# Testable non-interactively: idempotency check, conflict pre-flight, and
+# byte-identity of the injection are validated against synthetic fixtures.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0001() {
+  echo ""
+  echo "${YELLOW}=== Migration 0001 — Inject spec §11 Coding Discipline ===${RESET}"
+
+  local mirror="$REPO_ROOT/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  if [ ! -f "$mirror" ]; then
+    echo "  ${RED}FAIL${RESET} mirror missing: templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local PROV='<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->'
+
+  # Fixture A: AGENTS.md with a heading but no §11 → not yet applied.
+  printf '# Title\n\n## Some Section\n\nbody\n' > "$tmp/a-AGENTS.md"
+  ( cd "$tmp" && grep -qE "$PROV" a-AGENTS.md )
+  assert_check "idempotency: fresh AGENTS.md needs apply" \
+    "grep -qE '$PROV' a-AGENTS.md" "$tmp" "not-applied"
+
+  # Fixture B: AGENTS.md already carrying the provenance anchor → applied (skip).
+  printf '# Title\n\n<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n## Coding Discipline (NON-NEGOTIABLE)\n\n## Some Section\n' > "$tmp/b-AGENTS.md"
+  assert_check "idempotency: provenance present → skip" \
+    "grep -qE '$PROV' b-AGENTS.md" "$tmp" "applied"
+
+  # Fixture C: unmanaged §11 heading (no provenance) → conflict must be detected.
+  printf '# Title\n\n## Coding Discipline (NON-NEGOTIABLE)\n\nhand-written\n' > "$tmp/c-AGENTS.md"
+  if ( cd "$tmp" && grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' c-AGENTS.md \
+        && ! grep -qE "$PROV" c-AGENTS.md ); then
+    echo "  ${GREEN}PASS${RESET} conflict pre-flight detects unmanaged §11 prose"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} conflict pre-flight did NOT detect unmanaged §11 prose"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Injection byte-identity: applying Step 1's awk to fixture A must produce a
+  # §11 block byte-identical to the mirror.
+  awk -v mirror="$mirror" '
+    /^## / && !done {
+      print "<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->"
+      while ((getline line < mirror) > 0) print line
+      close(mirror); print ""; done=1
+    }
+    { print }
+  ' "$tmp/a-AGENTS.md" > "$tmp/a-injected.md"
+  awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
+    "$tmp/a-injected.md" > "$tmp/a-block.md"
+  if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} injected §11 block differs from the mirror"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Mirror byte-identity vs core spec (only when the core spec repo is present).
+  local core="$REPO_ROOT/../agenticapps-workflow-core/spec/11-coding-discipline.md"
+  if [ -f "$core" ]; then
+    if diff -q <(sed -n '27,101p' "$core") "$mirror" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} mirror == core spec §11 canonical block (verbatim)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} mirror has drifted from core spec §11"
+      FAIL=$((FAIL+1))
+    fi
+  else
+    echo "  ${YELLOW}SKIP${RESET} core spec repo not adjacent — mirror/core diff not checked"
+    SKIP=$((SKIP+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Drift test — the scaffolder's SKILL.md version MUST equal the latest
+# migration's to_version (version is migration-coupled).
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_drift() {
+  echo ""
+  echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
+  local skill_md="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
+  local skill_version latest to_version
+  skill_version="$(grep '^version:' "$skill_md" | awk '{print $2}')"
+  latest="$(ls "$REPO_ROOT"/migrations/[0-9][0-9][0-9][0-9]-*.md | sort | tail -1)"
+  to_version="$(grep '^to_version:' "$latest" | awk '{print $2}')"
+  if [ -n "$skill_version" ] && [ "$skill_version" = "$to_version" ]; then
+    echo "  ${GREEN}PASS${RESET} SKILL.md version=$skill_version == $(basename "$latest") to_version=$to_version"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} drift: SKILL.md version=$skill_version != $(basename "$latest") to_version=$to_version"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Repo layout sanity checks
 # These do not require fixtures; they verify the scaffolder itself
 # ships the artifacts the migrations and skills reference.
@@ -134,7 +235,9 @@ test_repo_layout() {
     templates/global-agents-additions.md \
     migrations/README.md \
     migrations/0000-baseline.md \
+    migrations/0001-inject-spec-11-coding-discipline.md \
     migrations/test-fixtures/README.md \
+    templates/spec-mirrors/11-coding-discipline-0.4.0.md \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -152,6 +255,14 @@ test_repo_layout() {
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0000" ]; then
   test_migration_0000
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0001" ]; then
+  test_migration_0001
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
+  test_drift
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "layout" ]; then

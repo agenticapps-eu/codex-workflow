@@ -1,7 +1,7 @@
 ---
 name: agentic-apps-workflow
-version: 0.1.0
-implements_spec: 0.1.0
+version: 0.2.0
+implements_spec: 0.4.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
   activate whenever the user asks Codex to implement, build, code, fix,
@@ -20,7 +20,7 @@ description: |
 This is the trigger skill for the AgenticApps spec-first workflow on
 the OpenAI Codex CLI host. It is a `full`-conformance implementation of
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
-v0.1.0. The frontmatter `implements_spec: 0.1.0` is the conformance
+v0.4.0. The frontmatter `implements_spec: 0.4.0` is the conformance
 citation per spec/09.
 
 The body of this skill follows the structure required by the core
