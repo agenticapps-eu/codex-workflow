@@ -268,6 +268,82 @@ JSON
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0003 — Delegate §10 observability to agenticapps-observability
+# Testable non-interactively: idempotency + jq apply/rollback on a synthetic
+# config; conditional AGENTS.md repoint on a synthetic fixture.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0003() {
+  echo ""
+  echo "${YELLOW}=== Migration 0003 — Delegate §10 observability ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — config-edit test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # Synthetic config without the delegation.
+  cat > "$tmp/config.json" <<'JSON'
+{ "hooks": { "per_task": { "tdd": { "skill": "codex-tdd" } } } }
+JSON
+
+  assert_check "idempotency: fresh config needs the §10 delegation" \
+    "jq -e '.hooks.observability.delegated_to == \"observability\"' config.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  # Apply Step 1's jq.
+  ( cd "$tmp" && jq '.hooks.observability = {
+      "delegated_to": "observability",
+      "implements_spec": "0.4.0",
+      "host": "codex",
+      "invoke": "$observability",
+      "spec_section": "10"
+    }' config.json > config.tmp && mv config.tmp config.json )
+
+  assert_check "after apply: §10 delegation present" \
+    "jq -e '.hooks.observability.delegated_to == \"observability\"' config.json >/dev/null" \
+    "$tmp" "applied"
+
+  # Base hooks must be intact.
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "codex-tdd"' config.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} base hooks intact after delegation record"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} base hooks lost"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Rollback removes the delegation.
+  ( cd "$tmp" && jq 'del(.hooks.observability)' config.json > config.tmp && mv config.tmp config.json )
+  assert_check "after rollback: delegation removed" \
+    "jq -e '.hooks.observability.delegated_to == \"observability\"' config.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  # Step 2 conditional repoint: a stale 'skill: add-observability' becomes 'skill: observability'.
+  printf 'observability:\n  skill: add-observability\n  spec_version: 0.3.2\n' > "$tmp/AGENTS.md"
+  ( cd "$tmp" && sed -i.bak -E 's/(skill:[[:space:]]*)add-observability/\1observability/' AGENTS.md && rm -f AGENTS.md.bak )
+  if ( cd "$tmp" && grep -q 'skill: observability' AGENTS.md && ! grep -qE '^[[:space:]]*skill:[[:space:]]*add-observability' AGENTS.md ); then
+    echo "  ${GREEN}PASS${RESET} Step 2 repoints a stale add-observability skill ref"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Step 2 repoint did not rewrite the stale skill ref"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The delegation/binding doc + ADR ship.
+  if [ -f "$REPO_ROOT/docs/observability-delegation.md" ] && [ -f "$REPO_ROOT/docs/decisions/0005-adopt-observability-architecture.md" ]; then
+    echo "  ${GREEN}PASS${RESET} delegation doc + ADR-0005 ship"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} delegation doc or ADR-0005 missing"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -312,7 +388,10 @@ test_repo_layout() {
     migrations/0000-baseline.md \
     migrations/0001-inject-spec-11-coding-discipline.md \
     migrations/0002-add-ts-declare-first-skill.md \
+    migrations/0003-delegate-observability.md \
     migrations/test-fixtures/README.md \
+    docs/observability-delegation.md \
+    docs/decisions/0005-adopt-observability-architecture.md \
     templates/spec-mirrors/11-coding-discipline-0.4.0.md \
     skills/codex-ts-declare-first/SKILL.md \
     skills/codex-ts-declare-first/templates/example.declare.ts \
@@ -343,6 +422,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0002" ]; then
   test_migration_0002
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0003" ]; then
+  test_migration_0003
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
