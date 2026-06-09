@@ -124,6 +124,7 @@ binding contract for `full` conformance per spec/09.
 | Gate | Bound skill | Notes |
 |---|---|---|
 | `tdd` | `codex-tdd` | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically |
+| `tdd` (new TS module) | `codex-ts-declare-first` | Strengthens `tdd` for a new TypeScript module's API surface (spec §13): three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN); refuses to collapse declare + impl into one commit |
 | `ui-preview` | `codex-qa` (preview mode) | Per-task pre-commit screenshot mode of the same QA skill; the qa skill body branches on `mode=preview` vs `mode=phase-qa` |
 | `verification` | `codex-verification` | Refuses task completion when `must_have` evidence is missing |
 

@@ -29,7 +29,13 @@
       "tdd": {
         "skill": "codex-tdd",
         "fires_when": "task carries tdd=\"true\" marker",
-        "commit_pair": ["test(RED):", "feat(GREEN):"]
+        "commit_pair": ["test(RED):", "feat(GREEN):"],
+        "strengthened_by": {
+          "skill": "codex-ts-declare-first",
+          "implements_spec": "0.4.0",
+          "fires_when": "task introduces a new TypeScript module's public API surface in a TS-primary project",
+          "commit_sequence": ["declare(ts):", "test(ts):", "feat(ts):"]
+        }
       },
       "ui_preview": {
         "skill": "codex-qa",

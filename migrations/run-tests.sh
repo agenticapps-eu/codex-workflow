@@ -193,6 +193,81 @@ test_migration_0001() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0002 — Add codex-ts-declare-first skill (spec §13)
+# Testable non-interactively: idempotency check + jq apply/rollback on a
+# synthetic .planning/config.json fixture.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0002() {
+  echo ""
+  echo "${YELLOW}=== Migration 0002 — Add codex-ts-declare-first skill ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — config-edit test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # Synthetic config without the §13 binding.
+  cat > "$tmp/config.json" <<'JSON'
+{ "hooks": { "per_task": { "tdd": { "skill": "codex-tdd", "fires_when": "tdd=true", "commit_pair": ["test(RED):","feat(GREEN):"] } } } }
+JSON
+
+  assert_check "idempotency: fresh config needs the §13 binding" \
+    "jq -e '.hooks.per_task.tdd.strengthened_by.skill == \"codex-ts-declare-first\"' config.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  # Apply Step 1's jq.
+  ( cd "$tmp" && jq '.hooks.per_task.tdd.strengthened_by = {
+      "skill": "codex-ts-declare-first",
+      "implements_spec": "0.4.0",
+      "fires_when": "task introduces a new TypeScript module public API surface in a TS-primary project",
+      "commit_sequence": ["declare(ts):", "test(ts):", "feat(ts):"]
+    }' config.json > config.tmp && mv config.tmp config.json )
+
+  assert_check "after apply: §13 binding present" \
+    "jq -e '.hooks.per_task.tdd.strengthened_by.skill == \"codex-ts-declare-first\"' config.json >/dev/null" \
+    "$tmp" "applied"
+
+  # Base tdd binding must be intact (not clobbered).
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.skill == "codex-tdd"' config.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} base tdd binding intact after strengthening"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} base tdd binding lost"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Rollback removes the binding.
+  ( cd "$tmp" && jq 'del(.hooks.per_task.tdd.strengthened_by)' config.json > config.tmp && mv config.tmp config.json )
+  assert_check "after rollback: binding removed" \
+    "jq -e '.hooks.per_task.tdd.strengthened_by.skill == \"codex-ts-declare-first\"' config.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  # The shipped skill has three SEPARATE template files (structural three-commit shape).
+  local sk="$REPO_ROOT/skills/codex-ts-declare-first"
+  if [ -f "$sk/templates/example.declare.ts" ] && [ -f "$sk/templates/example.test.ts" ] && [ -f "$sk/templates/example.impl.ts" ]; then
+    echo "  ${GREEN}PASS${RESET} three separate phase templates ship with the skill"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} ts-declare-first templates missing or incomplete"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The declare template must be declare-only (no implementation bodies).
+  if grep -qE '(^|[^.])\bexport declare\b' "$sk/templates/example.declare.ts" 2>/dev/null \
+     && ! grep -qE '^\s*(return|this\.[a-zA-Z]+ =)' "$sk/templates/example.declare.ts" 2>/dev/null; then
+    echo "  ${GREEN}PASS${RESET} declare template is declare-only (no impl bodies)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} declare template contains implementation bodies"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -236,8 +311,13 @@ test_repo_layout() {
     migrations/README.md \
     migrations/0000-baseline.md \
     migrations/0001-inject-spec-11-coding-discipline.md \
+    migrations/0002-add-ts-declare-first-skill.md \
     migrations/test-fixtures/README.md \
     templates/spec-mirrors/11-coding-discipline-0.4.0.md \
+    skills/codex-ts-declare-first/SKILL.md \
+    skills/codex-ts-declare-first/templates/example.declare.ts \
+    skills/codex-ts-declare-first/templates/example.test.ts \
+    skills/codex-ts-declare-first/templates/example.impl.ts \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -259,6 +339,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0001" ]; then
   test_migration_0001
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0002" ]; then
+  test_migration_0002
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
