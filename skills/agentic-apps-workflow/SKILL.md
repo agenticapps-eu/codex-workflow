@@ -87,6 +87,34 @@ Codex's invocation idiom is `$skill-name`. The five GSD entry-point
 skills are explicit-only (`policy.allow_implicit_invocation: false` in
 their `agents/openai.yaml`); invoke them by typing the `$` shortcut.
 
+The Step 1 size decision and this Step 2 routing form one branchy
+workflow. The flowchart below is the decision skeleton (per spec §12);
+the tables that follow carry the criteria — when a task matches two
+rows, judgment picks the higher one (the labeled fallback edge).
+
+```mermaid
+flowchart TD
+  start[Code task received] --> kind{Intent?}
+  kind -->|bug / unexpected behavior| dbg["$gsd-debug → codex-systematic-debugging"]
+  kind -->|quick experiment, GSD bookkeeping| quick["$gsd-quick"]
+  kind -->|build / change / refactor| size{Task size? Step 1}
+  size -->|tiny| tiny[codex-verification → commit]
+  size -->|small| small[codex-tdd → codex-verification → codex-finishing-branch]
+  size -->|medium or large| disc["$gsd-discuss-phase {N}"]
+  size -.->|ambiguous: matches two rows → pick the HIGHER size| size
+  disc --> plan["$gsd-plan-phase {N}"]
+  plan --> exec["$gsd-execute-phase {N}"]
+  exec --> gates{Gate trigger fires? Step 3}
+  gates -->|yes| gaterun[Run the bound codex-* gate skill]
+  gaterun --> exec
+  gates -->|all clear| close[codex-finishing-branch]
+  tiny --> report[REPORT: commitment list satisfied]
+  small --> report
+  close --> report
+  dbg --> report
+  quick --> report
+```
+
 | User intent | Entry point |
 |---|---|
 | Tiny or small task | invoke gate skills directly per Step 1 — no GSD orchestration |
