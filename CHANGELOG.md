@@ -9,17 +9,10 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
-### Pending (Phase 6/7 of the 0.2.0 catch-up — still open at this entry)
+### Pending
 
-- Restructure `install.sh` symlink mode so it does not write a secondary
-  symlink inside the source tree (Phase 6). See `docs/dogfood-2026-05-10.md`.
-- Record the two empirical checks (`policy.allow_implicit_invocation: false`
-  on a fresh Codex session; AGENTS.md root-down concat depth on Codex 0.130.0)
-  in the ADR appendices (Phase 6).
-- Adopt the `agenticapps-shared` submodule + unify the migration harness
-  (Phase 6).
-- Open the `agenticapps-workflow-core` reference-implementations PR flipping
-  the codex-workflow row to spec 0.4.0 / full (Phase 5 cross-repo / Phase 7).
+- Land the `agenticapps-workflow-core` reference-implementations PR flipping the
+  codex-workflow row to spec 0.4.0 / full (cross-repo).
 
 ### Backlog (beyond conformance)
 
@@ -32,13 +25,14 @@ Catch-up to `agenticapps-workflow-core` **spec 0.4.0** (full conformance),
 from the 0.1.0 baseline. Feature-bearing minor: new canonical prose, a new
 skill, observability delegation, and surgical Mermaid. Migration chain
 `0001`–`0003` (contiguous; `0001` is the sole version/`implements_spec`
-bumper). `run-tests.sh`: PASS 41 / FAIL 0 / SKIP 1.
+bumper). `run-tests.sh`: PASS 43 / FAIL 0 / SKIP 1.
 
 ### Added
 - **§11 Coding Discipline (canonical prose).** Reproduced verbatim in
   `AGENTS.md` behind the provenance anchor
   `<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->`; vendored
-  byte-identical mirror at `templates/spec-mirrors/11-coding-discipline-0.4.0.md`.
+  byte-identical mirror at
+  `skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md`.
   Migration `0001` (from 0.1.0 → 0.2.0) injects it and is the **sole bumper**
   of `version` (→0.2.0) and `implements_spec` (→0.4.0). (Phase 1)
 - **§13 declare-first TypeScript.** New gate skill `codex-ts-declare-first`
@@ -64,12 +58,27 @@ bumper). `run-tests.sh`: PASS 41 / FAIL 0 / SKIP 1.
 
 ### Changed
 - `implements_spec: 0.4.0` across the trigger, 14 gate skills, 5 GSD
-  entry-point skills, 2 lifecycle skills, and `config-hooks.json`.
+  entry-point skills, 2 lifecycle skills, and `config-hooks.json`. (Phase 5)
 - `.codex/workflow-version.txt` → `0.2.0`; trigger `SKILL.md` `version` → `0.2.0`.
 - `docs/ENFORCEMENT-PLAN.md` conformance claim 0.1.0 → 0.4.0 (+ §10 delegated
-  binding section, §13 binding row).
-- `.gitignore` narrowed (`skills/*/templates` → the setup skill only) so other
-  skills' template files are tracked.
+  binding section, §13 binding row). README + this CHANGELOG updated. (Phase 5)
+- **install.sh restructure (Phase 6):** `templates/` moved permanently under
+  `skills/setup-codex-agenticapps-workflow/templates/` (history-preserving);
+  the secondary templates-symlink step removed (no install-time write inside
+  the source tree); the obsolete `skills/*/templates` `.gitignore` rule dropped.
+  Fixed a dangling-symlink bug — `install_one` now tests `-L` before `-e`, so
+  stale/dangling skill links (e.g. after a repo relocation) are repointed
+  instead of leaving `ln -s` to fail "File exists".
+- **agenticapps-shared submodule (Phase 6):** added at `vendor/agenticapps-shared/`
+  (pinned v1.0.0); `migrations/run-tests.sh` now sources the shared harness
+  primitives (helpers / fixture-runner / drift-test) instead of local copies;
+  install.sh refreshes the submodule. SPLIT-01 parity.
+
+### Verified (Phase 6)
+- Empirical checks recorded in ADR appendices (Codex 0.130.0): AGENTS.md
+  concat is git-root-down to cwd (ADR-0001 A2); `allow_implicit_invocation:
+  false` is honored — the GSD entry points do not leak into unrelated sessions
+  (ADR-0003 F2).
 
 ## [0.1.0] — 2026-05-10
 

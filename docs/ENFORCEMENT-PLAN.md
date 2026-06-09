@@ -19,7 +19,7 @@ build-out (`docs/dogfood-2026-05-10.md`).
    Rationalization Table, Red Flags, Pressure-Test (spec/01,/03,/04,/05),
    and **§11 Coding Discipline** (injected into `AGENTS.md` behind a
    provenance anchor, byte-matched against the vendored mirror
-   `templates/spec-mirrors/11-coding-discipline-0.4.0.md`).
+   `skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md`).
 2. Every declarative-contract MUST in spec/02, /06, /07, /08, **/10,
    /12, /13** is satisfied by some `codex-*` skill, an `install.sh` /
    migration-framework mechanism, or a delegation:

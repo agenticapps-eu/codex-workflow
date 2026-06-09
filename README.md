@@ -95,14 +95,16 @@ codex-workflow/
 ├── CHANGELOG.md
 ├── AGENTS.md                   # workflow self-applied (Phase 6)
 ├── install.sh                  # symlinks skills/ into $CODEX_HOME/skills/
-├── skills/                     # 1 trigger + 13 gate + 5 GSD + 2 lifecycle = 21
-├── templates/                  # 5 project-side templates
-├── migrations/                 # framework + 0000-baseline + run-tests.sh
+├── skills/                     # 1 trigger + 14 gate + 5 GSD + 2 lifecycle = 22
+│   └── setup-codex-agenticapps-workflow/templates/  # project-side templates + spec-mirrors
+├── migrations/                 # framework + 0000…0003 + run-tests.sh
+├── vendor/agenticapps-shared/  # submodule — shared migration test harness
 ├── docs/
 │   ├── ENFORCEMENT-PLAN.md     # gate bindings for this scaffolder's own dev
+│   ├── observability-delegation.md  # §10 delegation setup/use guidance
 │   ├── dogfood-2026-05-10.md   # Phase 6 self-apply log
-│   └── decisions/              # ADRs (0001–0003)
-└── .github/workflows/ci.yml    # CI (trivial until Phase 7)
+│   └── decisions/              # ADRs (0001–0006)
+└── .github/workflows/ci.yml    # CI
 ```
 
 ## License

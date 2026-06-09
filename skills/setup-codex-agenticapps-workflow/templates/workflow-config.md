@@ -70,7 +70,7 @@ upstream catalogs take precedence when installed.
 
 ## Notes
 
-- The trigger skill cites `implements_spec: 0.1.0`. To bump the
+- The trigger skill cites `implements_spec: 0.4.0`. To bump the
   spec version, run `$update-codex-agenticapps-workflow` and follow
   its migration prompts.
 - This file is project-specific — do not commit secrets, only

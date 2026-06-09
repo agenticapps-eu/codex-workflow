@@ -8,7 +8,7 @@ status, date, context, decision, consequences, references.
 When a `codex-database-sentinel-audit` finding is accepted rather
 than fixed (in projects USING this scaffolder), the accepting ADR
 uses the
-[`templates/adr-db-security-acceptance.md`](../../templates/adr-db-security-acceptance.md)
+[`adr-db-security-acceptance.md`](../../skills/setup-codex-agenticapps-workflow/templates/adr-db-security-acceptance.md)
 template shape — risk owner, re-audit date, compensating controls.
 
 ## Index
