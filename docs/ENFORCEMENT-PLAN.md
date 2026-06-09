@@ -84,7 +84,7 @@ provide an observability **generator** (§10.7). codex-workflow satisfies
 | §10.5 `Flush(timeout)` primitive | Delegated | obs skill per-stack wrappers |
 | §10.7 generator obligation | Delegated | obs skill; installed on Codex via `install-codex.sh` |
 | §10.7.1 module-root path resolution | Delegated | obs skill |
-| §10.8 project metadata block (`AGENTS.md`) | Host-managed | migration `0003` records the delegation + repoints a stale skill ref; the block is materialised by `$observability init` / the host migration |
+| §10.8 project metadata block (`AGENTS.md`) | Host-managed | `$observability init` emits the anchored block (currently into `CLAUDE.md`); migration `0003` **relocates** it into `AGENTS.md` (the canonical Codex file), preserving init's real content, and repoints a stale skill ref. Flow: run `$observability init`, then `$update-codex-agenticapps-workflow`. The obs-init host-awareness (writing `AGENTS.md` directly) is a tracked obs-repo follow-up; until it lands, migration 0003's relocate closes the gap on the Codex side |
 | §10.9 baseline + `--since-commit` delta + CI | Delegated | obs skill (`$observability scan --since-commit`, `.observability/baseline.json`) |
 
 A delegation to a consumable skill is a **satisfied** §10 MUST per §09 —

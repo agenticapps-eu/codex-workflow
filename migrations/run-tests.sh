@@ -322,14 +322,33 @@ JSON
     "jq -e '.hooks.observability.delegated_to == \"observability\"' config.json >/dev/null" \
     "$tmp" "not-applied"
 
-  # Step 2 conditional repoint: a stale 'skill: add-observability' becomes 'skill: observability'.
-  printf 'observability:\n  skill: add-observability\n  spec_version: 0.3.2\n' > "$tmp/AGENTS.md"
-  ( cd "$tmp" && sed -i.bak -E 's/(skill:[[:space:]]*)add-observability/\1observability/' AGENTS.md && rm -f AGENTS.md.bak )
-  if ( cd "$tmp" && grep -q 'skill: observability' AGENTS.md && ! grep -qE '^[[:space:]]*skill:[[:space:]]*add-observability' AGENTS.md ); then
-    echo "  ${GREEN}PASS${RESET} Step 2 repoints a stale add-observability skill ref"
+  # Step 2 §10.8 relocate: an anchored observability block in CLAUDE.md (init's
+  # output) is moved to AGENTS.md, preserving its real content, and removed from
+  # CLAUDE.md.
+  printf '# Project\n\n<!-- agenticapps:observability:start -->\nobservability:\n  spec_version: 0.3.2\n  skill: add-observability\n  policy: lib/observability/policy.md\n<!-- agenticapps:observability:end -->\n' > "$tmp/CLAUDE.md"
+  printf '# AGENTS\n\nbody\n' > "$tmp/AGENTS.md"
+  ( cd "$tmp" \
+    && awk '/<!-- agenticapps:observability:start -->/,/<!-- agenticapps:observability:end -->/' CLAUDE.md >> AGENTS.md \
+    && awk 'BEGIN{d=0} /<!-- agenticapps:observability:start -->/{d=1} d==0{print} /<!-- agenticapps:observability:end -->/{d=0}' CLAUDE.md > CLAUDE.md.t && mv CLAUDE.md.t CLAUDE.md )
+  if ( cd "$tmp" \
+       && grep -q '^observability:' AGENTS.md \
+       && grep -q 'policy: lib/observability/policy.md' AGENTS.md \
+       && ! grep -q '<!-- agenticapps:observability:start -->' CLAUDE.md ); then
+    echo "  ${GREEN}PASS${RESET} Step 2 relocates the §10.8 block CLAUDE.md→AGENTS.md (content preserved)"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} Step 2 repoint did not rewrite the stale skill ref"
+    echo "  ${RED}FAIL${RESET} Step 2 relocate did not move the §10.8 block correctly"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Step 3 conditional repoint: a stale 'skill: add-observability' becomes 'skill: observability'
+  # (anchored to a line-leading skill: key).
+  ( cd "$tmp" && sed -i.bak -E 's/^([[:space:]]*skill:[[:space:]]*)add-observability/\1observability/' AGENTS.md && rm -f AGENTS.md.bak )
+  if ( cd "$tmp" && grep -q 'skill: observability' AGENTS.md && ! grep -qE '^[[:space:]]*skill:[[:space:]]*add-observability' AGENTS.md ); then
+    echo "  ${GREEN}PASS${RESET} Step 3 repoints a stale add-observability skill ref (anchored sed)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Step 3 repoint did not rewrite the stale skill ref"
     FAIL=$((FAIL+1))
   fi
 

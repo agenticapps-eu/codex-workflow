@@ -44,11 +44,14 @@ Division of labour (mirrors claude-workflow):
   wrapper/middleware (`$observability init`) and validates + baselines
   (`$observability scan`, host-neutral; reads `AGENTS.md` on Codex).
 - **This migration** records the delegation in the project's
-  `.planning/config.json` and repoints the `observability:` metadata
-  block's skill reference in `AGENTS.md` if a stale one exists. The
-  metadata block itself (§10.8) is materialised in `AGENTS.md` for Codex
-  projects by the host workflow (this migration / the obs init's
-  host-aware Phase 6 follow-up), not by Claude-targeting `init`.
+  `.planning/config.json`, **relocates** the §10.8 `observability:` block
+  that `init` emits into `CLAUDE.md` over to `AGENTS.md` (the canonical
+  Codex file, preserving init's real content), and repoints a stale skill
+  reference. Materialising the host's instruction-file block in the host
+  migration mirrors claude-workflow (whose migrations own the CLAUDE.md
+  block). The obs-init host-awareness (emitting `AGENTS.md` directly) is a
+  tracked obs-repo follow-up; until it lands, this relocate closes §10.8
+  on the Codex side.
 
 ## Pre-flight (hard aborts on failure)
 
@@ -105,20 +108,54 @@ tmp="$(mktemp)"
 jq 'del(.hooks.observability)' .planning/config.json > "$tmp" && mv "$tmp" .planning/config.json
 ```
 
-### Step 2: Repoint a stale observability skill reference in AGENTS.md (conditional)
+### Step 2: Materialise the §10.8 metadata block in AGENTS.md (relocate from CLAUDE.md)
+
+On Codex the canonical instruction file is `AGENTS.md`, so the §10.8
+`observability:` metadata block MUST live there (spec §10.8: "whichever
+filename the host runtime treats as canonical"). The obs skill's
+`$observability init` currently writes the block — wrapped in the
+load-bearing anchors `<!-- agenticapps:observability:start -->` …
+`<!-- agenticapps:observability:end -->` — into `CLAUDE.md` (its Phase 6 is
+not yet host-aware). This step **relocates** that block to `AGENTS.md`,
+preserving init's real, populated content (destinations / policy / spec_version)
+rather than fabricating a placeholder. The host migration owning the host's
+instruction-file block mirrors how claude-workflow's migrations own the
+CLAUDE.md block.
+
+**Idempotency check (positive — block already in the canonical file):**
+`grep -q '^observability:' AGENTS.md`
+**Pre-condition (there is a block to relocate):**
+`test -f CLAUDE.md && grep -q '<!-- agenticapps:observability:start -->' CLAUDE.md`
+(If neither AGENTS.md has the block nor CLAUDE.md has one to relocate,
+observability has not been initialised — run `$observability init` first, then
+re-run this migration. See Skip cases.)
+**Apply:**
+```bash
+# Append the anchored observability block (init's real content) to AGENTS.md…
+awk '/<!-- agenticapps:observability:start -->/,/<!-- agenticapps:observability:end -->/' CLAUDE.md >> AGENTS.md
+# …and delete it from CLAUDE.md (between anchors, inclusive).
+awk 'BEGIN{d=0}
+     /<!-- agenticapps:observability:start -->/{d=1}
+     d==0{print}
+     /<!-- agenticapps:observability:end -->/{d=0}' CLAUDE.md > CLAUDE.md.0003.tmp \
+  && mv CLAUDE.md.0003.tmp CLAUDE.md
+```
+**Rollback:** `git checkout AGENTS.md CLAUDE.md` (or move the anchored block
+back from AGENTS.md to CLAUDE.md).
+
+### Step 3: Repoint a stale observability skill reference in AGENTS.md (conditional)
 
 **Idempotency check (positive — repointed/absent):**
 `! grep -qE '^[[:space:]]*skill:[[:space:]]*add-observability' AGENTS.md`
 (Returns 0 when no stale `add-observability` skill reference remains — either
-already repointed or the block was never present.)
-**Pre-condition:** `grep -q '^observability:' AGENTS.md` (the project has an
-`observability:` metadata block). A fresh Codex project has none yet — the block
-is created later by `$observability init`; this step then no-ops.
-**Apply:** in the `observability:` metadata block / Skills line ONLY, rewrite a
-legacy `add-observability` skill reference to `observability`. Do NOT rewrite
-historical prose elsewhere.
+already repointed or never present.)
+**Pre-condition:** `grep -q '^observability:' AGENTS.md` (there is a block to
+repoint — true after Step 2 on a project that ran init).
+**Apply:** in the `observability:` block's `skill:` line ONLY, rewrite a legacy
+`add-observability` reference to `observability`. Do NOT rewrite historical
+prose elsewhere. The substitution is anchored to a line-leading `skill:` key.
 ```bash
-sed -i.0003.bak -E 's/(skill:[[:space:]]*)add-observability/\1observability/' AGENTS.md
+sed -i.0003.bak -E 's/^([[:space:]]*skill:[[:space:]]*)add-observability/\1observability/' AGENTS.md
 rm -f AGENTS.md.0003.bak
 ```
 **Rollback:** `git checkout AGENTS.md` (or reverse the substitution).
@@ -127,25 +164,34 @@ rm -f AGENTS.md.0003.bak
 
 - `jq -e '.hooks.observability.delegated_to == "observability"' .planning/config.json` — delegation recorded
 - `jq . .planning/config.json >/dev/null` — config still valid JSON
+- If observability is initialised: `grep -q '^observability:' AGENTS.md` — §10.8 block in the canonical Codex file
+- If observability is initialised: `! grep -q '<!-- agenticapps:observability:start -->' CLAUDE.md` 2>/dev/null — block no longer duplicated in CLAUDE.md
 - `! grep -qE '^[[:space:]]*skill:[[:space:]]*add-observability' AGENTS.md` — no stale skill ref
 - `test -f "${CODEX_HOME:-$HOME/.codex}/skills/observability/SKILL.md"` — obs skill installed
 - Drift test green: trigger SKILL.md `version` (0.2.0) == latest migration `to_version` (0.2.0)
 
 ## Skip cases
 
-- **Already delegated** (idempotency check passes) — Step 1 no-ops.
+- **Already delegated** (Step 1 idempotency passes) — Step 1 no-ops.
 - **`observability` skill absent** → pre-flight ABORTS (exit 3) with the
   separate-install pointer. NOT a silent skip and NOT an auto-install (D-03).
-- **No `observability:` block in AGENTS.md** → Step 2's pre-condition fails; the
-  repoint is skipped (nothing to repoint). The delegation record (Step 1) still
-  applies; the block is created later by `$observability init`.
+- **Observability not yet initialised** (no `observability:` block in AGENTS.md
+  AND no anchored block in CLAUDE.md to relocate) → Steps 2 and 3 no-op; the
+  delegation record (Step 1) still applies. Run `$observability init`, then
+  re-run `$update-codex-agenticapps-workflow` so Step 2 relocates the §10.8
+  block into AGENTS.md. A project with no observability has no §10.8 obligation
+  until it adds observability.
+- **Block already in AGENTS.md** (Step 2 idempotency passes) — Step 2 no-ops;
+  Step 3 repoints any stale skill ref.
 
 ## Notes
 
 Testable non-interactively via `test_migration_0003` in
 `migrations/run-tests.sh` (idempotency + jq apply/rollback on a synthetic
-config; conditional repoint on a synthetic AGENTS.md). Per migration
-immutability the chain stays contiguous (`0000`→`0001`→`0002`→`0003`).
+config; the §10.8 relocate on a synthetic CLAUDE.md→AGENTS.md; the conditional
+repoint on a synthetic AGENTS.md). Per migration immutability the chain stays
+contiguous (`0000`→`0001`→`0002`→`0003`); 0003 is not yet shipped (this branch
+is unreleased), so refining it pre-merge is not an immutability violation.
 
 ## References
 

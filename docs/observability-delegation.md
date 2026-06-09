@@ -47,9 +47,18 @@ test -f "${CODEX_HOME:-$HOME/.codex}/skills/observability/SKILL.md" \
    auto-install — D-03 mirror).
 2. Records the delegation in `.planning/config.json`
    (`hooks.observability.delegated_to = "observability"`).
-3. Repoints a stale `observability:` skill reference in `AGENTS.md` if one
-   exists (no-op on a fresh project — the block is created by
-   `$observability init`).
+3. **Relocates the §10.8 `observability:` metadata block** into `AGENTS.md`
+   (the canonical Codex file): `$observability init` currently emits the
+   anchored block into `CLAUDE.md`, and this step moves it to `AGENTS.md`
+   preserving init's real content (destinations / policy / spec_version).
+4. Repoints a stale `add-observability` skill reference in `AGENTS.md` if one
+   exists.
+
+**Recommended order:** run `$observability init` first (scaffolds the wrapper
+and emits the metadata block), then `$update-codex-agenticapps-workflow` (so
+migration 0003 relocates the §10.8 block into `AGENTS.md`). On a project that
+has not run `init`, steps 3–4 no-op — a project with no observability has no
+§10.8 obligation until it adds observability.
 
 ## Use (per project)
 
@@ -73,8 +82,10 @@ conformance claimant.
 
 ## Known follow-up
 
-The obs skill's `init` Phase 6 currently writes the §10.8 metadata block
-to `CLAUDE.md` specifically. On Codex the metadata block lives in
-`AGENTS.md` and is managed by migration 0003 / the host workflow. Making
-the obs `init` Phase 6 write `AGENTS.md` directly under a Codex host is a
-tracked follow-up on the obs repo (see agenticapps-observability#3).
+The obs skill's `init` Phase 6 currently emits the §10.8 metadata block
+into `CLAUDE.md`. On Codex the block belongs in `AGENTS.md`; **migration
+0003 relocates it there**, so §10.8 is satisfied on the Codex side today
+(the relocate preserves init's real content). Making the obs `init` Phase 6
+emit `AGENTS.md` directly under a Codex host — removing the relocate
+round-trip — is a tracked obs-repo follow-up (see
+agenticapps-observability#3).
