@@ -1,7 +1,7 @@
 ---
 name: gsd-plan-phase
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   Run the GSD plan step for a phase: read CONTEXT.md, author PLAN.md
   (the task list with gate triggers and must_haves), and produce the

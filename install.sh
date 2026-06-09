@@ -77,6 +77,20 @@ if ! command -v codex >/dev/null 2>&1; then
   echo "      before the skills are usable. See https://developers.openai.com/codex/"
 fi
 
+# Refresh the agenticapps-shared submodule (provides the migration test harness
+# primitives). Idempotent and non-fatal: a missing/transient submodule must not
+# block skill linking. Guard on a real .git so copied/tarball trees (which carry
+# .gitmodules but no git dir) don't fatal under the refresh.
+if [ "$DRY_RUN" -eq 0 ] && [ -f "$SCAFFOLDER_ROOT/.gitmodules" ] \
+   && { [ -d "$SCAFFOLDER_ROOT/.git" ] || [ -f "$SCAFFOLDER_ROOT/.git" ]; }; then
+  echo "${YELLOW}note:${RESET} syncing git submodule(s) vendor/agenticapps-shared..."
+  if ! { git -C "$SCAFFOLDER_ROOT" submodule sync --recursive \
+      && git -C "$SCAFFOLDER_ROOT" submodule update --init --recursive; }; then
+    echo "${YELLOW}warn:${RESET} submodule refresh failed — continuing with skill linking." >&2
+    echo "      Fix later: git -C \"$SCAFFOLDER_ROOT\" submodule update --init --recursive" >&2
+  fi
+fi
+
 # Ensure destination exists.
 if [ ! -d "$CODEX_SKILLS_DIR" ]; then
   echo "${YELLOW}note:${RESET} creating $CODEX_SKILLS_DIR"
@@ -99,25 +113,27 @@ install_one() {
   name="$(basename "$src")"
   local dst="$CODEX_SKILLS_DIR/$name"
 
-  if [ -e "$dst" ]; then
-    if [ -L "$dst" ]; then
-      local target
-      target="$(readlink "$dst")"
-      if [ "$target" = "$src" ]; then
-        echo "  ${GREEN}OK${RESET}     $name (already linked)"
-        SKIPPED=$((SKIPPED+1))
-        return
-      else
-        echo "  ${YELLOW}REPLACE${RESET} $name (was linked to $target)"
-        if [ "$DRY_RUN" -eq 0 ]; then
-          rm "$dst"
-        fi
-      fi
-    else
-      echo "  ${RED}BLOCKED${RESET} $name (destination exists and is not a symlink — refusing to clobber)"
-      FAILED=$((FAILED+1))
+  # NB: test -L before -e. A dangling symlink (target moved/deleted — e.g. the
+  # repo was relocated) makes `-e` false because it follows the link, which
+  # would skip replacement and leave `ln -s` to fail "File exists". Catch the
+  # symlink first so stale/dangling links are always repointed.
+  if [ -L "$dst" ]; then
+    local target
+    target="$(readlink "$dst")"
+    if [ "$target" = "$src" ]; then
+      echo "  ${GREEN}OK${RESET}     $name (already linked)"
+      SKIPPED=$((SKIPPED+1))
       return
+    else
+      echo "  ${YELLOW}REPLACE${RESET} $name (was linked to $target)"
+      if [ "$DRY_RUN" -eq 0 ]; then
+        rm "$dst"
+      fi
     fi
+  elif [ -e "$dst" ]; then
+    echo "  ${RED}BLOCKED${RESET} $name (destination exists and is not a symlink — refusing to clobber)"
+    FAILED=$((FAILED+1))
+    return
   fi
 
   case "$MODE" in
@@ -149,36 +165,15 @@ for d in "$SCAFFOLDER_ROOT"/skills/*/; do
 done
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Templates symlink — so migrations can `cp` from a stable scaffolder path
+# Templates: no secondary symlink needed (v0.2.0 fix)
 # ─────────────────────────────────────────────────────────────────────────────
-# The setup skill's migrations expect templates at
-# $CODEX_HOME/skills/setup-codex-agenticapps-workflow/templates/.
-# We make that path a symlink to the scaffolder's top-level templates/.
-
-SETUP_DIR="$CODEX_SKILLS_DIR/setup-codex-agenticapps-workflow"
-SETUP_TEMPLATES="$SETUP_DIR/templates"
-SCAFFOLDER_TEMPLATES="$SCAFFOLDER_ROOT/templates"
-
-if [ -d "$SETUP_DIR" ] || [ -L "$SETUP_DIR" ]; then
-  if [ -e "$SETUP_TEMPLATES" ] && [ ! -L "$SETUP_TEMPLATES" ]; then
-    echo "  ${RED}BLOCKED${RESET} setup skill's templates/ link (destination exists and is not a symlink)"
-    FAILED=$((FAILED+1))
-  else
-    if [ -L "$SETUP_TEMPLATES" ] && [ "$(readlink "$SETUP_TEMPLATES")" = "$SCAFFOLDER_TEMPLATES" ]; then
-      echo "  ${GREEN}OK${RESET}     setup-skill templates/ link (already linked)"
-      SKIPPED=$((SKIPPED+1))
-    else
-      [ -L "$SETUP_TEMPLATES" ] && rm "$SETUP_TEMPLATES"
-      if [ "$DRY_RUN" -eq 0 ]; then
-        ln -s "$SCAFFOLDER_TEMPLATES" "$SETUP_TEMPLATES"
-      fi
-      echo "  ${GREEN}LINK${RESET}   setup-skill templates/ -> $SCAFFOLDER_TEMPLATES"
-      INSTALLED=$((INSTALLED+1))
-    fi
-  fi
-else
-  echo "  ${YELLOW}skip${RESET}   setup skill not present at $SETUP_DIR"
-fi
+# Templates now ship INSIDE the setup skill at
+# skills/setup-codex-agenticapps-workflow/templates/ and are committed there.
+# Because the whole setup-skill directory is symlinked above, migrations resolve
+# them at the stable path
+# $CODEX_HOME/skills/setup-codex-agenticapps-workflow/templates/ with NO
+# install-time write inside the source tree. (Pre-v0.2.0, install.sh wrote a
+# secondary symlink there which resolved back into the repo — that step is gone.)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Summary

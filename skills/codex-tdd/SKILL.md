@@ -1,7 +1,7 @@
 ---
 name: codex-tdd
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: tdd
 description: |
   Run a test-first cycle for a single task: write the failing test

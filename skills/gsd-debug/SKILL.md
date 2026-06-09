@@ -1,7 +1,7 @@
 ---
 name: gsd-debug
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   GSD entry point for bugs, regressions, errors, and unexpected
   behavior. Auto-invokes `codex-systematic-debugging` (the four-phase

@@ -1,7 +1,7 @@
 ---
 name: agentic-apps-workflow
-version: 0.1.0
-implements_spec: 0.1.0
+version: 0.2.0
+implements_spec: 0.4.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
   activate whenever the user asks Codex to implement, build, code, fix,
@@ -20,7 +20,7 @@ description: |
 This is the trigger skill for the AgenticApps spec-first workflow on
 the OpenAI Codex CLI host. It is a `full`-conformance implementation of
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
-v0.1.0. The frontmatter `implements_spec: 0.1.0` is the conformance
+v0.4.0. The frontmatter `implements_spec: 0.4.0` is the conformance
 citation per spec/09.
 
 The body of this skill follows the structure required by the core
@@ -87,6 +87,34 @@ Codex's invocation idiom is `$skill-name`. The five GSD entry-point
 skills are explicit-only (`policy.allow_implicit_invocation: false` in
 their `agents/openai.yaml`); invoke them by typing the `$` shortcut.
 
+The Step 1 size decision and this Step 2 routing form one branchy
+workflow. The flowchart below is the decision skeleton (per spec §12);
+the tables that follow carry the criteria — when a task matches two
+rows, judgment picks the higher one (the labeled fallback edge).
+
+```mermaid
+flowchart TD
+  start[Code task received] --> kind{Intent?}
+  kind -->|bug / unexpected behavior| dbg["$gsd-debug → codex-systematic-debugging"]
+  kind -->|quick experiment, GSD bookkeeping| quick["$gsd-quick"]
+  kind -->|build / change / refactor| size{Task size? Step 1}
+  size -->|tiny| tiny[codex-verification → commit]
+  size -->|small| small[codex-tdd → codex-verification → codex-finishing-branch]
+  size -->|medium or large| disc["$gsd-discuss-phase {N}"]
+  size -.->|ambiguous: matches two rows → pick the HIGHER size| size
+  disc --> plan["$gsd-plan-phase {N}"]
+  plan --> exec["$gsd-execute-phase {N}"]
+  exec --> gates{Gate trigger fires? Step 3}
+  gates -->|yes| gaterun[Run the bound codex-* gate skill]
+  gaterun --> exec
+  gates -->|all clear| close[codex-finishing-branch]
+  tiny --> report[REPORT: commitment list satisfied]
+  small --> report
+  close --> report
+  dbg --> report
+  quick --> report
+```
+
 | User intent | Entry point |
 |---|---|
 | Tiny or small task | invoke gate skills directly per Step 1 — no GSD orchestration |
@@ -124,6 +152,7 @@ binding contract for `full` conformance per spec/09.
 | Gate | Bound skill | Notes |
 |---|---|---|
 | `tdd` | `codex-tdd` | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically |
+| `tdd` (new TS module) | `codex-ts-declare-first` | Strengthens `tdd` for a new TypeScript module's API surface (spec §13): three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN); refuses to collapse declare + impl into one commit |
 | `ui-preview` | `codex-qa` (preview mode) | Per-task pre-commit screenshot mode of the same QA skill; the qa skill body branches on `mode=preview` vs `mode=phase-qa` |
 | `verification` | `codex-verification` | Refuses task completion when `must_have` evidence is missing |
 

@@ -1,7 +1,7 @@
 ---
 name: codex-verification
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: verification
 description: |
   Refuse to mark a task complete until each `must_have` row in the

@@ -1,7 +1,7 @@
 ---
 name: gsd-discuss-phase
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   Run the GSD discuss step for a phase: surface open questions,
   assumptions, and ambiguities; ask the user just enough to fill the

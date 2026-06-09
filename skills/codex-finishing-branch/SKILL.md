@@ -1,7 +1,7 @@
 ---
 name: codex-finishing-branch
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 implements_gate: branch-close
 description: |
   Compose a PR description from the phase artifacts (CONTEXT.md,

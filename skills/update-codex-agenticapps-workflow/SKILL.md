@@ -1,7 +1,7 @@
 ---
 name: update-codex-agenticapps-workflow
 version: 0.1.0
-implements_spec: 0.1.0
+implements_spec: 0.4.0
 description: |
   Update an installed codex-workflow project to the current scaffolder
   version by applying pending migrations between the project's
