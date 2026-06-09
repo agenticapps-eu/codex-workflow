@@ -20,29 +20,27 @@
 
 set -uo pipefail
 
-# Colors for output (skip if not a tty)
-if [ -t 1 ]; then
-  RED=$'\033[31m'
-  GREEN=$'\033[32m'
-  YELLOW=$'\033[33m'
-  RESET=$'\033[0m'
-else
-  RED=""
-  GREEN=""
-  YELLOW=""
-  RESET=""
-fi
-
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
 if [ -z "$REPO_ROOT" ]; then
-  echo "${RED}error:${RESET} run-tests.sh must be invoked from inside a git repo"
+  echo "error: run-tests.sh must be invoked from inside a git repo" >&2
   exit 1
 fi
 cd "$REPO_ROOT"
 
-PASS=0
-FAIL=0
-SKIP=0
+# Shared harness primitives — agenticapps-shared submodule (SPLIT-01, per
+# claude-workflow ADR-0035). Provides colors (RED/GREEN/YELLOW/RESET), counters
+# (PASS/FAIL/SKIP), run_check, assert_check, extract_to, run_drift_test. The
+# drift POLICY (version coupling is a hard fail) stays in this consumer.
+SHARED_LIB="$REPO_ROOT/vendor/agenticapps-shared/migrations/lib"
+if [ ! -f "$SHARED_LIB/helpers.sh" ]; then
+  echo "error: agenticapps-shared submodule not initialized." >&2
+  echo "       Run: git submodule update --init --recursive   (or: bash install.sh)" >&2
+  exit 1
+fi
+# shellcheck source=/dev/null
+. "$SHARED_LIB/helpers.sh"
+. "$SHARED_LIB/fixture-runner.sh"
+. "$SHARED_LIB/drift-test.sh"
 
 # Filter (optional first non-`--` arg)
 FILTER=""
@@ -53,50 +51,9 @@ for arg in "$@"; do
   esac
 done
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Helpers (kept for incremental migrations to use)
-# ─────────────────────────────────────────────────────────────────────────────
-
-# Extract a file from a git ref into a temp path.
-# Usage: extract_to <ref> <path-in-repo> <output-path>
-extract_to() {
-  local ref="$1" path="$2" out="$3"
-  mkdir -p "$(dirname "$out")"
-  git show "$ref:$path" >"$out" 2>/dev/null
-}
-
-# Run an idempotency check shell snippet inside a fixture dir.
-# Returns the exit code of the check.
-run_check() {
-  local fixture="$1" check="$2"
-  ( cd "$fixture" && eval "$check" >/dev/null 2>&1 )
-  return $?
-}
-
-# Assert helper.
-# Usage: assert_check "<label>" "<check>" "<fixture>" "<expected: applied|not-applied>"
-# Semantic: "applied" means the idempotency check returned 0 (skip — already done).
-#          "not-applied" means it returned ANY non-zero (please apply).
-assert_check() {
-  local label="$1" check="$2" fixture="$3" expected="$4"
-  run_check "$fixture" "$check"
-  local actual=$?
-  local pass=0
-  case "$expected" in
-    applied)     [ "$actual" = "0" ] && pass=1 ;;
-    not-applied) [ "$actual" != "0" ] && pass=1 ;;
-    *) echo "  ${RED}!${RESET} bad expected value: $expected"; FAIL=$((FAIL+1)); return ;;
-  esac
-  if [ "$pass" = "1" ]; then
-    echo "  ${GREEN}PASS${RESET} $label (expected $expected, exit=$actual)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} $label (expected $expected, got exit=$actual)"
-    echo "      check: $check"
-    echo "      fixture: $fixture"
-    FAIL=$((FAIL+1))
-  fi
-}
+# Helpers (extract_to, run_check, assert_check) are now provided by the shared
+# lib sourced above (agenticapps-shared migrations/lib/helpers.sh +
+# fixture-runner.sh) — no local duplication.
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Migration 0000 — Baseline
@@ -123,9 +80,9 @@ test_migration_0001() {
   echo ""
   echo "${YELLOW}=== Migration 0001 — Inject spec §11 Coding Discipline ===${RESET}"
 
-  local mirror="$REPO_ROOT/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  local mirror="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
   if [ ! -f "$mirror" ]; then
-    echo "  ${RED}FAIL${RESET} mirror missing: templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    echo "  ${RED}FAIL${RESET} mirror missing: skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
     FAIL=$((FAIL+1)); return
   fi
 
@@ -370,16 +327,13 @@ JSON
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
-  local skill_md="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
-  local skill_version latest to_version
-  skill_version="$(grep '^version:' "$skill_md" | awk '{print $2}')"
-  latest="$(ls "$REPO_ROOT"/migrations/[0-9][0-9][0-9][0-9]-*.md | sort | tail -1)"
-  to_version="$(grep '^to_version:' "$latest" | awk '{print $2}')"
-  if [ -n "$skill_version" ] && [ "$skill_version" = "$to_version" ]; then
-    echo "  ${GREEN}PASS${RESET} SKILL.md version=$skill_version == $(basename "$latest") to_version=$to_version"
+  # Mechanism from the shared lib (run_drift_test); the POLICY (a mismatch is a
+  # hard fail) is this consumer's, per ADR-0035.
+  if run_drift_test "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md" "$REPO_ROOT/migrations"; then
+    echo "  ${GREEN}PASS${RESET} SKILL.md version matches latest migration to_version"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} drift: SKILL.md version=$skill_version != $(basename "$latest") to_version=$to_version"
+    echo "  ${RED}FAIL${RESET} drift mismatch (see message above)"
     FAIL=$((FAIL+1))
   fi
 }
@@ -398,20 +352,22 @@ test_repo_layout() {
     skills/agentic-apps-workflow/SKILL.md \
     skills/setup-codex-agenticapps-workflow/SKILL.md \
     skills/update-codex-agenticapps-workflow/SKILL.md \
-    templates/workflow-config.md \
-    templates/agents-md-additions.md \
-    templates/config-hooks.json \
-    templates/adr-db-security-acceptance.md \
-    templates/global-agents-additions.md \
+    skills/setup-codex-agenticapps-workflow/templates/workflow-config.md \
+    skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md \
+    skills/setup-codex-agenticapps-workflow/templates/config-hooks.json \
+    skills/setup-codex-agenticapps-workflow/templates/adr-db-security-acceptance.md \
+    skills/setup-codex-agenticapps-workflow/templates/global-agents-additions.md \
     migrations/README.md \
     migrations/0000-baseline.md \
     migrations/0001-inject-spec-11-coding-discipline.md \
     migrations/0002-add-ts-declare-first-skill.md \
     migrations/0003-delegate-observability.md \
     migrations/test-fixtures/README.md \
+    vendor/agenticapps-shared/migrations/lib/helpers.sh \
+    vendor/agenticapps-shared/migrations/lib/drift-test.sh \
     docs/observability-delegation.md \
     docs/decisions/0005-adopt-observability-architecture.md \
-    templates/spec-mirrors/11-coding-discipline-0.4.0.md \
+    skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md \
     skills/codex-ts-declare-first/SKILL.md \
     skills/codex-ts-declare-first/templates/example.declare.ts \
     skills/codex-ts-declare-first/templates/example.test.ts \

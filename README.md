@@ -52,14 +52,27 @@ and `CHANGELOG.md` for the artifact inventory at each tag.
   `0000-baseline.md` … `0003-delegate-observability.md` (contiguous
   chain), fixture-based test harness with a drift test, atomicity +
   idempotency contracts
-- **Templates** — `agents-md-additions.md`, `workflow-config.md`,
-  `config-hooks.json`, `adr-db-security-acceptance.md`,
-  `global-agents-additions.md`
-- **`install.sh`** — symlinks the skills + templates into
-  `$CODEX_HOME/skills/`; idempotent; `--copy` and `--dry-run` flags
+- **Templates** (under `skills/setup-codex-agenticapps-workflow/templates/`)
+  — `agents-md-additions.md`, `workflow-config.md`, `config-hooks.json`,
+  `adr-db-security-acceptance.md`, `global-agents-additions.md`,
+  `spec-mirrors/`
+- **`install.sh`** — symlinks the skills into `$CODEX_HOME/skills/`
+  (templates ship inside the setup skill — no secondary symlink);
+  refreshes the `agenticapps-shared` submodule; idempotent; repoints stale/
+  dangling links; `--copy` and `--dry-run` flags
 
 Every shipped artifact cites `implements_spec: 0.4.0` so conformance
 is auditable.
+
+## Consumes
+
+- [`agenticapps-shared`](https://github.com/agenticapps-eu/agenticapps-shared)
+  as a git submodule at `vendor/agenticapps-shared/` — the shared migration
+  test-harness primitives (helpers, fixture-runner, drift-test). SPLIT-01
+  parity with claude-workflow + agenticapps-observability.
+- [`agenticapps-observability`](https://github.com/agenticapps-eu/agenticapps-observability)
+  — the §10 observability generator, consumed by delegation (see
+  `docs/observability-delegation.md`).
 
 ## Install
 
