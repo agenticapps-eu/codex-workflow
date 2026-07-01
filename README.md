@@ -17,7 +17,8 @@ now **binds** the maintained upstreams instead of porting them
 ([ADR-0007](docs/decisions/0007-bind-upstream-gsd.md), standard
 [`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md)):
 GSD from `get-shit-done-codex` (the `/prompts:gsd-*` Codex prompts) and
-Superpowers from its Codex distribution. The re-ported `gsd-*`
+Superpowers from the official `superpowers` Codex plugin (`codex plugin add
+superpowers`). The re-ported `gsd-*`
 skills and the six Superpowers-duplicate `codex-*` gates were removed; their
 gate bindings now point at `superpowers:*`. Project state follows GSD's native
 flat `.planning/` layout, and the hook config is namespaced to

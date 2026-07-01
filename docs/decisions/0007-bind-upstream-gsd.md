@@ -45,8 +45,10 @@ shared standard so all three hosts share one portable project plan.
    ADR-0003's premise that Codex has no `prompts/` idiom. (The brief named
    `get-shit-done-multi`, but that npm package — and its successor
    `get-shit-done-cc` — are deprecated.)
-2. **Bind Superpowers** for Codex. Gates that duplicate Superpowers rebind to
-   `superpowers:*`:
+2. **Bind Superpowers** for Codex — the official `superpowers` Codex plugin
+   (`codex plugin add superpowers`, openai-curated marketplace; verified v6.1.0).
+   Codex plugins namespace skills as `plugin:skill`, so gates that duplicate
+   Superpowers rebind to `superpowers:*`:
    - `brainstorm-{ui,architecture}` → `superpowers:brainstorming`
    - `tdd` → `superpowers:test-driven-development`
    - `verification` → `superpowers:verification-before-completion`
@@ -95,15 +97,16 @@ shared standard so all three hosts share one portable project plan.
 
 ## Verified vs open
 
-- **Verified (2026-07-01).** `get-shit-done-codex` v1.4.1 installed on Codex CLI
-  0.142.0: 18 `/prompts:gsd-*` prompts under `~/.codex/prompts/` + resources
+- **Verified (2026-07-01, Codex CLI 0.142.0).** (1) `get-shit-done-codex` v1.4.1
+  installed → 18 `/prompts:gsd-*` prompts under `~/.codex/prompts/` + resources
   under `~/.codex/get-shit-done/`, and GSD writes the
-  `.planning/phases/<NN>-<slug>/` layout. The naming quirks (`gsd-execute-plan`;
-  no `gsd-quick`/`gsd-debug`) are reflected in the trigger skill's routing.
-- **Open.** Whether the Superpowers Codex distribution namespaces skills as
-  `superpowers:*` exactly as assumed, and the live cross-host testbed hand-off
-  (claude→codex on the shared `.planning/`). Mirrors the "Open verification"
-  caveat in `opencode-workflow/docs/BINDING.md`.
+  `.planning/phases/<NN>-<slug>/` layout (naming quirks `gsd-execute-plan`; no
+  `gsd-quick`/`gsd-debug` reflected in the trigger routing). (2) Superpowers
+  installed as the official `superpowers` Codex plugin (`codex plugin add
+  superpowers`) → all six referenced gates resolve as `superpowers:<skill>`.
+- **Open.** The live cross-host testbed hand-off (claude→codex on the shared
+  `.planning/`). Mirrors the "Open verification" caveat in
+  `opencode-workflow/docs/BINDING.md`.
 
 ## References
 

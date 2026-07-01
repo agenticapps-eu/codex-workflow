@@ -217,9 +217,15 @@ if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_UPSTREAM" -eq 0 ]; then
   fi
   echo ""
   echo "${YELLOW}Superpowers${RESET} (TDD, brainstorming, verification, code-review,"
-  echo "  finishing-branch, systematic-debugging) is the second upstream. Install the"
-  echo "  Superpowers distribution for Codex so the \`superpowers:*\` gate bindings resolve."
-  echo "  Verify: ask Codex \"tell me about your superpowers\"."
+  echo "  finishing-branch, systematic-debugging) is the second upstream — the official"
+  echo "  Codex plugin. Install it so the \`superpowers:*\` gate bindings resolve:"
+  if command -v codex >/dev/null 2>&1; then
+    codex plugin add superpowers 2>/dev/null \
+      || echo "  ${YELLOW}note:${RESET} run 'codex plugin add superpowers' (from the openai-curated marketplace)."
+  else
+    echo "    codex plugin add superpowers        # from the openai-curated marketplace"
+  fi
+  echo "  Verify: codex plugin list | grep superpowers"
 fi
 
 echo ""

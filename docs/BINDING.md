@@ -21,7 +21,7 @@ symmetric so all three share one portable project plan.
 | Layer | Source | How it's installed |
 |---|---|---|
 | **GSD** (discuss/plan/execute, `/prompts:gsd-*`, `.planning/` state) | [`get-shit-done-codex`](https://github.com/RazvanBugoi/get-shit-done) (TÂCHES lineage; v1.4.1 verified on Codex CLI 0.142.0) | `npx get-shit-done-codex` (pick Global) |
-| **Superpowers** (TDD, brainstorming, verification, code-review, finishing-branch, systematic-debugging) | [`obra/superpowers`](https://github.com/obra/superpowers) (Codex distribution) | per the Superpowers-for-Codex install |
+| **Superpowers** (TDD, brainstorming, verification, code-review, finishing-branch, systematic-debugging) | [`obra/superpowers`](https://github.com/obra/superpowers) — the official `superpowers` Codex plugin (openai-curated marketplace) | `codex plugin add superpowers` |
 | **AgenticApps** (spec-first trigger, gstack gates, spec/QA/DB/security gates, migration install) | this repo | `bash install.sh` + `$setup-codex-agenticapps-workflow` |
 
 ## What this repo still ships (the AgenticApps layer)
@@ -110,7 +110,9 @@ npx get-shit-done-codex               # interactive: pick Global (~/.codex)
 #   non-interactive: npx -y -p get-shit-done-codex get-shit-done-cc --global
 #   installs /prompts:gsd-* under $CODEX_HOME/prompts; verify: /prompts:gsd-help
 
-# 3. Superpowers for Codex — per its install; restart Codex to load
+# 3. Superpowers — official Codex plugin; restart Codex to load
+codex plugin add superpowers           # from the openai-curated marketplace
+#   verify: codex plugin list | grep superpowers
 
 # 4. Per-project: $setup-codex-agenticapps-workflow   (migration install)
 #    (or:          $update-codex-agenticapps-workflow  on an installed project)
@@ -118,16 +120,24 @@ npx get-shit-done-codex               # interactive: pick Global (~/.codex)
 
 ## Verified vs open
 
-**Verified (2026-07-01):** `get-shit-done-codex` v1.4.1 installed on Codex CLI
-0.142.0 → 18 `/prompts:gsd-*` prompts under `~/.codex/prompts/` + resources under
-`~/.codex/get-shit-done/`, and GSD writes the `.planning/phases/<NN>-<slug>/`
-layout above. The naming quirks (`gsd-execute-plan`; no `gsd-quick`/`gsd-debug`)
-are reflected in the trigger skill's routing.
+**Verified (2026-07-01, Codex CLI 0.142.0):**
 
-**Open:** whether the Superpowers Codex distribution namespaces its skills as
-`superpowers:*` exactly as referenced here (the gate bindings assume it), and the
-live cross-host testbed hand-off (claude→codex plan continuity on the shared
-`.planning/`).
+1. **GSD** — `get-shit-done-codex` v1.4.1 installed → 18 `/prompts:gsd-*` prompts
+   under `~/.codex/prompts/` + resources under `~/.codex/get-shit-done/`, and GSD
+   writes the `.planning/phases/<NN>-<slug>/` layout above. The naming quirks
+   (`gsd-execute-plan`; no `gsd-quick`/`gsd-debug`) are reflected in the trigger
+   skill's routing.
+2. **Superpowers** — installed as the official `superpowers` Codex plugin
+   (`codex plugin add superpowers`, openai-curated marketplace). Codex plugins
+   namespace skills as `plugin:skill`, so the six gate bindings resolve exactly:
+   `superpowers:brainstorming`, `superpowers:test-driven-development`,
+   `superpowers:verification-before-completion`,
+   `superpowers:requesting-code-review`,
+   `superpowers:finishing-a-development-branch`,
+   `superpowers:systematic-debugging`.
+
+**Open:** the live cross-host testbed hand-off (claude→codex plan continuity on
+the shared `.planning/`).
 
 > **Package lineage note.** The brief named `get-shit-done-multi`, but that npm
 > package is deprecated (→ `get-shit-done-cc`, also deprecated). The maintained

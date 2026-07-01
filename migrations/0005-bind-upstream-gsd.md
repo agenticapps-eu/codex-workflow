@@ -18,12 +18,13 @@ requires:
       symlinks go away and the kept AgenticApps skills relink:
         bash install.sh
     verify: "ls \"${CODEX_HOME:-$HOME/.codex}/prompts\" 2>/dev/null | grep -q '^gsd-' || echo 'bind GSD: run npx get-shit-done-codex'"
-  - skill: superpowers (for Codex)
+  - skill: superpowers (official Codex plugin)
     install: |
-      Install the Superpowers distribution for Codex so the superpowers:*
-      gate bindings resolve (TDD, brainstorming, verification, code-review,
-      finishing-branch, systematic-debugging). See docs/BINDING.md.
-    verify: "echo 'verify: ask Codex \"tell me about your superpowers\"'"
+      Install the Superpowers Codex plugin so the superpowers:* gate bindings
+      resolve (TDD, brainstorming, verification, code-review, finishing-branch,
+      systematic-debugging). Skills are namespaced `superpowers:<skill>`:
+        codex plugin add superpowers        # from the openai-curated marketplace
+    verify: "codex plugin list 2>/dev/null | grep -q superpowers || echo 'bind Superpowers: codex plugin add superpowers'"
 optional_for: []
 ---
 

@@ -27,7 +27,9 @@ in every shipped artifact's frontmatter.
   GSD is bound from `get-shit-done-codex` (TÂCHES lineage), which installs 18
   `/prompts:gsd-*` Codex prompts under `~/.codex/prompts` (verified v1.4.1 on
   Codex CLI 0.142.0 — supersedes ADR-0003's "no prompts idiom" premise);
-  Superpowers is bound from its Codex distribution. The six Superpowers-duplicate
+  Superpowers is bound from the official `superpowers` Codex plugin
+  (`codex plugin add superpowers`, openai-curated marketplace; verified v6.1.0 —
+  skills namespaced `superpowers:<skill>`). The six Superpowers-duplicate
   gates rebind to `superpowers:*`: `brainstorm-*` → `superpowers:brainstorming`,
   `tdd` → `superpowers:test-driven-development`, `verification` →
   `superpowers:verification-before-completion`, `code-review` →
