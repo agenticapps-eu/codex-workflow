@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 0.2.1
+version: 0.3.0
 implements_spec: 0.4.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
@@ -12,7 +12,8 @@ description: |
   "start working" or references a Linear / Asana / Jira / GitHub issue
   number. The skill emits the workflow commitment ritual, picks task
   size, routes to the right GSD entry-point skill, and binds every spec
-  gate to the codex-* gate-fulfilling skill that satisfies it.
+  gate to the upstream Superpowers skill or codex-* gate-fulfilling
+  skill that satisfies it.
 ---
 
 # agentic-apps-workflow
@@ -22,6 +23,25 @@ the OpenAI Codex CLI host. It is a `full`-conformance implementation of
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
 v0.4.0. The frontmatter `implements_spec: 0.4.0` is the conformance
 citation per spec/09.
+
+This repo is a **thin binding**, not a re-port (see
+[`docs/BINDING.md`](../../docs/BINDING.md) and
+[ADR-0007](../../docs/decisions/0007-bind-upstream-gsd.md)). Two upstreams
+provide the heavy lifting and are installed alongside this repo:
+
+- **GSD** (`$gsd-discuss-phase` / `$gsd-plan-phase` / `$gsd-execute-phase`
+  / `$gsd-debug` / `$gsd-quick`, model profiles, the `.planning/` project
+  state) — from `get-shit-done-multi` in `--codex` mode, installed under
+  `$CODEX_HOME/skills`.
+- **Superpowers** (TDD, brainstorming, verification, code review,
+  finishing-branch, systematic-debugging) — the Superpowers distribution
+  for Codex. Gates that duplicate Superpowers bind to `superpowers:*`.
+
+This repo ships only the AgenticApps layer: this trigger skill plus the
+gstack/AgenticApps gates that have **no** GSD/Superpowers equivalent
+(`codex-cso`, `codex-qa`, `codex-design-shotgun`, `codex-design-critique`,
+`codex-database-sentinel-audit`, `codex-impeccable-audit`,
+`codex-spec-review`, `codex-ts-declare-first`).
 
 The body of this skill follows the structure required by the core
 spec: the four canonical-prose blocks (Step 0, Rationalization Table,
@@ -70,22 +90,33 @@ violation.
 
 | Size | Heuristic | Required skills (in order) |
 |---|---|---|
-| **Tiny** | One-line typo, comment edit, README tweak, no behavior change | `codex-verification` |
-| **Small** | Single-file logic change, isolated bug fix, ≤ ~20 lines diff | `codex-tdd` → `codex-verification` → `codex-finishing-branch` |
-| **Medium** | Multi-file feature, new endpoint, new component, new test class | `$gsd-discuss-phase` → `$gsd-plan-phase` → `$gsd-execute-phase` (auto-invokes the gate skills bound in Step 3) |
-| **Large** | Cross-cutting refactor, new service, new data shape, new infrastructure | `$gsd-discuss-phase` → `$gsd-plan-phase` → `$gsd-execute-phase` plus `codex-cso`, `codex-database-sentinel-audit`, `codex-impeccable-audit` per gate triggers in Step 3 |
+| **Tiny** | One-line typo, comment edit, README tweak, no behavior change | `superpowers:verification-before-completion` |
+| **Small** | Single-file logic change, isolated bug fix, ≤ ~20 lines diff | `superpowers:test-driven-development` → `superpowers:verification-before-completion` → `superpowers:finishing-a-development-branch` |
+| **Medium** | Multi-file feature, new endpoint, new component, new test class | `$gsd-discuss-phase` → `$gsd-plan-phase` → `$gsd-execute-phase` (auto-invokes the gate skills bound in Step 3). **Mandatory (non-skippable):** the Stage-2 `code-review` gate (`superpowers:requesting-code-review`) and an ADR in `docs/decisions/` for any locked design decision |
+| **Large** | Cross-cutting refactor, new service, new data shape, new infrastructure | Medium's list plus `codex-cso`, `codex-database-sentinel-audit`, `codex-impeccable-audit` per gate triggers in Step 3 |
 
 If the request matches multiple rows, pick the higher one. The
 commitment block in Step 0 names the chosen size — this commits you to
 the row's invocation list.
+
+**Medium/large enforcement (spec §6 / standard §6).** For medium and
+large tasks the independent Stage-2 code-review gate is required and a
+decision captured only in `CONTEXT.md` is **not** sufficient — a locked
+design decision (ordering, schema, algorithm/policy choice, API shape)
+MUST also land as an ADR. `superpowers:verification-before-completion`
+refuses to mark the phase complete if either the review evidence or a
+required ADR is missing. Tiny/small tasks are exempt.
 
 ---
 
 ## Step 2 — Route to the right entry point
 
 Codex's invocation idiom is `$skill-name`. The five GSD entry-point
-skills are explicit-only (`policy.allow_implicit_invocation: false` in
-their `agents/openai.yaml`); invoke them by typing the `$` shortcut.
+skills (`$gsd-discuss-phase`, `$gsd-plan-phase`, `$gsd-execute-phase`,
+`$gsd-quick`, `$gsd-debug`) are provided by the bound upstream
+(`get-shit-done-multi --codex`), which installs them under
+`$CODEX_HOME/skills` as explicit-only Codex skills. Invoke them by
+typing the `$` shortcut. This repo does **not** ship them (see ADR-0007).
 
 The Step 1 size decision and this Step 2 routing form one branchy
 workflow. The flowchart below is the decision skeleton (per spec §12);
@@ -95,19 +126,19 @@ rows, judgment picks the higher one (the labeled fallback edge).
 ```mermaid
 flowchart TD
   start[Code task received] --> kind{Intent?}
-  kind -->|bug / unexpected behavior| dbg["$gsd-debug → codex-systematic-debugging"]
+  kind -->|bug / unexpected behavior| dbg["$gsd-debug → superpowers:systematic-debugging"]
   kind -->|quick experiment, GSD bookkeeping| quick["$gsd-quick"]
   kind -->|build / change / refactor| size{Task size? Step 1}
-  size -->|tiny| tiny[codex-verification → commit]
-  size -->|small| small[codex-tdd → codex-verification → codex-finishing-branch]
+  size -->|tiny| tiny[superpowers:verification-before-completion → commit]
+  size -->|small| small[superpowers:test-driven-development → superpowers:verification-before-completion → superpowers:finishing-a-development-branch]
   size -->|medium or large| disc["$gsd-discuss-phase {N}"]
   size -.->|ambiguous: matches two rows → pick the HIGHER size| size
   disc --> plan["$gsd-plan-phase {N}"]
   plan --> exec["$gsd-execute-phase {N}"]
   exec --> gates{Gate trigger fires? Step 3}
-  gates -->|yes| gaterun[Run the bound codex-* gate skill]
+  gates -->|yes| gaterun[Run the bound superpowers:* or codex-* gate skill]
   gaterun --> exec
-  gates -->|all clear| close[codex-finishing-branch]
+  gates -->|all clear| close[superpowers:finishing-a-development-branch]
   tiny --> report[REPORT: commitment list satisfied]
   small --> report
   close --> report
@@ -118,16 +149,17 @@ flowchart TD
 | User intent | Entry point |
 |---|---|
 | Tiny or small task | invoke gate skills directly per Step 1 — no GSD orchestration |
-| Bug or unexpected behavior | `$gsd-debug` (auto-invokes `codex-systematic-debugging`) |
+| Bug or unexpected behavior | `$gsd-debug` (auto-invokes `superpowers:systematic-debugging`) |
 | Quick experiment with GSD bookkeeping | `$gsd-quick` |
 | Surface open questions before planning | `$gsd-discuss-phase {N}` |
 | Author a phase plan | `$gsd-plan-phase {N}` |
 | Execute a planned phase | `$gsd-execute-phase {N}` |
 
 `{N}` is the phase number from the project's `ROADMAP.md`.
-`gsd-execute-phase` is the heavyweight orchestrator: it walks each plan
-in the phase, fires the applicable gates from Step 3, and refuses to
-mark any task complete without verification evidence (per spec/06).
+`$gsd-execute-phase` (GSD, upstream) is the heavyweight orchestrator: it
+walks each plan in the phase, fires the applicable gates from Step 3, and
+refuses to mark any task complete without verification evidence (per
+spec/06).
 
 ---
 
@@ -136,14 +168,17 @@ mark any task complete without verification evidence (per spec/06).
 The 15 gates from
 [spec/02-hook-taxonomy.md](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/spec/02-hook-taxonomy.md)
 are bound on the Codex host as follows. This table is the host's
-binding contract for `full` conformance per spec/09.
+binding contract for `full` conformance per spec/09. Gates that have a
+Superpowers equivalent bind to `superpowers:*` (installed by the
+Superpowers-for-Codex distribution); the rest bind to this repo's
+`codex-*` gstack gates.
 
 ### Pre-phase
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `brainstorm-ui` | `codex-brainstorming` | Same skill covers UI and architecture; body branches on the prompt |
-| `brainstorm-architecture` | `codex-brainstorming` | |
+| `brainstorm-ui` | `superpowers:brainstorming` | Same skill covers UI and architecture; body branches on the prompt |
+| `brainstorm-architecture` | `superpowers:brainstorming` | |
 | `design-shotgun` | `codex-design-shotgun` | Generates ≥3 visual variants and writes them into `CONTEXT.md` |
 | `design-critique` | `codex-design-critique` | Impeccable-style critique against an existing `UI-SPEC.md` |
 
@@ -151,17 +186,17 @@ binding contract for `full` conformance per spec/09.
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `tdd` | `codex-tdd` | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically |
+| `tdd` | `superpowers:test-driven-development` | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically |
 | `tdd` (new TS module) | `codex-ts-declare-first` | Strengthens `tdd` for a new TypeScript module's API surface (spec §13): three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN); refuses to collapse declare + impl into one commit |
 | `ui-preview` | `codex-qa` (preview mode) | Per-task pre-commit screenshot mode of the same QA skill; the qa skill body branches on `mode=preview` vs `mode=phase-qa` |
-| `verification` | `codex-verification` | Refuses task completion when `must_have` evidence is missing |
+| `verification` | `superpowers:verification-before-completion` | Refuses task completion when `must_have` evidence is missing |
 
 ### Post-phase
 
 | Gate | Bound skill | Notes |
 |---|---|---|
 | `spec-review` | `codex-spec-review` | Stage 1; writes `## Stage 1 — Spec compliance` into `REVIEW.md` |
-| `code-review` | `codex-code-review` | Stage 2; spawns an independent reviewer via `codex exec --model …` per [ADR-0002](../../docs/decisions/0002-stage2-independent-reviewer-on-codex.md) |
+| `code-review` | `superpowers:requesting-code-review` | Stage 2; spawns an independent reviewer via `codex exec --model …` per [ADR-0002](../../docs/decisions/0002-stage2-independent-reviewer-on-codex.md). Mandatory (non-skippable) for medium/large per Step 1 |
 | `security` | `codex-cso` | OWASP-aligned security audit; writes `SECURITY.md` |
 | `database-security` | `codex-database-sentinel-audit` | Same skill, "in-phase" mode |
 | `qa` | `codex-qa` | Phase-level browser-driven QA mode (distinct from `ui-preview` mode) |
@@ -172,9 +207,9 @@ binding contract for `full` conformance per spec/09.
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `branch-close` | `codex-finishing-branch` | Composes the PR description from the phase artifacts |
+| `branch-close` | `superpowers:finishing-a-development-branch` | Composes the PR description from the phase artifacts |
 
-The `codex-systematic-debugging` skill is not bound to a spec gate —
+The `superpowers:systematic-debugging` skill is not bound to a spec gate —
 it is the implementation behind `$gsd-debug` for the four-phase
 Observe → Hypothesize → Test → Conclude protocol.
 
@@ -194,6 +229,12 @@ Every non-trivial decision lands as an ADR in
 canonical layout). Generic and database-acceptance ADR templates from
 `agenticapps-workflow-core/templates/` are deferred — copy from
 `docs/decisions/0001-*.md` until the core templates land.
+
+**For medium and large tasks an ADR is mandatory** whenever the phase
+locks a design decision (per Step 1). A decision recorded only in the
+phase `CONTEXT.md` does not satisfy the requirement;
+`superpowers:verification-before-completion` treats a missing ADR as a
+verification failure.
 
 ADR-0012 governs the database-sentinel acceptance template. When that
 gate fires, copy its ADR shape from
@@ -249,17 +290,23 @@ If any answer gives you pause, follow the protocol.
 
 Before claiming any phase complete, run the following checks against
 the working tree. Each check is a permitted evidence shape per
-spec/06.
+spec/06. Paths follow GSD's native phase-subdirectory layout: a phase
+lives in `.planning/phases/<NN>-<slug>/` (e.g. `03-checkout/`) holding
+GSD's `<NN>-CONTEXT.md`, `<NN>-<MM>-PLAN.md`, `<NN>-VERIFICATION.md`,
+`<NN>-<MM>-SUMMARY.md`, etc. The AgenticApps artifacts (`REVIEW.md`,
+`QA.md`, `DB-AUDIT.md`, `IMPECCABLE-AUDIT.md`, `screenshots/`) live
+**inside** that same phase directory — GSD writes the plan state, the
+AgenticApps layer adds its evidence alongside without reshaping it.
 
 ### Commitment block was emitted
 
-The session transcript or `.planning/phases/<N>/SUMMARY.md` contains
-the `## Workflow commitment` block. If the agent did not emit it, the
-phase is non-conformant and Stage 1 review MUST flag it.
+A `.planning/phases/<NN>-<slug>/<NN>-CONTEXT.md` (or the phase summary)
+contains the `## Workflow commitment` block. If the agent did not emit
+it, the phase is non-conformant and Stage 1 review MUST flag it.
 
 ```bash
-grep -l '^## Workflow commitment$' .planning/phases/*/SUMMARY.md 2>/dev/null \
-  || echo "MISS: commitment block not found in any phase summary"
+grep -l '^## Workflow commitment$' .planning/phases/*/*-CONTEXT.md .planning/phases/*/*-SUMMARY.md 2>/dev/null \
+  || echo "MISS: commitment block not found in any phase artifact"
 ```
 
 ### TDD commit pairs exist for tasks marked `tdd="true"`
@@ -277,23 +324,24 @@ git log --oneline --grep '^feat(GREEN)' | head
 
 ### Stage 2 evidence is present and independent
 
-`REVIEW.md` for the phase contains both `## Stage 1 — Spec compliance`
-and `## Stage 2 — Code quality`. Stage 2 was authored by an
-independent reviewer (per spec/07) — on Codex this means a `codex
-exec` child invocation logged in the phase's `evidence/` directory or
-referenced by command in `REVIEW.md`.
+`.planning/phases/<NN>-<slug>/REVIEW.md` contains both `## Stage 1 —
+Spec compliance` and `## Stage 2 — Code quality`. Stage 2 was authored
+by an independent reviewer (per spec/07) — on Codex this means a `codex
+exec` child invocation logged for the phase or referenced by command in
+the REVIEW file. For medium/large tasks this file is mandatory (Step 1).
 
 ```bash
-grep -l '^## Stage 1 — Spec compliance' .planning/phases/<N>/REVIEW.md \
-  && grep -l '^## Stage 2 — Code quality' .planning/phases/<N>/REVIEW.md \
+phase="$1"   # e.g. 03-checkout
+grep -l '^## Stage 1 — Spec compliance' ".planning/phases/${phase}/REVIEW.md" \
+  && grep -l '^## Stage 2 — Code quality' ".planning/phases/${phase}/REVIEW.md" \
   || echo "MISS: REVIEW.md is missing one of the two stages"
 ```
 
 ### Per-`must_have` evidence in VERIFICATION.md
 
-Every `must_have` row in `VERIFICATION.md` has at least one Evidence
-subrow per spec/06. A `must_have` with zero Evidence rows is a
-verification failure.
+Every `must_have` row in `.planning/phases/<NN>-<slug>/<NN>-VERIFICATION.md`
+has at least one Evidence subrow per spec/06. A `must_have` with zero
+Evidence rows is a verification failure.
 
 ```bash
 awk '
@@ -301,7 +349,18 @@ awk '
   /^- Evidence:/ && must { ev++ ; next }
   /^### / && must && !ev { print "MISS evidence: " must; must=""; ev=0 }
   END { if (must && !ev) print "MISS evidence: " must }
-' .planning/phases/<N>/VERIFICATION.md
+' .planning/phases/*/*-VERIFICATION.md
+```
+
+### ADR present for medium/large locked decisions
+
+A medium/large phase that locked a design decision has a matching ADR
+under `docs/decisions/`. A decision living only in the phase context is
+a verification failure (Step 4).
+
+```bash
+ls docs/decisions/[0-9][0-9][0-9][0-9]-*.md >/dev/null 2>&1 \
+  || echo "MISS: no ADR recorded — required for medium/large locked decisions"
 ```
 
 ### `implements_spec` is current
@@ -322,7 +381,9 @@ grep '^implements_spec:' "${CODEX_HOME:-$HOME/.codex}/skills/agentic-apps-workfl
 After install via this scaffolder's `install.sh` (or by symlinking the
 `skills/agentic-apps-workflow/` directory into `$CODEX_HOME/skills/`),
 Codex auto-discovers this SKILL.md and routes to it on any code task
-matching the description in the frontmatter.
+matching the description in the frontmatter. `install.sh` also binds the
+upstreams (GSD via `get-shit-done-multi --codex`; Superpowers for Codex)
+— see [`docs/BINDING.md`](../../docs/BINDING.md).
 
 The skill stays loaded only during the triggering turn (per Codex's
 progressive-disclosure design); subsequent turns re-trigger when the

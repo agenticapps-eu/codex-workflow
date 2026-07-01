@@ -14,3 +14,4 @@ venv/
 .planning/cache/
 .planning/state/
 session-handoff.md
+.codex/session-handoff.md

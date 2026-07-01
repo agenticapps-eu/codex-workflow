@@ -356,6 +356,133 @@ test_migration_0004() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0005 — Bind upstream GSD + Superpowers; namespace the hook config
+# Testable non-interactively: config rename (config.json → config.codex.json) +
+# jq rebind/rollback of the six Superpowers-duplicate gates on a synthetic config,
+# plus a kept-gate-intact assertion.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0005() {
+  echo ""
+  echo "${YELLOW}=== Migration 0005 — Bind upstream GSD + Superpowers ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — config-edit test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  mkdir -p "$tmp/.planning"
+
+  # Synthetic pre-0.3.0 config: old name, codex-* dupe bindings, a kept gstack
+  # gate (design_shotgun), and the §13 strengthener from migration 0002.
+  cat > "$tmp/.planning/config.json" <<'JSON'
+{ "hooks": {
+    "pre_phase": {
+      "brainstorm_ui": { "skill": "codex-brainstorming", "mode": "ui" },
+      "brainstorm_architecture": { "skill": "codex-brainstorming", "mode": "architecture" },
+      "design_shotgun": { "skill": "codex-design-shotgun" }
+    },
+    "per_task": {
+      "tdd": { "skill": "codex-tdd", "strengthened_by": { "skill": "codex-ts-declare-first" } },
+      "verification": { "skill": "codex-verification" }
+    },
+    "post_phase": { "code_review": { "skill": "codex-code-review", "stage": 2 } },
+    "finishing": { "branch_close": { "skill": "codex-finishing-branch" } }
+} }
+JSON
+
+  # Step 1 idempotency: not yet renamed → needs apply.
+  assert_check "idempotency: config.json still present → needs namespacing" \
+    "test -f .planning/config.codex.json && ! test -f .planning/config.json" \
+    "$tmp" "not-applied"
+
+  # Apply Step 1 (rename).
+  ( cd "$tmp" && mv .planning/config.json .planning/config.codex.json )
+  assert_check "after Step 1: config namespaced to config.codex.json" \
+    "test -f .planning/config.codex.json && ! test -f .planning/config.json" \
+    "$tmp" "applied"
+
+  # Step 2 idempotency: dupe gate still codex-* → needs rebind.
+  assert_check "idempotency: dupe gate still codex-* → needs rebind" \
+    "jq -e '.hooks.pre_phase.brainstorm_ui.skill == \"superpowers:brainstorming\"' .planning/config.codex.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  # Apply Step 2 (rebind).
+  ( cd "$tmp" && jq '
+        .hooks.pre_phase.brainstorm_ui.skill           = "superpowers:brainstorming"
+      | .hooks.pre_phase.brainstorm_architecture.skill = "superpowers:brainstorming"
+      | .hooks.per_task.tdd.skill                      = "superpowers:test-driven-development"
+      | .hooks.per_task.verification.skill             = "superpowers:verification-before-completion"
+      | .hooks.post_phase.code_review.skill            = "superpowers:requesting-code-review"
+      | .hooks.finishing.branch_close.skill            = "superpowers:finishing-a-development-branch"
+    ' .planning/config.codex.json > .planning/config.tmp && mv .planning/config.tmp .planning/config.codex.json )
+
+  assert_check "after Step 2: tdd rebound to superpowers" \
+    "jq -e '.hooks.per_task.tdd.skill == \"superpowers:test-driven-development\"' .planning/config.codex.json >/dev/null" \
+    "$tmp" "applied"
+  assert_check "after Step 2: code_review rebound to superpowers" \
+    "jq -e '.hooks.post_phase.code_review.skill == \"superpowers:requesting-code-review\"' .planning/config.codex.json >/dev/null" \
+    "$tmp" "applied"
+
+  # Kept gstack gate must be intact (not clobbered).
+  if ( cd "$tmp" && jq -e '.hooks.pre_phase.design_shotgun.skill == "codex-design-shotgun"' .planning/config.codex.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} kept gstack gate (design-shotgun) intact after rebind"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} kept gstack gate clobbered by rebind"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The §13 strengthener from 0002 must survive the rebind.
+  if ( cd "$tmp" && jq -e '.hooks.per_task.tdd.strengthened_by.skill == "codex-ts-declare-first"' .planning/config.codex.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} §13 strengthener (codex-ts-declare-first) preserved"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §13 strengthener lost during rebind"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Rollback Step 2 restores codex-* bindings.
+  ( cd "$tmp" && jq '
+        .hooks.pre_phase.brainstorm_ui.skill           = "codex-brainstorming"
+      | .hooks.pre_phase.brainstorm_architecture.skill = "codex-brainstorming"
+      | .hooks.per_task.tdd.skill                      = "codex-tdd"
+      | .hooks.per_task.verification.skill             = "codex-verification"
+      | .hooks.post_phase.code_review.skill            = "codex-code-review"
+      | .hooks.finishing.branch_close.skill            = "codex-finishing-branch"
+    ' .planning/config.codex.json > .planning/config.tmp && mv .planning/config.tmp .planning/config.codex.json )
+  assert_check "after Step 2 rollback: bindings back to codex-*" \
+    "jq -e '.hooks.per_task.tdd.skill == \"superpowers:test-driven-development\"' .planning/config.codex.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  # The binding ADR + BINDING doc ship.
+  if [ -f "$REPO_ROOT/docs/BINDING.md" ] && [ -f "$REPO_ROOT/docs/decisions/0007-bind-upstream-gsd.md" ]; then
+    echo "  ${GREEN}PASS${RESET} docs/BINDING.md + ADR-0007 ship"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} docs/BINDING.md or ADR-0007 missing"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The re-ported skills must be gone from the scaffolder.
+  local leaked=""
+  for s in gsd-discuss-phase gsd-plan-phase gsd-execute-phase gsd-debug gsd-quick \
+           codex-brainstorming codex-tdd codex-verification codex-finishing-branch \
+           codex-code-review codex-systematic-debugging; do
+    [ -e "$REPO_ROOT/skills/$s" ] && leaked="$leaked $s"
+  done
+  if [ -z "$leaked" ]; then
+    echo "  ${GREEN}PASS${RESET} re-ported gsd-*/superpowers-dupe skills removed from scaffolder"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} re-ported skills still present:$leaked"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -399,7 +526,10 @@ test_repo_layout() {
     migrations/0002-add-ts-declare-first-skill.md \
     migrations/0003-delegate-observability.md \
     migrations/0004-revendor-spec-11.md \
+    migrations/0005-bind-upstream-gsd.md \
     migrations/test-fixtures/README.md \
+    docs/BINDING.md \
+    docs/decisions/0007-bind-upstream-gsd.md \
     vendor/agenticapps-shared/migrations/lib/helpers.sh \
     vendor/agenticapps-shared/migrations/lib/drift-test.sh \
     docs/observability-delegation.md \
@@ -442,6 +572,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0004" ]; then
   test_migration_0004
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0005" ]; then
+  test_migration_0005
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

@@ -15,7 +15,7 @@ finding during phase {{PHASE_OR_PRE_LAUNCH}}:
 - **Anti-pattern**: {{NAME_FROM_DB_AUDIT_MD}}
 - **Location**: {{TABLE / RULE / POLICY / FUNCTION / CONFIG_KEY}}
 - **Scanner output**: see
-  `.planning/phases/{{N}}/DB-AUDIT.md` (or `docs/DB-AUDIT.md` for
+  `.planning/phases/{{NN}}-{{slug}}/DB-AUDIT.md` (or `docs/DB-AUDIT.md` for
   pre-launch).
 
 Per [ADR-0012](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0012-database-sentinel-rls-audit-gate.md),
@@ -84,7 +84,7 @@ indefinite deferral.
 
 ## References
 
-- DB-AUDIT.md: `.planning/phases/{{N}}/DB-AUDIT.md`
+- DB-AUDIT.md: `.planning/phases/{{NN}}-{{slug}}/DB-AUDIT.md`
 - ADR-0012 (host-agnostic gate definition):
   https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0012-database-sentinel-rls-audit-gate.md
 - spec/02 `database-security` gate definition:

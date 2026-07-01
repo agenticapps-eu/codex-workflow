@@ -42,8 +42,8 @@ One skill, two modes — see ADR-0001 D2 for the binding rationale.
    component's URL.
 3. **Screenshot.** Capture default state, plus any clearly-implied
    alternate state (hover, focus, populated form, error). Save under
-   `.planning/phases/<N>/screenshots/{{task-id}}/{{state}}.png` (or
-   the project's screenshot convention).
+   `.planning/phases/<NN>-<slug>/screenshots/{{task-id}}/{{state}}.png`
+   (or the project's screenshot convention).
 4. **Reference in commit message.** The commit body MUST include a
    `Screenshot: <path>` line per state captured. The
    `verification` gate's later check looks for this reference.
@@ -65,7 +65,7 @@ One skill, two modes — see ADR-0001 D2 for the binding rationale.
    (screenshot, network response, console output), and any console
    errors / warnings.
 4. **Write the QA report.** Append to VERIFICATION.md or create
-   `.planning/phases/<N>/QA.md`:
+   `.planning/phases/<NN>-<slug>/QA.md`:
 
    ```markdown
    # QA report — phase {{N}}

@@ -5,12 +5,12 @@
   "hooks": {
     "pre_phase": {
       "brainstorm_ui": {
-        "skill": "codex-brainstorming",
+        "skill": "superpowers:brainstorming",
         "mode": "ui",
         "fires_when": "phase has UI plan and CONTEXT.md lacks Design alternatives section"
       },
       "brainstorm_architecture": {
-        "skill": "codex-brainstorming",
+        "skill": "superpowers:brainstorming",
         "mode": "architecture",
         "fires_when": "phase introduces new service/model/integration/data shape and CONTEXT.md or RESEARCH.md lacks Architecture alternatives section"
       },
@@ -27,7 +27,7 @@
     },
     "per_task": {
       "tdd": {
-        "skill": "codex-tdd",
+        "skill": "superpowers:test-driven-development",
         "fires_when": "task carries tdd=\"true\" marker",
         "commit_pair": ["test(RED):", "feat(GREEN):"]
       },
@@ -37,7 +37,7 @@
         "fires_when": "task modifies a frontend component, route, or visual surface"
       },
       "verification": {
-        "skill": "codex-verification",
+        "skill": "superpowers:verification-before-completion",
         "fires_when": "always — before any task transitions to complete",
         "permitted_evidence_shapes": [
           "test_output",
@@ -56,7 +56,7 @@
         "stage": 1
       },
       "code_review": {
-        "skill": "codex-code-review",
+        "skill": "superpowers:requesting-code-review",
         "fires_when": "always — after spec_review, in independent agent context",
         "stage": 2,
         "mechanism": "codex exec child process",
@@ -94,7 +94,7 @@
         "blocking_severity": ["Critical", "High"]
       },
       "branch_close": {
-        "skill": "codex-finishing-branch",
+        "skill": "superpowers:finishing-a-development-branch",
         "fires_when": "feature branch ready to merge"
       }
     }

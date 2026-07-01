@@ -1,7 +1,0 @@
-interface:
-  display_name: "GSD: Debug"
-  short_description: "Four-phase root-cause debugging protocol"
-  default_prompt: "Use $gsd-debug to run the four-phase Observe → Hypothesize → Test → Conclude protocol on a bug — refuses to propose a fix until a discriminating test names the root cause."
-
-policy:
-  allow_implicit_invocation: false

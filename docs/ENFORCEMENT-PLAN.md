@@ -53,14 +53,14 @@ build-out (`docs/dogfood-2026-05-10.md`).
 
 | Gate | Bound skill | When fires here | Notes |
 |---|---|---|---|
-| `brainstorm-architecture` | `codex-brainstorming` (architecture mode) | Adding a new skill, template, or migration | The Phase 0 ADR set is the reference shape |
-| `tdd` | `codex-tdd` | Any task adding logic to `install.sh` or `migrations/run-tests.sh` | Markdown content (skills, templates, ADRs) does not require TDD |
+| `brainstorm-architecture` | `superpowers:brainstorming` (architecture mode) | Adding a new skill, template, or migration | The Phase 0 ADR set is the reference shape |
+| `tdd` | `superpowers:test-driven-development` | Any task adding logic to `install.sh` or `migrations/run-tests.sh` | Markdown content (skills, templates, ADRs) does not require TDD |
 | `tdd` (new TS module) | `codex-ts-declare-first` | A new TypeScript module's public API surface (spec §13) | Strengthens `tdd`: three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN). Does not fire on this markdown scaffolder; bound for downstream TS projects |
-| `verification` | `codex-verification` | Always — every PR | Evidence shapes here are typically grep results, file existence, and `run-tests.sh` output |
+| `verification` | `superpowers:verification-before-completion` | Always — every PR | Evidence shapes here are typically grep results, file existence, and `run-tests.sh` output |
 | `spec-review` | `codex-spec-review` | Always — every PR | Stage 1 of two-stage review |
-| `code-review` | `codex-code-review` | Always — every PR | Stage 2; `codex exec` child process per ADR-0002 |
+| `code-review` | `superpowers:requesting-code-review` | Always — every PR | Stage 2; `codex exec` child process per ADR-0002 |
 | `security` | `codex-cso` | When changing `install.sh` or any executable script | OWASP-aligned scan; for a scaffolder the relevant axes are: command injection, path traversal, secret exposure, unsafe `eval` of remote content |
-| `branch-close` | `codex-finishing-branch` | Every PR | The PRs for Phases 1–6 each demonstrate this binding |
+| `branch-close` | `superpowers:finishing-a-development-branch` | Every PR | The PRs for Phases 1–6 each demonstrate this binding |
 
 ### Spec Deltas — gates whose trigger cannot occur
 
@@ -72,7 +72,7 @@ cannot occur (spec/09 final paragraph in "full" section).
 
 | Gate | Bound skill (for downstream projects) | Why no trigger here |
 |---|---|---|
-| `brainstorm-ui` | `codex-brainstorming` (ui mode) | The scaffolder ships no UI. All contributors interact via CLI / git / markdown. |
+| `brainstorm-ui` | `superpowers:brainstorming` (ui mode) | The scaffolder ships no UI. All contributors interact via CLI / git / markdown. |
 | `design-shotgun` | `codex-design-shotgun` | Same — no visual surface to vary. |
 | `design-critique` | `codex-design-critique` | Same — no UI to critique. |
 | `ui-preview` | `codex-qa` (preview mode) | Same — no frontend code, no dev server. |

@@ -55,7 +55,7 @@ and is bound by [ADR-0012](https://github.com/agenticapps-eu/agenticapps-workflo
    - Supabase RLS default-permissive (CVE-2025-48757) — policy
      audit per table
    - Firebase Firestore default-readable rules — rules file inspection
-5. **Write DB-AUDIT.md** to `.planning/phases/<N>/DB-AUDIT.md`
+5. **Write DB-AUDIT.md** to `.planning/phases/<NN>-<slug>/DB-AUDIT.md`
    (phase-scoped) or `docs/DB-AUDIT.md` (pre-launch):
 
    ```markdown
