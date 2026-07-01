@@ -52,7 +52,7 @@ Two forms per §13:
   > "I'm starting a new TS module `lib/bounded-queue/`. Use
   > $codex-ts-declare-first."
 
-- **Implicit** (future wiring): `$gsd-plan-phase` / `$gsd-execute-phase`
+- **Implicit** (future wiring): `/prompts:gsd-plan-phase` / `/prompts:gsd-execute-plan`
   recognise that a phase plan introduces a new TS module AND the
   project's `package.json` declares TypeScript as the primary language,
   then route the task through this skill. The per-project binding lives

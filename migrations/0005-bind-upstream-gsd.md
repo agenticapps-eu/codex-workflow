@@ -8,16 +8,16 @@ applies_to:
   - .planning/config.json
   - .planning/config.codex.json
 requires:
-  - skill: gsd (get-shit-done-multi, --codex)
+  - skill: gsd (get-shit-done-codex)
     install: |
-      Bind the upstream GSD distribution (installs the $gsd-* skills under
-      ${CODEX_HOME:-$HOME/.codex}/skills; requires Codex CLI >= 0.130.0):
-        npx get-shit-done-multi --codex
-      Fallback (Codex-only vanilla): npx get-shit-done-codex
+      Bind the upstream GSD distribution (installs the /prompts:gsd-* Codex
+      prompts under ${CODEX_HOME:-$HOME/.codex}/prompts; verify /prompts:gsd-help):
+        npx get-shit-done-codex                 # interactive: pick Global (~/.codex)
+        # non-interactive: npx -y -p get-shit-done-codex get-shit-done-cc --global
       Also re-run the scaffolder install so the removed re-ported skills'
       symlinks go away and the kept AgenticApps skills relink:
         bash install.sh
-    verify: "ls \"${CODEX_HOME:-$HOME/.codex}/skills\" | grep -qE '^gsd-(discuss|plan|execute|debug|quick)' || echo 'bind GSD: run npx get-shit-done-multi --codex'"
+    verify: "ls \"${CODEX_HOME:-$HOME/.codex}/prompts\" 2>/dev/null | grep -q '^gsd-' || echo 'bind GSD: run npx get-shit-done-codex'"
   - skill: superpowers (for Codex)
     install: |
       Install the Superpowers distribution for Codex so the superpowers:*
@@ -122,7 +122,7 @@ jq '
 - `jq -e '.hooks.post_phase.code_review.skill == "superpowers:requesting-code-review"' .planning/config.codex.json` — code-review rebound
 - `jq -e '.hooks.pre_phase.design_shotgun.skill == "codex-design-shotgun"' .planning/config.codex.json` — kept gstack gates intact (not clobbered)
 - `jq -e '.hooks.per_task.tdd.strengthened_by.skill == "codex-ts-declare-first"' .planning/config.codex.json` — §13 strengthener (if present from 0002) intact
-- `ls "${CODEX_HOME:-$HOME/.codex}/skills" | grep -qE '^gsd-'` — upstream GSD bound
+- `ls "${CODEX_HOME:-$HOME/.codex}/prompts" | grep -q '^gsd-'` — upstream GSD prompts bound
 - Drift test green: trigger SKILL.md `version` (0.3.0) == latest migration `to_version` (0.3.0)
 
 ## Skip cases
@@ -131,8 +131,8 @@ jq '
   migration no-ops.
 - **Config missing** — pre-flight aborts; run migration 0000 (setup) first.
 - **Upstream not yet bound** — the config rebind still applies; the
-  `superpowers:*` / `$gsd-*` skills resolve once `bash install.sh` /
-  `npx get-shit-done-multi --codex` have run (see `requires`).
+  `superpowers:*` skills / `/prompts:gsd-*` prompts resolve once
+  `bash install.sh` / `npx get-shit-done-codex` have run (see `requires`).
 
 ## Notes
 

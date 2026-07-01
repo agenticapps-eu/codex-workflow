@@ -112,7 +112,7 @@ review.
 
 10. **Surface follow-ups.** Tell the user:
     - The project is now at `codex-workflow v0.1.0`
-    - Next step: run `$gsd-discuss-phase 1` to start a planning
+    - Next step: run `/prompts:gsd-discuss-phase 1` to start a planning
       session for the first phase
     - Future scaffolder updates: run
       `$update-codex-agenticapps-workflow` periodically; the skill

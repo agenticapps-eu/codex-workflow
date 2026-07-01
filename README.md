@@ -16,8 +16,8 @@ rather than a re-port — see [`docs/BINDING.md`](docs/BINDING.md).
 now **binds** the maintained upstreams instead of porting them
 ([ADR-0007](docs/decisions/0007-bind-upstream-gsd.md), standard
 [`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md)):
-GSD from `get-shit-done-multi --codex` (the `$gsd-*` Codex skills; Codex CLI
-≥ 0.130.0) and Superpowers from its Codex distribution. The re-ported `gsd-*`
+GSD from `get-shit-done-codex` (the `/prompts:gsd-*` Codex prompts) and
+Superpowers from its Codex distribution. The re-ported `gsd-*`
 skills and the six Superpowers-duplicate `codex-*` gates were removed; their
 gate bindings now point at `superpowers:*`. Project state follows GSD's native
 flat `.planning/` layout, and the hook config is namespaced to
@@ -34,8 +34,8 @@ inventory at each tag.
 
 ## What ships at v0.3.0 (spec 0.4.0)
 
-The AgenticApps layer only — GSD (`$gsd-*`) and Superpowers (`superpowers:*`)
-are bound from upstream (see `docs/BINDING.md`).
+The AgenticApps layer only — GSD (`/prompts:gsd-*`) and Superpowers
+(`superpowers:*`) are bound from upstream (see `docs/BINDING.md`).
 
 - **Trigger skill** (`agentic-apps-workflow`) — activates on any code
   task, emits the canonical commitment ritual, routes to the right
@@ -46,10 +46,10 @@ are bound from upstream (see `docs/BINDING.md`).
   `codex-design-shotgun`, `codex-design-critique`,
   `codex-database-sentinel-audit`, `codex-impeccable-audit`,
   `codex-spec-review`, and **declare-first TypeScript** (`codex-ts-declare-first`, §13)
-- **Bound upstreams** — GSD entry points `$gsd-discuss-phase` /
-  `$gsd-plan-phase` / `$gsd-execute-phase` / `$gsd-quick` / `$gsd-debug`
-  (from `get-shit-done-multi --codex`) and the Superpowers discipline skills
-  (`superpowers:*`). Not shipped by this repo.
+- **Bound upstreams** — GSD entry points `/prompts:gsd-discuss-phase` /
+  `/prompts:gsd-plan-phase` / `/prompts:gsd-execute-plan` (from
+  `get-shit-done-codex`, installed under `~/.codex/prompts`) and the
+  Superpowers discipline skills (`superpowers:*`). Not shipped by this repo.
 - **§10 observability** — delegated to `agenticapps-observability`
   (installed on Codex via its `install-codex.sh`); wired by migration
   `0003`. See `docs/observability-delegation.md`

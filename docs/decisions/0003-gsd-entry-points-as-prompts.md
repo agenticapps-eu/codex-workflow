@@ -12,10 +12,12 @@
 > in this repo. Per the shared standard
 > [`docs/standards/gsd-binding-and-planning.md`](../standards/gsd-binding-and-planning.md),
 > `codex-workflow` now **binds** the upstream GSD distribution
-> (`get-shit-done-multi --codex`) instead of porting it; the `skills/gsd-*`
-> directories were removed. The finding below about Codex's invocation idiom
-> (`$gsd-*`, no `prompts/` dir) still holds — the upstream distribution
-> installs its GSD skills as `$gsd-*` Codex skills under `$CODEX_HOME/skills`.
+> (`get-shit-done-codex`) instead of porting it; the `skills/gsd-*`
+> directories were removed. This ADR's core premise — that Codex has **no**
+> `prompts/` idiom, so GSD must ship as `$gsd-*` skills — is now **outdated**:
+> current Codex CLI (verified 0.142.0) supports `$CODEX_HOME/prompts` with
+> `/prompts:<name>` invocation, and `get-shit-done-codex` installs its entry
+> points there as `/prompts:gsd-*`. See ADR-0007 and `docs/BINDING.md`.
 
 ## Context
 

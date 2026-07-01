@@ -24,15 +24,17 @@ in every shipped artifact's frontmatter.
   [ADR-0007](docs/decisions/0007-bind-upstream-gsd.md)).** `codex-workflow` is
   now a **thin binding**, symmetric with `opencode-workflow` and per the shared
   standard [`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md).
-  GSD is bound from `get-shit-done-multi --codex` (installs the `$gsd-*` Codex
-  skills; requires Codex CLI ≥ 0.130.0); Superpowers is bound from its Codex
-  distribution. The six Superpowers-duplicate gates rebind to `superpowers:*`:
-  `brainstorm-*` → `superpowers:brainstorming`, `tdd` →
-  `superpowers:test-driven-development`, `verification` →
+  GSD is bound from `get-shit-done-codex` (TÂCHES lineage), which installs 18
+  `/prompts:gsd-*` Codex prompts under `~/.codex/prompts` (verified v1.4.1 on
+  Codex CLI 0.142.0 — supersedes ADR-0003's "no prompts idiom" premise);
+  Superpowers is bound from its Codex distribution. The six Superpowers-duplicate
+  gates rebind to `superpowers:*`: `brainstorm-*` → `superpowers:brainstorming`,
+  `tdd` → `superpowers:test-driven-development`, `verification` →
   `superpowers:verification-before-completion`, `code-review` →
   `superpowers:requesting-code-review`, `branch-close` →
-  `superpowers:finishing-a-development-branch`, and `$gsd-debug` behind →
-  `superpowers:systematic-debugging`.
+  `superpowers:finishing-a-development-branch`, and bug tasks →
+  `superpowers:systematic-debugging` directly (no `gsd-debug` prompt). Execute
+  is `/prompts:gsd-execute-plan`; this distribution ships no `gsd-quick`.
 - **GSD-native phase-subdirectory layout (get-shit-done v1.42.3).** The
   earlier **invented** `.planning/phases/<N>/` variant (bare number, bare
   `PLAN.md`) is superseded by GSD's real layout: `.planning/phases/<NN>-<slug>/`
@@ -50,7 +52,7 @@ in every shipped artifact's frontmatter.
 ### Removed
 - The re-ported GSD entry-point skills (`skills/gsd-discuss-phase`,
   `gsd-plan-phase`, `gsd-execute-phase`, `gsd-debug`, `gsd-quick`) — now
-  provided by upstream `get-shit-done-multi --codex`.
+  provided by upstream `get-shit-done-codex` as `/prompts:gsd-*`.
 - The six Superpowers-duplicate gate skills (`codex-brainstorming`,
   `codex-tdd`, `codex-verification`, `codex-finishing-branch`,
   `codex-code-review`, `codex-systematic-debugging`) — now provided by
@@ -59,11 +61,12 @@ in every shipped artifact's frontmatter.
 
 ### Added
 - [`docs/BINDING.md`](docs/BINDING.md) — the three-layer architecture, install
-  order, Codex invocation idiom (`$gsd-*`), planning layout, coexistence rules,
-  and open-verification caveats.
+  order, Codex invocation idiom (`/prompts:gsd-*`), planning layout, coexistence
+  rules, and verified-vs-open status.
 - [`docs/decisions/0007-bind-upstream-gsd.md`](docs/decisions/0007-bind-upstream-gsd.md).
-- `install.sh` now binds the upstreams (runs `npx get-shit-done-multi --codex`,
-  notes the Superpowers install) with a `--skip-upstream` flag.
+- `install.sh` now binds the upstreams (runs `npx get-shit-done-codex` via the
+  non-interactive `-p get-shit-done-codex get-shit-done-cc --global` bin, notes
+  the Superpowers install) with a `--skip-upstream` flag.
 - Trigger skill Step 1 makes the Stage-2 code-review gate + an ADR **mandatory**
   for medium/large tasks (standard §6 enforcement parity), bound to
   `superpowers:requesting-code-review`.

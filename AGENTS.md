@@ -111,7 +111,7 @@ recorded at `.codex/workflow-version.txt`.
 
 The `agentic-apps-workflow` trigger skill binds every spec/02 gate
 to an upstream `superpowers:*` skill or a `codex-*` gate skill. GSD
-(`$gsd-*`) and Superpowers are bound from upstream — this repo is a
+(`/prompts:gsd-*` Codex prompts) and Superpowers are bound from upstream — this repo is a
 thin binding, not a re-port (see [`docs/BINDING.md`](docs/BINDING.md)
 and [ADR-0007](docs/decisions/0007-bind-upstream-gsd.md)).
 Project-specific gate bindings live in `.planning/config.codex.json`.
@@ -145,11 +145,11 @@ skill's task-size table:
 
 - **Tiny** (typo, comment, README) → `superpowers:verification-before-completion`
 - **Small** (single-file logic) → `superpowers:test-driven-development` → `superpowers:verification-before-completion` → `superpowers:finishing-a-development-branch`
-- **Medium** (new skill, new template, new migration) → `$gsd-discuss-phase` → `$gsd-plan-phase` → `$gsd-execute-phase`; the Stage-2 `superpowers:requesting-code-review` gate and an ADR for any locked decision are mandatory
+- **Medium** (new skill, new template, new migration) → `/prompts:gsd-discuss-phase` → `/prompts:gsd-plan-phase` → `/prompts:gsd-execute-plan`; the Stage-2 `superpowers:requesting-code-review` gate and an ADR for any locked decision are mandatory
 - **Large** (cross-cutting refactor, new lifecycle, breaking changes) → same as medium plus `codex-cso` for any security-sensitive scripts
 
-Bug reports route through `$gsd-debug` (auto-invokes
-`superpowers:systematic-debugging`, the four-phase
+Bug reports route directly through `superpowers:systematic-debugging`
+(this GSD distribution ships no `gsd-debug` prompt; the four-phase
 Observe → Hypothesize → Test → Conclude protocol).
 
 ## Session handoff

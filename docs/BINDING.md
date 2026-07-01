@@ -20,7 +20,7 @@ symmetric so all three share one portable project plan.
 
 | Layer | Source | How it's installed |
 |---|---|---|
-| **GSD** (discuss/plan/execute/verify, `$gsd-*`, model profiles, `.planning/` state) | [`get-shit-done-multi`](https://github.com/shoootyou/get-shit-done-multi) in `--codex` mode (tracks TÂCHES upstream; alt: [`undeemed/get-shit-done-codex`](https://github.com/undeemed/get-shit-done-codex)) | `npx get-shit-done-multi --codex` |
+| **GSD** (discuss/plan/execute, `/prompts:gsd-*`, `.planning/` state) | [`get-shit-done-codex`](https://github.com/RazvanBugoi/get-shit-done) (TÂCHES lineage; v1.4.1 verified on Codex CLI 0.142.0) | `npx get-shit-done-codex` (pick Global) |
 | **Superpowers** (TDD, brainstorming, verification, code-review, finishing-branch, systematic-debugging) | [`obra/superpowers`](https://github.com/obra/superpowers) (Codex distribution) | per the Superpowers-for-Codex install |
 | **AgenticApps** (spec-first trigger, gstack gates, spec/QA/DB/security gates, migration install) | this repo | `bash install.sh` + `$setup-codex-agenticapps-workflow` |
 
@@ -39,13 +39,22 @@ What was **removed** (now provided by upstream): the `gsd-*` skills (GSD) and
 Gate bindings for these now point at the upstream skills — see the trigger
 skill's Step 3 table and `.planning/config.codex.json`.
 
-## Codex invocation idiom — `$gsd-*`
+## Codex invocation idiom — `/prompts:gsd-*`
 
-Codex has no slash-command / `prompts/` directory (ADR-0003). The upstream GSD
-distribution installs its entry points as **Codex skills** under
-`$CODEX_HOME/skills`, invoked with the `$` shortcut: `$gsd-discuss-phase`,
-`$gsd-plan-phase`, `$gsd-execute-phase`, `$gsd-quick`, `$gsd-debug`. The
-AgenticApps trigger routes to these by name; this repo does not ship them.
+ADR-0003's premise ("Codex has no `prompts/` directory") is outdated: Codex CLI
+(verified on 0.142.0) supports **custom prompts** under `$CODEX_HOME/prompts`,
+invoked as `/prompts:<name>`. `get-shit-done-codex` installs its 18 GSD entry
+points there — invoke them as `/prompts:gsd-discuss-phase`,
+`/prompts:gsd-plan-phase`, `/prompts:gsd-execute-plan` (plus
+`/prompts:gsd-new-project`, `/prompts:gsd-create-roadmap`,
+`/prompts:gsd-progress`, `/prompts:gsd-help`, …). The AgenticApps trigger routes
+to these; this repo does not ship them.
+
+Notable naming: execute is **`gsd-execute-plan`** (not `gsd-execute-phase`), and
+this distribution ships **no** `gsd-quick` or `gsd-debug` — tiny/small tasks
+skip GSD orchestration (Step 1), and bug tasks route straight to
+`superpowers:systematic-debugging`. AgenticApps gate skills are still Codex
+**skills** invoked as `$skill-name` (e.g. `$codex-cso`).
 
 ## Planning layout — GSD-native phase subdirectories
 
@@ -58,10 +67,10 @@ PROJECT.md  REQUIREMENTS.md  ROADMAP.md  STATE.md
 .planning/
   research/
   phases/<NN>-<slug>/            # e.g. 03-checkout/
-    <NN>-CONTEXT.md              # /gsd-discuss-phase
-    <NN>-<MM>-PLAN.md            # /gsd-plan-phase
+    <NN>-CONTEXT.md              # /prompts:gsd-discuss-phase
+    <NN>-<MM>-PLAN.md            # /prompts:gsd-plan-phase
     <NN>-RESEARCH.md  <NN>-VALIDATION.md  <NN>-VERIFICATION.md
-    <NN>-<MM>-SUMMARY.md         # /gsd-execute-phase
+    <NN>-<MM>-SUMMARY.md         # /prompts:gsd-execute-plan
     <NN>-UAT.md  <NN>-UI-SPEC.md  <NN>-SECURITY.md  …
   milestones/  quick/<NNN>-<slug>/
 docs/decisions/NNNN-<slug>.md
@@ -92,13 +101,14 @@ reads its own `.planning/config.<host>.json` and its own
 ```bash
 # 1. AgenticApps layer (skills) + bind upstreams
 bash install.sh                       # symlinks skills into $CODEX_HOME/skills,
-                                      # then runs the GSD-multi installer and
-                                      # notes the Superpowers install
+                                      # then runs the get-shit-done-codex installer
+                                      # and notes the Superpowers install
 #    (bash install.sh --skip-upstream  to install only the AgenticApps skills)
 
-# 2. GSD (if not bound by install.sh, or to (re)pick model profiles)
-npx get-shit-done-multi --codex       # installs $gsd-* under $CODEX_HOME/skills
-                                      # requires Codex CLI >= 0.130.0
+# 2. GSD (if not bound by install.sh)
+npx get-shit-done-codex               # interactive: pick Global (~/.codex)
+#   non-interactive: npx -y -p get-shit-done-codex get-shit-done-cc --global
+#   installs /prompts:gsd-* under $CODEX_HOME/prompts; verify: /prompts:gsd-help
 
 # 3. Superpowers for Codex — per its install; restart Codex to load
 
@@ -106,13 +116,20 @@ npx get-shit-done-multi --codex       # installs $gsd-* under $CODEX_HOME/skills
 #    (or:          $update-codex-agenticapps-workflow  on an installed project)
 ```
 
-## Open verification
+## Verified vs open
 
-- `get-shit-done-multi` is archived and its Codex docs are thin (it points to
-  the maintained `gsd-build/get-shit-done`). Confirm the exact `--codex`
-  installer command, the `$gsd-*` skill names it registers, and the precise
-  `.planning/` filenames it emits against a live install before relying on
-  cross-host byte-compatibility. If `get-shit-done-multi --codex` proves
-  unsuitable, `undeemed/get-shit-done-codex` is the documented fallback.
-- Whether Superpowers' Codex distribution namespaces its skills as
-  `superpowers:*` exactly as referenced here (the gate bindings assume it).
+**Verified (2026-07-01):** `get-shit-done-codex` v1.4.1 installed on Codex CLI
+0.142.0 → 18 `/prompts:gsd-*` prompts under `~/.codex/prompts/` + resources under
+`~/.codex/get-shit-done/`, and GSD writes the `.planning/phases/<NN>-<slug>/`
+layout above. The naming quirks (`gsd-execute-plan`; no `gsd-quick`/`gsd-debug`)
+are reflected in the trigger skill's routing.
+
+**Open:** whether the Superpowers Codex distribution namespaces its skills as
+`superpowers:*` exactly as referenced here (the gate bindings assume it), and the
+live cross-host testbed hand-off (claude→codex plan continuity on the shared
+`.planning/`).
+
+> **Package lineage note.** The brief named `get-shit-done-multi`, but that npm
+> package is deprecated (→ `get-shit-done-cc`, also deprecated). The maintained
+> Codex-native distribution is `get-shit-done-codex` (RazvanBugoi, TÂCHES
+> lineage), which is what this repo binds.

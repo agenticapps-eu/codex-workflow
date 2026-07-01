@@ -203,14 +203,17 @@ fi
 # docs/decisions/0007-bind-upstream-gsd.md. Pass --skip-upstream to install only
 # the AgenticApps skills.
 if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_UPSTREAM" -eq 0 ]; then
+  CODEX_PROMPTS_DIR="${CODEX_HOME:-$HOME/.codex}/prompts"
   echo ""
-  echo "${YELLOW}Binding GSD (get-shit-done-multi --codex) — \$gsd-* skills + model profiles...${RESET}"
-  echo "  (requires Codex CLI >= 0.130.0; installs \$gsd-* under $CODEX_SKILLS_DIR)"
+  echo "${YELLOW}Binding GSD (get-shit-done-codex, TÂCHES lineage) — /prompts:gsd-* + resources...${RESET}"
+  echo "  (installs /prompts:gsd-* under $CODEX_PROMPTS_DIR; verify with /prompts:gsd-help)"
   if command -v npx >/dev/null 2>&1; then
-    npx -y get-shit-done-multi --codex \
-      || echo "${YELLOW}warn:${RESET} get-shit-done-multi install failed — run 'npx get-shit-done-multi --codex' manually (fallback: 'npx get-shit-done-codex')."
+    # Non-interactive global install: the installer bin is get-shit-done-cc; --global
+    # skips its Global/Local prompt and writes to ~/.codex/{prompts,get-shit-done}.
+    npx -y -p get-shit-done-codex get-shit-done-cc --global \
+      || echo "${YELLOW}warn:${RESET} GSD install failed — run 'npx get-shit-done-codex' manually (pick Global)."
   else
-    echo "${YELLOW}warn:${RESET} npx not found — install Node, then: npx get-shit-done-multi --codex"
+    echo "${YELLOW}warn:${RESET} npx not found — install Node, then: npx get-shit-done-codex"
   fi
   echo ""
   echo "${YELLOW}Superpowers${RESET} (TDD, brainstorming, verification, code-review,"

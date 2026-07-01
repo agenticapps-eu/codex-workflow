@@ -38,10 +38,13 @@ shared standard so all three hosts share one portable project plan.
 
 **`codex-workflow` is a thin binding, not a re-port.**
 
-1. **Bind GSD** from `get-shit-done-multi` in `--codex` mode (multi-CLI GSD with
-   unified project state; requires Codex CLI ≥ 0.130.0). It installs the
-   `$gsd-*` skills/agents under `$CODEX_HOME/skills`. Alternative:
-   `undeemed/get-shit-done-codex` for a Codex-only vanilla distribution.
+1. **Bind GSD** from `get-shit-done-codex` (RazvanBugoi, TÂCHES lineage;
+   `npx get-shit-done-codex`, pick Global). It installs 18 GSD entry points as
+   Codex **custom prompts** under `$CODEX_HOME/prompts`, invoked as
+   `/prompts:gsd-*` (verified v1.4.1 on Codex CLI 0.142.0). This supersedes
+   ADR-0003's premise that Codex has no `prompts/` idiom. (The brief named
+   `get-shit-done-multi`, but that npm package — and its successor
+   `get-shit-done-cc` — are deprecated.)
 2. **Bind Superpowers** for Codex. Gates that duplicate Superpowers rebind to
    `superpowers:*`:
    - `brainstorm-{ui,architecture}` → `superpowers:brainstorming`
@@ -49,7 +52,8 @@ shared standard so all three hosts share one portable project plan.
    - `verification` → `superpowers:verification-before-completion`
    - `code-review` → `superpowers:requesting-code-review`
    - `branch-close` → `superpowers:finishing-a-development-branch`
-   - `$gsd-debug` behind → `superpowers:systematic-debugging`
+   - bug / unexpected-behavior tasks → `superpowers:systematic-debugging`
+     directly (this GSD distribution ships no `gsd-debug` prompt)
 3. **Remove** `skills/gsd-*` and the six Superpowers-duplicate `codex-*` gate
    skills.
 4. **Adopt GSD's native phase-subdirectory layout** (get-shit-done v1.42.3):
@@ -89,14 +93,17 @@ shared standard so all three hosts share one portable project plan.
   remain as build-history provenance; only the *kept skills* and *fresh-install
   outputs* move to the GSD-native layout.
 
-## Open verification
+## Verified vs open
 
-- `get-shit-done-multi` is archived upstream and its Codex-mode docs are thin;
-  it points readers to the maintained `gsd-build/get-shit-done`. The exact
-  `--codex` installer invocation and the precise `.planning/` filenames it emits
-  should be confirmed against a live install before relying on cross-host
-  byte-compatibility. This mirrors the "Open verification" caveat in
-  `opencode-workflow/docs/BINDING.md`.
+- **Verified (2026-07-01).** `get-shit-done-codex` v1.4.1 installed on Codex CLI
+  0.142.0: 18 `/prompts:gsd-*` prompts under `~/.codex/prompts/` + resources
+  under `~/.codex/get-shit-done/`, and GSD writes the
+  `.planning/phases/<NN>-<slug>/` layout. The naming quirks (`gsd-execute-plan`;
+  no `gsd-quick`/`gsd-debug`) are reflected in the trigger skill's routing.
+- **Open.** Whether the Superpowers Codex distribution namespaces skills as
+  `superpowers:*` exactly as assumed, and the live cross-host testbed hand-off
+  (claude→codex on the shared `.planning/`). Mirrors the "Open verification"
+  caveat in `opencode-workflow/docs/BINDING.md`.
 
 ## References
 
