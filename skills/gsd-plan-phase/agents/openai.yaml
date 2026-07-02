@@ -1,7 +1,0 @@
-interface:
-  display_name: "GSD: Plan phase"
-  short_description: "Author PLAN.md from CONTEXT.md and roadmap"
-  default_prompt: "Use $gsd-plan-phase to author PLAN.md for phase {N} from CONTEXT.md and the roadmap."
-
-policy:
-  allow_implicit_invocation: false

@@ -11,7 +11,7 @@ description: |
   complete and before any code-review pass. Writes the
   `## Stage 1 — Spec compliance` section into REVIEW.md. The
   implementer agent runs this stage in the same session; Stage 2
-  (`codex-code-review`) MUST run independently afterwards.
+  (`superpowers:requesting-code-review`) MUST run independently afterwards.
 ---
 
 # codex-spec-review
@@ -20,13 +20,13 @@ This skill fulfills the `spec-review` gate from
 [`agenticapps-workflow-core/spec/02-hook-taxonomy.md`](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/spec/02-hook-taxonomy.md)
 and is bound by [`spec/07-two-stage-review.md`](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/spec/07-two-stage-review.md).
 It is **Stage 1** — the implementer's own pass against the spec.
-Stage 2 is `codex-code-review` and MUST run in a separate agent
+Stage 2 is `superpowers:requesting-code-review` and MUST run in a separate agent
 context.
 
 ## When to invoke
 
 After the last task of the phase transitions to complete (per
-`codex-verification`) and before phase verification closes. Order is
+`superpowers:verification-before-completion`) and before phase verification closes. Order is
 load-bearing: Stage 1 must complete before Stage 2 fires (per
 spec/07).
 

@@ -7,6 +7,8 @@
 #   bash install.sh --copy           # copy instead of symlinking (cuts
 #                                    # the link to git pull updates)
 #   bash install.sh --dry-run        # show what would happen
+#   bash install.sh --skip-upstream  # install only the AgenticApps skills
+#                                    # (do not bind GSD / Superpowers)
 #
 # Idempotent — re-running with no changes produces "already linked"
 # log lines and exits 0. Refuses to clobber non-symlink directories
@@ -36,14 +38,16 @@ fi
 
 MODE="symlink"
 DRY_RUN=0
+SKIP_UPSTREAM=0
 
 for arg in "$@"; do
   case "$arg" in
-    --copy)    MODE="copy"  ;;
-    --symlink) MODE="symlink" ;;
-    --dry-run) DRY_RUN=1     ;;
+    --copy)          MODE="copy"  ;;
+    --symlink)       MODE="symlink" ;;
+    --dry-run)       DRY_RUN=1     ;;
+    --skip-upstream) SKIP_UPSTREAM=1 ;;
     -h|--help)
-      sed -n '2,12p' "$0"
+      sed -n '2,14p' "$0"
       exit 0
       ;;
     *)
@@ -191,13 +195,47 @@ if [ $FAILED -gt 0 ]; then
   exit 1
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Bind upstream — GSD + Superpowers (this repo no longer re-ports them)
+# ─────────────────────────────────────────────────────────────────────────────
+# codex-workflow ships only the AgenticApps layer. GSD and Superpowers are the
+# maintained upstream distributions for Codex — see docs/BINDING.md and
+# docs/decisions/0007-bind-upstream-gsd.md. Pass --skip-upstream to install only
+# the AgenticApps skills.
+if [ "$DRY_RUN" -eq 0 ] && [ "$SKIP_UPSTREAM" -eq 0 ]; then
+  CODEX_PROMPTS_DIR="${CODEX_HOME:-$HOME/.codex}/prompts"
+  echo ""
+  echo "${YELLOW}Binding GSD (get-shit-done-codex, TÂCHES lineage) — /prompts:gsd-* + resources...${RESET}"
+  echo "  (installs /prompts:gsd-* under $CODEX_PROMPTS_DIR; verify with /prompts:gsd-help)"
+  if command -v npx >/dev/null 2>&1; then
+    # Non-interactive global install: the installer bin is get-shit-done-cc; --global
+    # skips its Global/Local prompt and writes to ~/.codex/{prompts,get-shit-done}.
+    npx -y -p get-shit-done-codex get-shit-done-cc --global \
+      || echo "${YELLOW}warn:${RESET} GSD install failed — run 'npx get-shit-done-codex' manually (pick Global)."
+  else
+    echo "${YELLOW}warn:${RESET} npx not found — install Node, then: npx get-shit-done-codex"
+  fi
+  echo ""
+  echo "${YELLOW}Superpowers${RESET} (TDD, brainstorming, verification, code-review,"
+  echo "  finishing-branch, systematic-debugging) is the second upstream — the official"
+  echo "  Codex plugin. Install it so the \`superpowers:*\` gate bindings resolve:"
+  if command -v codex >/dev/null 2>&1; then
+    codex plugin add superpowers 2>/dev/null \
+      || echo "  ${YELLOW}note:${RESET} run 'codex plugin add superpowers' (from the openai-curated marketplace)."
+  else
+    echo "    codex plugin add superpowers        # from the openai-curated marketplace"
+  fi
+  echo "  Verify: codex plugin list | grep superpowers"
+fi
+
 echo ""
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "${YELLOW}dry-run only${RESET} — no changes written."
 else
-  echo "${GREEN}done.${RESET} Restart Codex (or open a fresh session) to pick up the new skills."
+  echo "${GREEN}done.${RESET} Restart Codex (or open a fresh session) to pick up everything."
   echo ""
   echo "Next:"
-  echo "  - In a fresh project: \$setup-codex-agenticapps-workflow"
+  echo "  - In a fresh project:               \$setup-codex-agenticapps-workflow"
   echo "  - In an existing installed project: \$update-codex-agenticapps-workflow"
+  echo "  - Architecture + caveats:           docs/BINDING.md"
 fi

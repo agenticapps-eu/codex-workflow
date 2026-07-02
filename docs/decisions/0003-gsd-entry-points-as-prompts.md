@@ -1,11 +1,23 @@
 # ADR-0003 — GSD entry points are skills, not prompts
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-05-09
 - Phase: 0 (research)
 - Implements (eventual) spec: `agenticapps-workflow-core` v0.1.0
 - Supersedes: —
-- Superseded by: —
+- Superseded by: [0007](0007-bind-upstream-gsd.md)
+
+> **Superseded (2026-07-01) by [ADR-0007](0007-bind-upstream-gsd.md).**
+> This ADR shipped the five GSD entry points as **re-ported** `skills/gsd-*`
+> in this repo. Per the shared standard
+> [`docs/standards/gsd-binding-and-planning.md`](../standards/gsd-binding-and-planning.md),
+> `codex-workflow` now **binds** the upstream GSD distribution
+> (`get-shit-done-codex`) instead of porting it; the `skills/gsd-*`
+> directories were removed. This ADR's core premise — that Codex has **no**
+> `prompts/` idiom, so GSD must ship as `$gsd-*` skills — is now **outdated**:
+> current Codex CLI (verified 0.142.0) supports `$CODEX_HOME/prompts` with
+> `/prompts:<name>` invocation, and `get-shit-done-codex` installs its entry
+> points there as `/prompts:gsd-*`. See ADR-0007 and `docs/BINDING.md`.
 
 ## Context
 

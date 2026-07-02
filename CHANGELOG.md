@@ -9,6 +9,23 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Documentation
+- **Standard: forbid gitignoring `.planning/phases/` + document the `git add -f`
+  fallback** ([`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md),
+  mirrors the claude-workflow amendment). §5 now states phase artifacts are
+  committed evidence — only `.planning/cache/`, `.planning/state/`, and host
+  session-handoffs may be ignored — and adds the fallback the codex round-2
+  testbed run improvised: if a host project's own `.gitignore` matches the path,
+  the workflow surfaces it and un-ignores or stages with `git add -f` rather than
+  silently skipping the evidence commit. A matching conformance-checklist line
+  was added. Verified this repo's scaffolder is already conformant: the setup
+  skill's atomic commit stages `.planning/` wholesale, the committed root
+  `.gitignore` ignores only cache/state/handoffs, and neither `install.sh` nor
+  any migration emits a `.planning/phases/` ignore rule — so a fresh install
+  leaves the path tracked (`git check-ignore` clean, 18 phase files tracked). The
+  round-2 friction was in the testbed/claude scaffolder, not here. Docs-only; no
+  migration (no scaffolder output changed).
+
 ### Backlog (beyond conformance)
 
 - Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
@@ -16,6 +33,62 @@ in every shipped artifact's frontmatter.
 - Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
+
+## [0.3.0] — 2026-07-01
+
+### Changed
+- **Bind upstream GSD + Superpowers; stop re-porting (migration `0005`,
+  [ADR-0007](docs/decisions/0007-bind-upstream-gsd.md)).** `codex-workflow` is
+  now a **thin binding**, symmetric with `opencode-workflow` and per the shared
+  standard [`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md).
+  GSD is bound from `get-shit-done-codex` (TÂCHES lineage), which installs 18
+  `/prompts:gsd-*` Codex prompts under `~/.codex/prompts` (verified v1.4.1 on
+  Codex CLI 0.142.0 — supersedes ADR-0003's "no prompts idiom" premise);
+  Superpowers is bound from the official `superpowers` Codex plugin
+  (`codex plugin add superpowers`, openai-curated marketplace; verified v6.1.0 —
+  skills namespaced `superpowers:<skill>`). The six Superpowers-duplicate
+  gates rebind to `superpowers:*`: `brainstorm-*` → `superpowers:brainstorming`,
+  `tdd` → `superpowers:test-driven-development`, `verification` →
+  `superpowers:verification-before-completion`, `code-review` →
+  `superpowers:requesting-code-review`, `branch-close` →
+  `superpowers:finishing-a-development-branch`, and bug tasks →
+  `superpowers:systematic-debugging` directly (no `gsd-debug` prompt). Execute
+  is `/prompts:gsd-execute-plan`; this distribution ships no `gsd-quick`.
+- **GSD-native phase-subdirectory layout (get-shit-done v1.42.3).** The
+  earlier **invented** `.planning/phases/<N>/` variant (bare number, bare
+  `PLAN.md`) is superseded by GSD's real layout: `.planning/phases/<NN>-<slug>/`
+  holding `<NN>-CONTEXT.md`, `<NN>-<MM>-PLAN.md`, `<NN>-VERIFICATION.md`,
+  `<NN>-<MM>-SUMMARY.md`, with AgenticApps artifacts (`REVIEW.md`, `QA.md`,
+  `DB-AUDIT.md`, `IMPECCABLE-AUDIT.md`, `screenshots/`) written **inside** the
+  phase directory alongside GSD's files — so plans are byte-compatible across
+  hosts. Existing `.planning/phases/**` are kept as provenance.
+- **Namespaced hook config (standard §4).** `.planning/config.json` →
+  `.planning/config.codex.json` so a codex + claude tree can coexist.
+- Scaffolder `version` `0.2.1 → 0.3.0` (trigger SKILL.md +
+  `.codex/workflow-version.txt`); migration chain now `0000`–`0005`.
+  `run-tests.sh`: PASS 59 / FAIL 0 / SKIP 1.
+
+### Removed
+- The re-ported GSD entry-point skills (`skills/gsd-discuss-phase`,
+  `gsd-plan-phase`, `gsd-execute-phase`, `gsd-debug`, `gsd-quick`) — now
+  provided by upstream `get-shit-done-codex` as `/prompts:gsd-*`.
+- The six Superpowers-duplicate gate skills (`codex-brainstorming`,
+  `codex-tdd`, `codex-verification`, `codex-finishing-branch`,
+  `codex-code-review`, `codex-systematic-debugging`) — now provided by
+  upstream Superpowers.
+- ADR-0003 ("GSD entry points as skills") is **superseded** by ADR-0007.
+
+### Added
+- [`docs/BINDING.md`](docs/BINDING.md) — the three-layer architecture, install
+  order, Codex invocation idiom (`/prompts:gsd-*`), planning layout, coexistence
+  rules, and verified-vs-open status.
+- [`docs/decisions/0007-bind-upstream-gsd.md`](docs/decisions/0007-bind-upstream-gsd.md).
+- `install.sh` now binds the upstreams (runs `npx get-shit-done-codex` via the
+  non-interactive `-p get-shit-done-codex get-shit-done-cc --global` bin, notes
+  the Superpowers install) with a `--skip-upstream` flag.
+- Trigger skill Step 1 makes the Stage-2 code-review gate + an ADR **mandatory**
+  for medium/large tasks (standard §6 enforcement parity), bound to
+  `superpowers:requesting-code-review`.
 
 ## [0.2.1] — 2026-06-09
 

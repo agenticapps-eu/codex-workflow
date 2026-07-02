@@ -5,7 +5,7 @@ implements_spec: 0.4.0
 description: |
   Bootstrap a fresh project with the codex-workflow scaffolding —
   apply the baseline migration to install the trigger skill's
-  required project-side artifacts (AGENTS.md sections, .planning/config.json,
+  required project-side artifacts (AGENTS.md sections, .planning/config.codex.json,
   .codex/workflow-config.md, docs/decisions/, .codex/workflow-version.txt).
   Use when a project is freshly cloned or initialized and the user
   asks to "set up the workflow", "add agenticapps workflow", "enable
@@ -30,7 +30,7 @@ User asks to set up the workflow on a project that does not yet have
 a `.codex/workflow-version.txt` file. The trigger skill's
 `agentic-apps-workflow` does NOT auto-route to setup — setup is an
 explicit, user-driven act because it modifies project-side files
-(AGENTS.md, .planning/config.json, .codex/) that the user expects to
+(AGENTS.md, .planning/config.codex.json, .codex/) that the user expects to
 review.
 
 ## What this skill does
@@ -97,7 +97,7 @@ review.
 8. **Run all post-checks** from `0000-baseline.md`:
    - `.codex/workflow-config.md` exists and has no unsubstituted
      `{{...}}` placeholders
-   - `.planning/config.json` is valid JSON with the expected hook
+   - `.planning/config.codex.json` is valid JSON with the expected hook
      keys
    - `AGENTS.md` contains the `BEGIN: agentic-apps-workflow` marker
    - `docs/decisions/README.md` exists
@@ -112,7 +112,7 @@ review.
 
 10. **Surface follow-ups.** Tell the user:
     - The project is now at `codex-workflow v0.1.0`
-    - Next step: run `$gsd-discuss-phase 1` to start a planning
+    - Next step: run `/prompts:gsd-discuss-phase 1` to start a planning
       session for the first phase
     - Future scaffolder updates: run
       `$update-codex-agenticapps-workflow` periodically; the skill
@@ -122,7 +122,7 @@ review.
 ## Required evidence (per spec/06)
 
 - `.codex/workflow-version.txt` exists with content `0.1.0`
-- `.planning/config.json` is valid JSON with all `hooks` keys from
+- `.planning/config.codex.json` is valid JSON with all `hooks` keys from
   the template
 - `AGENTS.md` contains the marker pair
   `<!-- BEGIN: agentic-apps-workflow sections -->` ... `<!-- END: agentic-apps-workflow sections -->`

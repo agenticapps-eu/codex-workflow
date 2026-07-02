@@ -52,11 +52,11 @@ Two forms per §13:
   > "I'm starting a new TS module `lib/bounded-queue/`. Use
   > $codex-ts-declare-first."
 
-- **Implicit** (future wiring): `$gsd-plan-phase` / `$gsd-execute-phase`
+- **Implicit** (future wiring): `/prompts:gsd-plan-phase` / `/prompts:gsd-execute-plan`
   recognise that a phase plan introduces a new TS module AND the
   project's `package.json` declares TypeScript as the primary language,
   then route the task through this skill. The per-project binding lives
-  in `.planning/config.json` (`hooks.per_task.tdd.strengthened_by`,
+  in `.planning/config.codex.json` (`hooks.per_task.tdd.strengthened_by`,
   seeded by migration 0002); the GSD-side detection that fires on it is
   a follow-up.
 
@@ -127,7 +127,7 @@ Resolution mechanism — pick one of:
    contract-test purity.
 
 Capture the failing-test output as §06 evidence (this is the
-`codex-verification` evidence shape `test_output`):
+`superpowers:verification-before-completion` evidence shape `test_output`):
 
 ```bash
 npm test -- path/to/<module>.test.ts > /tmp/phase-2-expected-failure.log
@@ -195,7 +195,7 @@ flowchart TD
   recover_collapse --> check
   recover_impl --> check
   recover_no_red --> check
-  proceed --> done[Three atomic commits land — §06 evidence satisfied → REPORT to codex-verification]
+  proceed --> done[Three atomic commits land — §06 evidence satisfied → REPORT to superpowers:verification-before-completion]
 ```
 
 Recovery details per refusal:
@@ -224,15 +224,15 @@ Recovery details per refusal:
 ## Verification-gate integration
 
 Per §13 the three phases produce the §02 `verification`-gate evidence
-that `codex-verification` checks before a task completes:
+that `superpowers:verification-before-completion` checks before a task completes:
 
-| Phase | Evidence (`codex-verification` shape) |
+| Phase | Evidence (`superpowers:verification-before-completion` shape) |
 |---|---|
 | 1 | `declare(ts):` commit hash; `tsc --noEmit` clean output |
 | 2 | `test(ts):` commit hash; captured expected-failure runner output (`test_output`) |
 | 3 | `feat(ts):` commit hash; passing runner output (`test_output`) |
 
-`codex-verification` MUST refuse task completion if the three-commit
+`superpowers:verification-before-completion` MUST refuse task completion if the three-commit
 sequence and its evidence are not present for a task that went through
 this skill.
 
@@ -256,4 +256,4 @@ the module they're authoring.
 - workflow-core spec §02 — Hook Taxonomy — the `tdd` gate this skill
   strengthens for TypeScript modules.
 - migration 0002 (this repo) — binds this skill into project
-  `.planning/config.json` per the §13 trigger contract.
+  `.planning/config.codex.json` per the §13 trigger contract.

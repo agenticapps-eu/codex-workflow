@@ -27,7 +27,7 @@ contract; the pre-implementation half is `codex-design-critique`.
 - A phase's changeset modifies the visual surface of a shipping UI
   (typography, color, layout, spacing, motion), AND
 - The implementation is complete (all tasks marked complete by
-  `codex-verification`), AND
+  `superpowers:verification-before-completion`), AND
 - The change is visible in the dev server.
 
 MAY also be invoked retroactively on shipping UI that has not been
@@ -58,7 +58,7 @@ implementation reality is a common gap.
    design-critique. Compare to the project's quality bar (default
    ≥ 90 per ADR-0011, project-overridable).
 6. **Write the audit document** to
-   `.planning/phases/<N>/IMPECCABLE-AUDIT.md`:
+   `.planning/phases/<NN>-<slug>/IMPECCABLE-AUDIT.md`:
 
    ```markdown
    # Impeccable audit — phase {{N}}
