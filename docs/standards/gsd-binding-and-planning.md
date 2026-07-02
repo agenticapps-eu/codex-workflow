@@ -96,13 +96,20 @@ and the host session-handoff files may be ignored. A host scaffolder MUST NOT
 emit a rule ignoring `.planning/phases/`, and a fresh install MUST leave the path
 tracked.
 
-**Fallback when a host project ignores the path anyway.** A project's own
-`.gitignore` is outside our scaffolder's control. If it matches
-`.planning/phases/`, the workflow MUST surface it — not silently skip the
-evidence commit — and then either un-ignore the path or stage the artifacts with
-`git add -f`. Losing phase evidence to a stray ignore rule is a correctness
-failure, not a warning. (This mirrors the established family pattern for
-intentionally version-controlled artifacts that trip a `.gitignore` advisory.)
+**Committed by default; strip stray ignores at the source.** Phase evidence is
+committed by the workflow's normal `git add` / commit — no `git add -f` and no
+mid-run un-ignoring in the happy path. Each host's update path MUST strip a
+**whole-tree** `.planning/phases/` ignore from an existing install so the evidence
+becomes trackable again (codex: migration `0006`; claude: migration `0024`,
+ADR-0037). Fresh installs are conformant by construction — a host scaffolder
+never seeds a whole-tree ignore.
+
+**Last-resort surface.** If a project re-introduces a whole-tree ignore *between*
+updates (its own `.gitignore` is outside our control), the workflow MUST surface
+it — never silently skip the evidence commit — and un-ignore the path in a
+dedicated chore commit. Staging with `git add -f` is a stopgap for a single
+commit only, not the sanctioned path: losing phase evidence to a stray ignore
+rule is a correctness failure, not a warning.
 
 ## 6. Enforcement parity
 

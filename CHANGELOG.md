@@ -9,23 +9,6 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
-### Documentation
-- **Standard: forbid gitignoring `.planning/phases/` + document the `git add -f`
-  fallback** ([`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md),
-  mirrors the claude-workflow amendment). §5 now states phase artifacts are
-  committed evidence — only `.planning/cache/`, `.planning/state/`, and host
-  session-handoffs may be ignored — and adds the fallback the codex round-2
-  testbed run improvised: if a host project's own `.gitignore` matches the path,
-  the workflow surfaces it and un-ignores or stages with `git add -f` rather than
-  silently skipping the evidence commit. A matching conformance-checklist line
-  was added. Verified this repo's scaffolder is already conformant: the setup
-  skill's atomic commit stages `.planning/` wholesale, the committed root
-  `.gitignore` ignores only cache/state/handoffs, and neither `install.sh` nor
-  any migration emits a `.planning/phases/` ignore rule — so a fresh install
-  leaves the path tracked (`git check-ignore` clean, 18 phase files tracked). The
-  round-2 friction was in the testbed/claude scaffolder, not here. Docs-only; no
-  migration (no scaffolder output changed).
-
 ### Backlog (beyond conformance)
 
 - Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
@@ -33,6 +16,46 @@ in every shipped artifact's frontmatter.
 - Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
+
+## [0.4.0] — 2026-07-02
+
+### Changed
+- **Commit phase artifacts — never gitignore `.planning/phases/` (migration
+  `0006`, mirrors the shared
+  [ADR-0037](https://github.com/agenticapps-eu/claude-workflow/blob/main/docs/decisions/0037-commit-phase-artifacts.md)
+  downstream-hosts note).** Phase artifacts (`.planning/phases/<NN>-<slug>/`
+  contexts, plans, verifications, and the AgenticApps gate outputs
+  `REVIEW.md`/`QA.md`/`DB-AUDIT.md`) are the shared cross-host project plan and
+  are **committed by default** — the workflow's normal `git add`/commit captures
+  them, no `git add -f` needed. Migration `0006` makes this authoritative for
+  existing installs by stripping a **whole-tree** `.planning/phases/` ignore from
+  the project `.gitignore` (surgical, anchored to a bare directory line; narrow
+  under-tree scratch ignores and `.planning/cache/`/`.planning/state/` are
+  preserved). This closes the dual-host workflow-testbed benchmark friction
+  (rounds 1+2, 2026-07-01/02) where the round-2 codex run had to improvise
+  `git add -f` to commit phase evidence.
+- **Standard §5 amendment + conformance-checklist line**
+  ([`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md),
+  mirrors the claude-workflow amendment): phase artifacts are committed evidence
+  (only `.planning/cache/`, `.planning/state/`, and host session-handoffs may be
+  ignored); each host's update path strips a whole-tree ignore; `git add -f` is
+  demoted to a single-commit stopgap, not the sanctioned path.
+- Scaffolder `version` `0.3.0 → 0.4.0` (trigger SKILL.md +
+  `.codex/workflow-version.txt`); migration chain now `0000`–`0006`.
+  `run-tests.sh`: PASS 68 / FAIL 0 / SKIP 1 (adds `test_migration_0006` — strip
+  whole-tree ignore, preserve narrow + transient ignores, version-bump
+  round-trip).
+
+### Notes
+- Verified this repo's codex scaffolder was already conformant *before* the
+  migration: the setup skill's atomic commit stages `.planning/` wholesale, the
+  committed root `.gitignore` ignores only cache/state/handoffs, and neither
+  `install.sh` nor any migration ever emitted a `.planning/phases/` ignore rule
+  (`git check-ignore` clean; 18 phase files tracked). The benchmark friction was
+  in host projects' own `.gitignore` (mis-attributed by the testbed to "the GSD
+  config"), not this repo's scaffolder. Migration `0006` is the defensive
+  existing-install fix + the mirror of ADR-0037's downstream obligation. Codex
+  ships no snapshot, so there is no snapshot drift-guard §6 analog.
 
 ## [0.3.0] — 2026-07-01
 
