@@ -88,6 +88,22 @@ Required for any shared pair:
 - **Host-specific:** `.planning/config.<host>.json`, `.<host>/` marker dir,
   the host instruction file, `.<host>/session-handoff.md`.
 
+**Phase artifacts are committed evidence — never gitignore `.planning/phases/`.**
+Plan handoff only works if `.planning/phases/<NN>-<slug>/` (GSD's contexts,
+plans, and verifications plus the AgenticApps gate outputs REVIEW/QA/DB-AUDIT)
+is committed. Only transient host scratch (`.planning/cache/`, `.planning/state/`)
+and the host session-handoff files may be ignored. A host scaffolder MUST NOT
+emit a rule ignoring `.planning/phases/`, and a fresh install MUST leave the path
+tracked.
+
+**Fallback when a host project ignores the path anyway.** A project's own
+`.gitignore` is outside our scaffolder's control. If it matches
+`.planning/phases/`, the workflow MUST surface it — not silently skip the
+evidence commit — and then either un-ignore the path or stage the artifacts with
+`git add -f`. Losing phase evidence to a stray ignore rule is a correctness
+failure, not a warning. (This mirrors the established family pattern for
+intentionally version-controlled artifacts that trip a `.gitignore` advisory.)
+
 ## 6. Enforcement parity
 
 Gate requirements are consistent by task size across hosts: medium/large tasks
@@ -98,6 +114,7 @@ decision; tiny/small stay fast. (See the per-repo enforcement brief.)
 
 - [ ] Binds an upstream GSD distribution (no custom `gsd-*` port).
 - [ ] Emits GSD's native `.planning/phases/<NN>-<slug>/` layout (no bare-number or flat variants).
+- [ ] MUST NOT gitignore `.planning/phases/` — phase artifacts are committed evidence (only `.planning/cache/`, `.planning/state/`, and host session-handoffs may be ignored); a fresh install leaves the path tracked.
 - [ ] AgenticApps layer limited to trigger + gstack gates + snapshot + host file.
 - [ ] `.planning/config.<host>.json` namespaced; handoff host-scoped.
 - [ ] Medium/large enforce review gate + ADR.

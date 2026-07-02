@@ -9,6 +9,23 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Documentation
+- **Standard: forbid gitignoring `.planning/phases/` + document the `git add -f`
+  fallback** ([`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md),
+  mirrors the claude-workflow amendment). §5 now states phase artifacts are
+  committed evidence — only `.planning/cache/`, `.planning/state/`, and host
+  session-handoffs may be ignored — and adds the fallback the codex round-2
+  testbed run improvised: if a host project's own `.gitignore` matches the path,
+  the workflow surfaces it and un-ignores or stages with `git add -f` rather than
+  silently skipping the evidence commit. A matching conformance-checklist line
+  was added. Verified this repo's scaffolder is already conformant: the setup
+  skill's atomic commit stages `.planning/` wholesale, the committed root
+  `.gitignore` ignores only cache/state/handoffs, and neither `install.sh` nor
+  any migration emits a `.planning/phases/` ignore rule — so a fresh install
+  leaves the path tracked (`git check-ignore` clean, 18 phase files tracked). The
+  round-2 friction was in the testbed/claude scaffolder, not here. Docs-only; no
+  migration (no scaffolder output changed).
+
 ### Backlog (beyond conformance)
 
 - Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
