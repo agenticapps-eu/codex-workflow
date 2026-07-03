@@ -482,6 +482,87 @@ JSON
   fi
 }
 
+test_migration_0006() {
+  echo ""
+  echo "${YELLOW}=== Migration 0006 — Commit phase artifacts (strip whole-tree ignore) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # Synthetic project .gitignore: a whole-tree phases ignore (to strip), a
+  # narrow under-tree scratch ignore (to preserve), and legitimate transient
+  # ignores (to preserve).
+  cat > "$tmp/.gitignore" <<'IGN'
+node_modules/
+.planning/cache/
+.planning/state/
+.planning/phases/
+.planning/phases/*/.codex-review.md
+IGN
+
+  # Step 1 idempotency: whole-tree ignore present → needs apply.
+  assert_check "idempotency: whole-tree .planning/phases/ ignore present → needs strip" \
+    "[ ! -f .gitignore ] || ! grep -qE '^[[:space:]]*/?\.planning/phases/?[[:space:]]*\$' .gitignore" \
+    "$tmp" "not-applied"
+
+  # Apply Step 1 (strip whole-tree ignore; preserve narrow + transient).
+  ( cd "$tmp" && sed -i.0006.bak -E \
+      -e '/^[[:space:]]*\/?\.planning\/phases\/?[[:space:]]*$/d' \
+      -e '/^[[:space:]]*\/?\.planning\/?[[:space:]]*$/d' \
+      -e '/^[[:space:]]*\/?\.planning\/\*[[:space:]]*$/d' \
+      .gitignore && rm -f .gitignore.0006.bak )
+
+  assert_check "after Step 1: no whole-tree .planning/phases/ ignore remains" \
+    "[ ! -f .gitignore ] || ! grep -qE '^[[:space:]]*/?\.planning/phases/?[[:space:]]*\$' .gitignore" \
+    "$tmp" "applied"
+
+  # Narrow under-tree scratch ignore preserved.
+  if grep -qF '.planning/phases/*/.codex-review.md' "$tmp/.gitignore"; then
+    echo "  ${GREEN}PASS${RESET} narrow under-tree scratch ignore preserved"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} narrow under-tree scratch ignore was clobbered"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Transient .planning/cache/ + .planning/state/ preserved.
+  if grep -qF '.planning/cache/' "$tmp/.gitignore" && grep -qF '.planning/state/' "$tmp/.gitignore"; then
+    echo "  ${GREEN}PASS${RESET} transient .planning/cache/ + .planning/state/ preserved"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} transient cache/state ignore lost"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Version-bump round-trip (Step 2) on a synthetic SKILL.md copy.
+  printf 'version: 0.3.0\nimplements_spec: 0.4.0\n' > "$tmp/SKILL.md"
+  ( cd "$tmp" && sed -i.0006.bak -E 's/^version: 0\.3\.0$/version: 0.4.0/' SKILL.md && rm -f SKILL.md.0006.bak )
+  assert_check "after Step 2: version bumped to 0.4.0" \
+    "grep -q '^version: 0.4.0\$' SKILL.md" "$tmp" "applied"
+  # implements_spec must NOT be touched by the version bump.
+  if grep -q '^implements_spec: 0.4.0$' "$tmp/SKILL.md"; then
+    echo "  ${GREEN}PASS${RESET} implements_spec untouched by version bump"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} implements_spec was altered"
+    FAIL=$((FAIL+1))
+  fi
+  # Rollback restores 0.3.0.
+  ( cd "$tmp" && sed -i.bak -E 's/^version: 0\.4\.0$/version: 0.3.0/' SKILL.md && rm -f SKILL.md.bak )
+  assert_check "after Step 2 rollback: version back to 0.3.0" \
+    "grep -q '^version: 0.4.0\$' SKILL.md" "$tmp" "not-applied"
+
+  # An already-clean .gitignore is a no-op (idempotent re-apply).
+  printf 'node_modules/\n.planning/cache/\n' > "$tmp/clean.gitignore"
+  if ! grep -qE '^[[:space:]]*/?\.planning/phases/?[[:space:]]*$' "$tmp/clean.gitignore"; then
+    echo "  ${GREEN}PASS${RESET} already-clean .gitignore needs no change (idempotent)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} false-positive on a clean .gitignore"
+    FAIL=$((FAIL+1))
+  fi
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
@@ -527,6 +608,7 @@ test_repo_layout() {
     migrations/0003-delegate-observability.md \
     migrations/0004-revendor-spec-11.md \
     migrations/0005-bind-upstream-gsd.md \
+    migrations/0006-commit-planning-phases.md \
     migrations/test-fixtures/README.md \
     docs/BINDING.md \
     docs/decisions/0007-bind-upstream-gsd.md \
@@ -576,6 +658,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0005" ]; then
   test_migration_0005
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0006" ]; then
+  test_migration_0006
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
