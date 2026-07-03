@@ -20,9 +20,11 @@ description: |
 
 This skill is the entry point for bootstrapping a fresh project with
 the codex-workflow scaffolding. It applies the baseline migration
-(`migrations/0000-baseline.md`) and any additional migrations that
+(`0000-baseline.md`) and any additional migrations that
 have shipped between scaffolder versions, leaving the project at the
-current scaffolder version.
+current scaffolder version. Migration files are read from the stable
+installed path — see **Notes for the Codex host** — never relative to
+the project being set up.
 
 ## When to invoke
 
@@ -74,7 +76,10 @@ review.
 
 ### Stage C — Apply the baseline migration
 
-6. **Walk `migrations/0000-baseline.md` step by step.** For each
+6. **Walk the baseline migration
+   `${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/migrations/0000-baseline.md`
+   step by step** (the stable installed path — do NOT read
+   `migrations/…` relative to the project being set up). For each
    step:
    - Run the **idempotency check**. If it returns 0, log "skipped
      (already applied)" and continue.
@@ -153,6 +158,16 @@ review.
   `${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/templates/`.
   `install.sh` symlinks the scaffolder's top-level `templates/` to
   this path so migrations can `cp` from a stable location.
+- **Migrations path.** This skill reads its migrations at
+  `${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/migrations/`.
+  A committed `migrations` symlink inside the skill dir points to the
+  scaffolder's top-level `migrations/`; because `install.sh` symlinks
+  the whole skill dir into `~/.codex`, they resolve at that stable path
+  regardless of the target project's working directory. Every
+  `migrations/…` / `0000-baseline.md` reference in this skill means that
+  path — never read them relative to the project being set up. (The
+  `$update-codex-agenticapps-workflow` skill uses the identical
+  convention for its own `migrations` symlink.)
 - "Project name detection" can also pull from
   `package.json::name`, `pyproject.toml::project.name`,
   `Cargo.toml::package.name` — surface those as a prefilled
