@@ -645,6 +645,19 @@ test_repo_layout() {
     echo "  ${RED}FAIL${RESET} update skill migrations symlink missing/broken — \$update discovers no migrations"
     FAIL=$((FAIL+1))
   fi
+
+  # Setup-path migration discovery: the setup skill walks 0000-baseline.md at
+  # ${CODEX_HOME}/skills/setup-codex-agenticapps-workflow/migrations/. Same
+  # committed-symlink mechanism as the update skill — without it, setup can't
+  # find the baseline migration when run in a target repo (regression guard).
+  if [ -L skills/setup-codex-agenticapps-workflow/migrations ] \
+     && [ -f skills/setup-codex-agenticapps-workflow/migrations/0000-baseline.md ]; then
+    echo "  ${GREEN}PASS${RESET} setup skill migrations symlink resolves to repo-root migrations/"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} setup skill migrations symlink missing/broken — setup can't find 0000-baseline"
+    FAIL=$((FAIL+1))
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

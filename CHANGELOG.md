@@ -24,10 +24,18 @@ in every shipped artifact's frontmatter.
   location and the drift/version coupling are unchanged (no version bump — this is
   scaffolder wiring with no per-project effect, so no migration). `run-tests.sh`
   gains a regression guard asserting the symlink resolves.
-  - **Known adjacent gap (not fixed here):** the *setup* skill applies
-    `migrations/0000-baseline.md` via a relative path, which only resolves when
-    run from the scaffolder checkout — the setup-in-arbitrary-target-repo path is
-    still unwired. Tracked for a follow-up.
+- **Wire setup-path migration discovery** (same class as the update-path fix
+  above). The *setup* skill walked `migrations/0000-baseline.md` via a **relative**
+  path, which only resolved from the scaffolder checkout — so
+  `$setup-codex-agenticapps-workflow` could not find the baseline migration when
+  run inside a target project. Added the committed symlink
+  `skills/setup-codex-agenticapps-workflow/migrations → ../../migrations` and
+  rewrote the skill's operative references to the stable installed path
+  `${CODEX_HOME}/skills/setup-codex-agenticapps-workflow/migrations/` (matching
+  the update skill's convention), with a host note making the path authoritative.
+  Verified `0000-baseline.md` resolves through the install path; `run-tests.sh`
+  gains a matching regression guard. No version bump (scaffolder wiring, no
+  per-project effect, no migration).
 
 ### Backlog (beyond conformance)
 
