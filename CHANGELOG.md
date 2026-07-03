@@ -9,6 +9,26 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Fixed
+- **Wire update-path migration discovery.** `$update-codex-agenticapps-workflow`
+  reads migrations from
+  `${CODEX_HOME}/skills/update-codex-agenticapps-workflow/migrations/`, but that
+  path was empty — the canonical migrations live at repo-root `migrations/` and
+  were never exposed under `~/.codex`, so the update path discovered **zero**
+  migrations in target repos (latent since the migration framework landed; the
+  repo dogfoods via direct edits and `run-tests.sh` synthetic fixtures, so it
+  went unnoticed). Added a committed symlink
+  `skills/update-codex-agenticapps-workflow/migrations → ../../migrations`; since
+  the whole skill dir is symlinked into `~/.codex`, migrations now resolve at the
+  expected installed path (verified: all of `0000`–`0006` discoverable). Canonical
+  location and the drift/version coupling are unchanged (no version bump — this is
+  scaffolder wiring with no per-project effect, so no migration). `run-tests.sh`
+  gains a regression guard asserting the symlink resolves.
+  - **Known adjacent gap (not fixed here):** the *setup* skill applies
+    `migrations/0000-baseline.md` via a relative path, which only resolves when
+    run from the scaffolder checkout — the setup-in-arbitrary-target-repo path is
+    still unwired. Tracked for a follow-up.
+
 ### Backlog (beyond conformance)
 
 - Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).

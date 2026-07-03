@@ -630,6 +630,21 @@ test_repo_layout() {
       FAIL=$((FAIL+1))
     fi
   done
+
+  # Update-path migration discovery: the update skill reads migrations at
+  # ${CODEX_HOME}/skills/update-codex-agenticapps-workflow/migrations/. Because
+  # the whole skill dir is symlinked into ~/.codex, a committed
+  # `migrations -> ../../migrations` symlink exposes the canonical repo-root
+  # migrations there. Without it, `$update-codex-agenticapps-workflow` discovers
+  # zero migrations in target repos (regression guard).
+  if [ -L skills/update-codex-agenticapps-workflow/migrations ] \
+     && [ -f skills/update-codex-agenticapps-workflow/migrations/0006-commit-planning-phases.md ]; then
+    echo "  ${GREEN}PASS${RESET} update skill migrations symlink resolves to repo-root migrations/"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} update skill migrations symlink missing/broken — \$update discovers no migrations"
+    FAIL=$((FAIL+1))
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
