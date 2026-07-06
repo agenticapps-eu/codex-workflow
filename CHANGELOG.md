@@ -45,6 +45,54 @@ in every shipped artifact's frontmatter.
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
 
+## [0.5.0] — 2026-07-06
+
+### Added
+- **Knowledge capture into the Obsidian vault — spec §15 (migration `0007`,
+  [ADR-0008](docs/decisions/0008-knowledge-capture.md); mirrors core ADR-0017
+  and claude-workflow ADR-0038).** A `## Knowledge Capture — Ritual Tail
+  (spec §15)` section is wired into this host's always-loaded surfaces — the
+  trigger `skills/agentic-apps-workflow/SKILL.md` and the project `AGENTS.md`
+  (via the `agents-md-additions.md` template) — instructing the agent to distill
+  **1–5 transferable learnings** to **one Obsidian note per repo** as the FINAL
+  step of the three rituals: session handoff, plan completion, phase completion.
+  Entries carry the `(codex)` host tag in the append-only Log heading; the
+  curated `## Key Learnings` section is reconciled on each write. The write never
+  blocks the ritual, is never committed to the repo, and skips gracefully
+  (one info line) when the config block is absent/disabled or the vault folder
+  is missing.
+- **Config-routed, host-neutral destination.** The `knowledge_capture`
+  `{enabled, note}` block lives in the **shared** `.planning/config.json` — *not*
+  the namespaced `.planning/config.codex.json` — so codex and claude sharing a
+  working tree read the identical block and write to the same per-repo note,
+  differing only by the host tag (dual-host workflow-testbed finding; standard
+  §4/§5). Seeded by migration `0007` as a `. + {knowledge_capture}` merge that
+  preserves every existing key (a claude co-install's hooks stay intact) and is
+  skipped when the block already exists. The `<repo-name>` placeholder is
+  resolved to the repo directory name at configuration time (spec §15.2).
+- **Vendored, self-contained templates:**
+  `templates/config-knowledge-capture.json` (the host-neutral block) and
+  `templates/obsidian-learnings-note.md` (first-write note skeleton). No
+  claude-workflow path is referenced at runtime.
+
+### Changed
+- Scaffolder `version` `0.4.0 → 0.5.0` (trigger SKILL.md +
+  `.codex/workflow-version.txt`); migration chain now `0000`–`0007`.
+  `run-tests.sh`: adds `test_migration_0007` (config merge resolves `<repo-name>`
+  and preserves a pre-existing claude key; codex-only create yields a block-only
+  file; AGENTS.md section insert + idempotency; version-bump round-trip) plus
+  layout guards for the two new templates and ADR-0008.
+- Standard conformance checklist gains a §15 knowledge-capture line
+  ([`docs/standards/gsd-binding-and-planning.md`](docs/standards/gsd-binding-and-planning.md)).
+
+### Notes
+- `implements_spec` stays at `0.4.0`: it tracks the last full-conformance audit;
+  §15 wiring is real either way, and citing 0.7.0 requires auditing the §§ added
+  in 0.5.0/0.6.0 (out of scope). Codex ships no snapshot, so there is no
+  snapshot drift-guard analog — the fresh-install path is conformant by
+  construction (the template carries the section; the migration chain seeds the
+  config).
+
 ## [0.4.0] — 2026-07-02
 
 ### Changed

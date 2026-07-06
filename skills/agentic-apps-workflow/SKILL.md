@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 0.4.0
+version: 0.5.0
 implements_spec: 0.4.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
@@ -391,3 +391,75 @@ upstreams (GSD via `get-shit-done-codex`; Superpowers for Codex)
 The skill stays loaded only during the triggering turn (per Codex's
 progressive-disclosure design); subsequent turns re-trigger when the
 description matches.
+
+---
+
+## Knowledge Capture — Ritual Tail (spec §15)
+
+Transferable learnings must not die in a `.codex/session-handoff.md` that the
+next session overwrites. This step routes them to a cross-repo memory: **one
+Obsidian note per repo** in the operator's vault. It is the FINAL step of three
+rituals — run it AFTER, never before, the ritual's own artifact exists:
+
+1. **Session handoff** — after `.codex/session-handoff.md` is written.
+2. **Plan completion** — after a plan is marked complete under `.planning/`
+   (GSD `/prompts:gsd-plan-phase`).
+3. **Phase completion** — after the phase artifacts are committed
+   (GSD `/prompts:gsd-execute-plan`).
+
+The vault write is machine-local: it MUST NEVER be committed to the repo, and
+it MUST NEVER fail, block, or roll back the ritual that triggered it — on any
+failure print one warning line and continue. This mirrors the same section in
+the project `AGENTS.md` (root-down concat); both are the same contract, so a
+session that only reads `AGENTS.md` still performs the capture.
+
+Procedure (mechanical — follow exactly):
+
+1. **Read the config.** Open `.planning/config.json` — the shared, host-neutral
+   file, NOT `.planning/config.codex.json` — and read its `knowledge_capture`
+   object. **Skip** — print at most one line
+   `knowledge-capture: skipped (<reason>)` and continue the ritual — when any
+   holds:
+   - `.planning/config.json` is absent, or has no `knowledge_capture` block, or
+   - `knowledge_capture.enabled` is `false`, or
+   - the parent folder of `knowledge_capture.note` does not exist (expand a
+     leading `~` against `$HOME`).
+   NEVER create the parent folder: an absent vault means "not this machine",
+   not "set up the vault".
+2. **Distill 1–5 transferable learnings** from the ritual just completed. A
+   learning qualifies ONLY if it would change how you, another agent, or
+   another host works next time: gotchas whose root cause generalizes; decision
+   rationale with reusable trade-offs; tooling/workflow insights (what made the
+   agent fast or slow); wrong assumptions and what corrected them. Status
+   updates, restatements of the plan, repo facts already in
+   ADRs/handoffs/CHANGELOGs, and filler do NOT qualify. **If nothing clears the
+   bar, write nothing** — no empty entries, no placeholders.
+3. **Create the note on first write.** If the `knowledge_capture.note` file
+   does not exist, create it from the skeleton at
+   `${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/templates/obsidian-learnings-note.md`
+   (fill the `<...>` fields and the dates; `hosts:` starts as `[codex]`).
+4. **Prepend a Log entry** at the TOP of `## Log` (append-only — never edit or
+   delete existing entries) with a heading of exactly this shape, `codex` as
+   the host tag:
+   `### YYYY-MM-DD — <handoff|plan|phase> — <short title> (codex)`
+   and the learnings as bullets beneath it.
+5. **Curate `## Key Learnings`:** dedupe, merge related items, promote log
+   entries that earned it, demote or remove stale ones. Target ~10–20
+   highest-value items — each a bolded short title plus one to three sentences
+   carrying the transferable insight, not the status.
+6. **Update frontmatter:** set `updated:` to today's date; ensure `codex`
+   appears in the `hosts:` list (add it, preserving any hosts already listed —
+   e.g. `[claude]` becomes `[claude, codex]`).
+7. **Report** in one or two lines what was written (or why the step skipped).
+
+Vault safety (hard rules): touch ONLY the configured note — never other repos'
+notes, the folder's `CLAUDE.md`, or anything else in the vault. Never write
+secrets, tokens, URLs with embedded credentials, or client-confidential data;
+redact before writing.
+
+The destination is config-routed (spec §15.2) and the block is host-neutral, so
+codex and claude running in one working tree read the **same**
+`.planning/config.json → knowledge_capture` and write to the same per-repo note
+(differentiated only by the `(codex)` / `(claude)` host tag in the Log heading).
+See [ADR-0008](../../docs/decisions/0008-knowledge-capture.md) and core
+[ADR-0017](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0017-knowledge-capture-obsidian.md).

@@ -107,6 +107,17 @@ review.
    - `AGENTS.md` contains the `BEGIN: agentic-apps-workflow` marker
    - `docs/decisions/README.md` exists
    - `.codex/workflow-version.txt` reads `0.1.0`
+
+   When the full migration chain runs (0000 → latest), also confirm the
+   **knowledge-capture** wiring landed (migration 0007, spec §15):
+   - `.planning/config.json` carries the host-neutral `knowledge_capture`
+     block with its `<repo-name>` placeholder resolved:
+     `jq -e '.knowledge_capture.enabled | type == "boolean"' .planning/config.json`
+     and `! grep -qF '<repo-name>' .planning/config.json`. This is the
+     **shared** config file (not `.planning/config.codex.json`) so codex and
+     claude read the same block.
+   - `AGENTS.md` contains the section heading
+     `## Knowledge Capture — Ritual Tail (spec §15)` inside the marker block.
 9. **Atomic commit.** All baseline-migration changes go in a single
    commit:
 
