@@ -22,3 +22,4 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0005](0005-adopt-observability-architecture.md) | Adopt core ADR-0014 observability architecture (generator layer via delegation) | Accepted |
 | [0006](0006-secret-scanner-gitleaks.md) | Secret scanner: stay on gitleaks (adopt core ADR-0015) | Accepted |
 | [0007](0007-bind-upstream-gsd.md) | Bind upstream GSD + Superpowers; stop re-porting | Accepted |
+| [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the Codex host | Accepted |

@@ -125,3 +125,10 @@ decision; tiny/small stay fast. (See the per-repo enforcement brief.)
 - [ ] AgenticApps layer limited to trigger + gstack gates + snapshot + host file.
 - [ ] `.planning/config.<host>.json` namespaced; handoff host-scoped.
 - [ ] Medium/large enforce review gate + ADR.
+- [ ] Wires the spec §15 knowledge-capture step into all three rituals (session
+      handoff, plan completion, phase completion); destination read from the
+      **shared, host-neutral** `.planning/config.json → knowledge_capture` at
+      trigger time — never hardcoded, never the namespaced `config.<host>.json`;
+      graceful skip when the block is absent/disabled or the vault folder is
+      missing; capture failure never blocks a ritual (codex: ADR-0008,
+      migration 0007; claude: ADR-0038).

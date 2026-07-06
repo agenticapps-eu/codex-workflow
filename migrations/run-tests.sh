@@ -564,6 +564,191 @@ IGN
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0007 — Knowledge capture (spec §15) into the Obsidian vault.
+# Testable non-interactively: the config merge (resolve <repo-name>, preserve a
+# pre-existing key, codex-only create) + the AGENTS.md section insert/idempotency
+# + the version-bump round-trip. Uses the real shipped templates as source.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0007() {
+  echo ""
+  echo "${YELLOW}=== Migration 0007 — Knowledge capture (spec §15) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — config-merge test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local kc_tpl agents_tpl
+  kc_tpl="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/config-knowledge-capture.json"
+  agents_tpl="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md"
+
+  # Templates must ship (single source of truth for both fresh + migrated).
+  if [ -f "$kc_tpl" ] && [ -f "$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/obsidian-learnings-note.md" ]; then
+    echo "  ${GREEN}PASS${RESET} knowledge-capture templates ship (config block + note skeleton)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} knowledge-capture template(s) missing"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The shipped block is host-neutral (no host-specific keys) and enabled.
+  if jq -e '.knowledge_capture | has("enabled") and has("note") and (keys | length == 2)' "$kc_tpl" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} config block is host-neutral (only enabled + note)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} config block carries unexpected/host-specific keys"
+    FAIL=$((FAIL+1))
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  mkdir -p "$tmp/.planning"
+
+  local REPO_NAME="codex-workflow"
+  local KC
+  KC="$(jq -c --arg name "$REPO_NAME" \
+          '.knowledge_capture.note |= gsub("<repo-name>"; $name) | .knowledge_capture' \
+          "$kc_tpl")"
+
+  # --- Merge path: pre-existing config.json with a claude-written key survives.
+  cat > "$tmp/.planning/config.json" <<'JSON'
+{ "host": "claude", "hooks": { "post_phase": { "code_review": { "stage": 2 } } } }
+JSON
+
+  # Step 1 idempotency (pre): no knowledge_capture yet → needs apply.
+  assert_check "idempotency: config.json has no knowledge_capture → needs seed" \
+    "test -f .planning/config.json && jq -e '.knowledge_capture' .planning/config.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  ( cd "$tmp" && jq --argjson kc "$KC" '. + {knowledge_capture: $kc}' \
+      .planning/config.json > .planning/config.json.tmp \
+      && mv .planning/config.json.tmp .planning/config.json )
+
+  assert_check "after merge: knowledge_capture present" \
+    "jq -e '.knowledge_capture.enabled == true' .planning/config.json >/dev/null" \
+    "$tmp" "applied"
+
+  # <repo-name> placeholder resolved to the real repo directory name.
+  if ( cd "$tmp" && jq -e '.knowledge_capture.note | endswith("/codex-workflow.md")' .planning/config.json >/dev/null ) \
+     && ! grep -qF '<repo-name>' "$tmp/.planning/config.json"; then
+    echo "  ${GREEN}PASS${RESET} <repo-name> resolved in note path; no placeholder left"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} <repo-name> not resolved (or placeholder remains)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Pre-existing claude key preserved by the merge (host-neutral coexistence).
+  if ( cd "$tmp" && jq -e '.hooks.post_phase.code_review.stage == 2 and .host == "claude"' .planning/config.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} pre-existing (claude) config keys preserved by merge"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} merge clobbered pre-existing config keys"
+    FAIL=$((FAIL+1))
+  fi
+
+  # --- Create path: codex-only repo (no config.json) gets a block-only file.
+  rm -f "$tmp/.planning/config.json"
+  ( cd "$tmp" && jq -n --argjson kc "$KC" '{knowledge_capture: $kc}' > .planning/config.json )
+  if ( cd "$tmp" && jq -e '(keys == ["knowledge_capture"])' .planning/config.json >/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} codex-only create yields a block-only shared config.json"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} codex-only create produced unexpected keys"
+    FAIL=$((FAIL+1))
+  fi
+
+  # --- AGENTS.md section insert from the real template.
+  cat > "$tmp/AGENTS.md" <<'MD'
+# AGENTS.md — fixture
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+
+## Session handoff
+
+Existing content.
+
+<!-- END: agentic-apps-workflow sections -->
+MD
+
+  # Step 2 idempotency (pre): section absent → needs insert.
+  assert_check "idempotency: AGENTS.md lacks Knowledge Capture section → needs insert" \
+    "grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' AGENTS.md" \
+    "$tmp" "not-applied"
+
+  local secfile; secfile="$tmp/section.txt"
+  awk '
+    /^## Knowledge Capture — Ritual Tail \(spec §15\)/ {f=1}
+    /^<!-- END: agentic-apps-workflow sections -->/    {f=0}
+    f
+  ' "$agents_tpl" > "$secfile"
+
+  ( cd "$tmp" && awk -v secfile="$secfile" '
+      /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
+        while ((getline line < secfile) > 0) print line
+        ins=1
+      }
+      { print }
+    ' AGENTS.md > AGENTS.md.0007.tmp && mv AGENTS.md.0007.tmp AGENTS.md )
+
+  assert_check "after insert: Knowledge Capture section present in AGENTS.md" \
+    "grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' AGENTS.md" \
+    "$tmp" "applied"
+
+  # Section landed INSIDE the marker block (before the END marker).
+  if awk '/^## Knowledge Capture — Ritual Tail/{k=NR} /^<!-- END: agentic-apps-workflow sections -->/{e=NR} END{exit !(k>0 && e>0 && k<e)}' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} section sits inside the agentic-apps-workflow marker block"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} section landed outside the marker block"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Config-routed, not hardcoded: the section names the shared .planning/config.json
+  # and explicitly steers away from the host-specific config.codex.json.
+  if grep -qF '.planning/config.json' "$tmp/AGENTS.md" \
+     && grep -qF 'config.codex.json' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} section routes destination via shared .planning/config.json"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} section does not disambiguate the config source"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Host tag is codex in the Log-heading shape.
+  if grep -qF '(codex)' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} Log-entry heading carries the (codex) host tag"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} (codex) host tag missing from the section"
+    FAIL=$((FAIL+1))
+  fi
+
+  # --- Version-bump round-trip on a synthetic SKILL.md copy.
+  printf 'version: 0.4.0\nimplements_spec: 0.4.0\n' > "$tmp/SKILL.md"
+  ( cd "$tmp" && sed -i.0007.bak -E 's/^version: 0\.4\.0$/version: 0.5.0/' SKILL.md && rm -f SKILL.md.0007.bak )
+  assert_check "after Step 3: version bumped to 0.5.0" \
+    "grep -q '^version: 0.5.0\$' SKILL.md" "$tmp" "applied"
+  if grep -q '^implements_spec: 0.4.0$' "$tmp/SKILL.md"; then
+    echo "  ${GREEN}PASS${RESET} implements_spec untouched by version bump"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} implements_spec was altered"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The ADR ships.
+  if [ -f "$REPO_ROOT/docs/decisions/0008-knowledge-capture.md" ]; then
+    echo "  ${GREEN}PASS${RESET} ADR-0008 (knowledge capture) ships"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} ADR-0008 missing"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -599,6 +784,8 @@ test_repo_layout() {
     skills/setup-codex-agenticapps-workflow/templates/workflow-config.md \
     skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md \
     skills/setup-codex-agenticapps-workflow/templates/config-hooks.json \
+    skills/setup-codex-agenticapps-workflow/templates/config-knowledge-capture.json \
+    skills/setup-codex-agenticapps-workflow/templates/obsidian-learnings-note.md \
     skills/setup-codex-agenticapps-workflow/templates/adr-db-security-acceptance.md \
     skills/setup-codex-agenticapps-workflow/templates/global-agents-additions.md \
     migrations/README.md \
@@ -609,7 +796,9 @@ test_repo_layout() {
     migrations/0004-revendor-spec-11.md \
     migrations/0005-bind-upstream-gsd.md \
     migrations/0006-commit-planning-phases.md \
+    migrations/0007-knowledge-capture.md \
     migrations/test-fixtures/README.md \
+    docs/decisions/0008-knowledge-capture.md \
     docs/BINDING.md \
     docs/decisions/0007-bind-upstream-gsd.md \
     vendor/agenticapps-shared/migrations/lib/helpers.sh \
@@ -690,6 +879,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0006" ]; then
   test_migration_0006
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0007" ]; then
+  test_migration_0007
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
