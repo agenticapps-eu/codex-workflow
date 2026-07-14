@@ -48,7 +48,7 @@ source. GSD roadmap tracking starts at Phase 8.
   6. The resolver selects the active phase in the spec's documented order and fails open when nothing resolves
   7. `migrations/run-tests.sh` passes, including a `test_migration_0008` that is a no-op on second run
 
-**Plans**: 5 plans in 4 waves
+**Plans**: 6 plans in 5 waves
 
 Plans:
 **Wave 1**
@@ -66,7 +66,13 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 08-05-PLAN.md — Migration 0008 + `test_migration_0008` + version bump + CHANGELOG, TDD [wave 4] → criterion 7
+- [ ] 08-05-PLAN.md — Migration 0008 core: config leaf-merge + ritual insert + `test_migration_0008` + version bump in lockstep, TDD [wave 4] → contributes to criterion 7
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [ ] 08-06-PLAN.md — Migration 0008 bindings-table step (D-20) + CHANGELOG, TDD [wave 5] → closes criterion 7
+
+<sub>08-05/08-06 were one plan; split for context budget (operator-approved). 08-06 depends on 08-05 rather than running beside it because both edit `migrations/0008-plan-review-gate.md` and `migrations/run-tests.sh` — same-wave siblings must not share `files_modified`. The version bump stays with 08-05 because `run_drift_test` compares the latest migration's `to_version` against SKILL.md's `version`, and this repo hard-fails a mismatch: splitting them would leave the harness red across the wave boundary.</sub>
 
 ## Progress
 
@@ -75,4 +81,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 0/5 | In progress | - |
+| 8. Plan-Review Gate | 0/6 | In progress | - |
