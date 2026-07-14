@@ -114,15 +114,17 @@ The explicit check is what makes legacy grandfathering a stated rule rather than
 an emergent property of a glob.
 
 Otherwise: `*-REVIEWS.md` absent → **exit 2**, message naming both escape
-hatches. Present and non-empty (≥5 lines, matching the reference) → exit 0.
+hatches.
 
-**Verifier and producer enforce different things, deliberately.** The verifier
-checks *existence and non-emptiness only* — it does not parse reviewer count.
-`min_reviewers: 2` is the **producer's** contract, enforced in
-`codex-plan-review`. A verifier that parsed provenance headers would couple
-itself to one producer's output format and would falsely block a hand-written or
-externally-generated REVIEWS.md. The reference makes the same loose-verifier /
-strict-producer split, and its ≥5-line check is ported for the same reason.
+> **SUPERSEDED by `08-CONTEXT.md` D-13 (2026-07-14).** This section originally
+> specified a loose verifier — existence and non-emptiness only — arguing that
+> parsing reviewer count would couple the verifier to one producer's output
+> format. That argument does not survive contact with the evidence: a real
+> REVIEWS.md in `agenticapps-dashboard` shows the `reviewers: []` frontmatter is a
+> **family-wide convention**, not a producer-specific format. The verifier
+> therefore parses `reviewers:` and blocks below 2, falling back to the ≥5-line
+> check only when frontmatter is absent. `min_reviewers` remains the producer's
+> contract as well. See `08-CONTEXT.md` D-12/D-13/D-14 for the current rule.
 
 ### 3. Escape hatches
 
