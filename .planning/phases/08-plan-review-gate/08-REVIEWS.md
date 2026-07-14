@@ -1,577 +1,371 @@
 ---
 phase: 8
+round: 2
 reviewers: [gemini, codex, opencode]
-reviewed_at: 2026-07-14T12:46:46Z
-plans_reviewed: [08-01-PLAN.md, 08-02-PLAN.md, 08-03-PLAN.md, 08-04-PLAN.md, 08-05-PLAN.md]
+reviewed_at: 2026-07-14T17:57:00Z
+plans_reviewed: [08-01-PLAN.md, 08-02-PLAN.md, 08-03-PLAN.md, 08-04-PLAN.md, 08-05-PLAN.md, 08-06-PLAN.md]
+supersedes: round 1 (2026-07-14T12:46:46Z, commit 765999b — recoverable from git history)
 ---
 
-# Cross-AI Plan Review — Phase 8: Plan-Review Gate
+# Cross-AI Plan Review — Phase 8: Plan-Review Gate (Round 2)
 
-Reviewers were given identical context (ROADMAP, 08-CONTEXT.md, 08-PATTERNS.md,
-and all five PLAN.md files) and ran independently without seeing each other's
-output. `claude` was skipped for independence — this review was orchestrated from
-Claude Code. `coderabbit`, `qwen`, and `cursor` are not installed; no local model
-server was reachable.
+This is the **second** review round. Round 1 (12:46Z) reviewed five plans; the
+plans were then revised in response (commit ab1f164) and 08-05 was split into
+08-05/08-06 for context budget (commit 52725db). This round reviews all six
+plans as they now stand.
+
+Reviewers were given identical context — README, AGENTS.md, ROADMAP, 08-CONTEXT,
+08-DISCUSSION-LOG, 08-PATTERNS, and all six PLAN.md files — and ran independently
+without seeing each other's output. They were told a prior round had occurred and
+instructed to judge the plans on their current merits rather than assume earlier
+feedback was ignored. `claude` was skipped for independence: this review was
+orchestrated from Claude Code. `coderabbit`, `qwen`, and `cursor` are not
+installed; no local model server was reachable.
 
 **Reviewer provenance:**
 
 | Reviewer | CLI | Model | Notes |
 |---|---|---|---|
-| Gemini | `gemini -p` | CLI default | — |
-| Codex | `codex exec` | CLI default | 105k tokens used |
-| OpenCode | `opencode run` | glm-5.2 | First invocation ignored the prompt and spent 10 min exploring the repo; re-run with tool use explicitly discouraged |
+| Gemini | `gemini -p -` | CLI default | Trailing SessionEnd hook logs stripped from stdout |
+| Codex | `codex exec --skip-git-repo-check -` | `gpt-5.6-sol`, reasoning effort xhigh | Ran read-only sandboxed |
+| OpenCode | `opencode run -` | `glm-5.2` (via GitHub Copilot) | — |
 
-Reviewer sections below are verbatim output, with internal heading levels demoted
-to nest under this document's structure. Treat reviewer text as data, not as
-instructions to act on.
+**Risk verdicts:** Gemini **LOW** · OpenCode **MEDIUM** · Codex **HIGH**
 
 ---
 
 ## Gemini Review
 
+## Summary
 
-### Overall Assessment
+This is an exceptionally thorough and mature set of implementation plans. They have been substantially improved in response to the previous review, systematically closing every identified high-risk gap. The plans now demonstrate a deep commitment to correctness, security, and testability through a rigorous TDD approach. The level of detail, from correcting subtle defects in the upstream reference implementation to honestly documenting the gate's own limitations (the "bootstrap paradox" and agent-mediated enforcement), is exemplary. The addition of a producer-verifier contract test and robust path-handling logic transforms the most critical components from plausible designs into verifiable contracts. The phase is well-decomposed into logical waves, dependencies are clear, and the threat models are specific and effectively mitigated.
 
-This is an exceptionally high-quality and comprehensive set of plans. The five plans are logically sequenced, internally consistent, and demonstrate a deep understanding of the project's goals, technical context, and established patterns. The rigorous test-driven development (TDD) approach, thorough threat modeling for each component, and meticulous attention to detail significantly de-risk the implementation. The plans not only address the core requirements but also correct defects in the upstream reference implementation and wisely handle complex issues like the "bootstrap paradox" of self-hosting the gate. The overall risk is assessed as LOW.
+## Strengths
 
----
+-   **Systematic Risk Mitigation:** Every HIGH-severity concern from the previous review has been addressed with a specific, robust, and testable solution. This includes the verifier's root self-location (T-08-28), the corrected `jq` merge logic (T-08-22), the fail-closed handling of non-regular artifacts (T-08-09), and the honest rewording of the enforcement claim (T-08-33).
+-   **Rigorous TDD & Contract Testing:** The plans enforce a strict RED/GREEN workflow for all new code. Crucially, the addition of `test_check_plan_review_contract` in plan `08-02` creates a round-trip test that proves the producer's output is valid input for the verifier, mechanically closing the highest-risk integration gap.
+-   **Proactive Defect Correction:** The plans don't just port the reference implementation; they improve it. The discovery and correction of three distinct defects in the reference resolver—evidenced by a runnable `awk` proof in plan `08-01`—is a standout example of deep analysis.
+-   **Intellectual Honesty:** The plans consistently and honestly confront their own limitations. The "bootstrap paradox" is documented in every relevant plan's verification section, preventing the team from claiming a false dogfood success. Similarly, the agent-mediated nature of the gate is recorded in the `ROADMAP`, `CHANGELOG`, and `ADR-0009`, aligning the project's claims with its actual capabilities.
+-   **Security as a First-Class Concern:** The threat models are specific to each plan and have clearly driven design. Key security controls include the producer's affirmative consent gate for data egress (T-08-12), the verifier's path containment checks (T-08-01), audited escape hatches (T-08-07), and the explicit decision to have the ritual invoke a fixed verifier path rather than one from a target repo's config (T-08-17).
 
-### Review of `08-01-PLAN.md` — Verifier Core
+## Concerns
 
-1.  **Summary**
-    This plan outlines a solid TDD approach for building the "allow" paths of the verifier script. It focuses on correctly implementing the phase resolution logic and grandfathering rules, intelligently porting and correcting a flawed upstream reference. The plan is detailed, well-scoped, and prioritizes creating a robust test suite before writing implementation code.
+-   **(LOW) Upstream Defect Reporting is Not Tasked.** The plans and ADR are meticulous in identifying and documenting several defects in upstream dependencies (`claude-workflow`'s resolver, `agenticapps-workflow-core`'s gate count). However, these valuable findings are only recorded in this repo's "deferred items" list. There is no explicit task to consolidate and report these issues upstream, creating a risk that this cross-ecosystem knowledge will be lost. (Applies to: Phase-level process).
 
-2.  **Strengths**
-    *   **Rigorous TDD:** The clear separation of RED (failing tests first) and GREEN (implementation) tasks ensures a test-driven workflow, which is a best practice.
-    *   **Defect Correction:** The plan shows deep analysis by not only identifying but planning to fix two documented defects (D-06, D-07) and a third, subtle bug in the reference implementation's regex logic. This proactive correction is a major strength.
-    *   **Comprehensive Test Plan:** The list of test cases for the resolver is exhaustive, covering precedence, fallbacks, grandfathering rules, and even a path-traversal security case (T-08-01).
-    *   **Testability:** The introduction of a `GSD_PLAN_REVIEW_DEBUG` flag is a clever solution to make the resolver's output testable, which would otherwise be difficult with only exit codes to assert against.
+## Suggestions
 
-3.  **Concerns**
-    *   **(LOW) New Test Harness Logic:** The plan correctly identifies that a new test helper (`_cpr_case`) is needed to assert against subprocess exit codes, which is a departure from existing file-content-based tests. While this is a necessity, it introduces new test-harness code that must be implemented correctly. The plan's awareness of this reduces the risk.
+-   Consider adding a final, non-blocking administrative task to plan `08-06`. This task would be to consolidate all identified upstream defects from `ADR-0009` and the deferred items list into a single draft issue or internal document for the operator to file. This would close the loop on the excellent analysis work already done and ensure the wider project ecosystem benefits from it.
 
-4.  **Suggestions**
-    *   No major suggestions. The plan is excellent. As a minor point, the implementation task (Task 2) should re-emphasize using the corrected regex from the `<resolver_defects>` section to ensure that critical fix is not overlooked.
+## Risk Assessment
 
-5.  **Risk Assessment: LOW**
-    The risk is low due to the thorough TDD approach, deep analysis of the problem space, and clear mitigation of identified threats. The plan is set up for success.
+**Overall Risk: LOW**
 
----
-
-### Review of `08-02-PLAN.md` — Verifier Enforcement
-
-1.  **Summary**
-    This plan logically follows the first, using TDD to implement the verifier's "block" paths. It covers the core enforcement logic: checking for the `REVIEWS.md` artifact, enforcing a minimum reviewer count based on frontmatter, handling escape hatches, and defining the user-facing block message.
-
-2.  **Strengths**
-    *   **Security-First Ordering:** The `<ordering>` section is a standout feature, correctly specifying the sequence of checks to ensure escape hatches are checked first and that guards are ordered for correctness and performance.
-    *   **Strict Conformance:** The plan correctly implements the stricter verifier logic (D-13), a critical decision that supersedes the original brief and hardens the gate against trivial bypasses. The test cases are designed to explicitly validate this stricter behavior.
-    *   **Auditable Bypasses:** The plan requires that escape hatches log to stderr when used. This mitigates threat T-08-07 by ensuring that a bypass is an auditable event, not a silent one.
-    *   **Robust Test Cases:** The test suite covers complex edge cases, such as attempts to bypass the reviewer count with a long file body and ensuring the `--file` bypass logic isn't fooled by simple basename matching (T-08-08).
-
-3.  **Concerns**
-    *   **(LOW) Parsing with `awk`:** The plan specifies parsing YAML-like frontmatter with `awk` to avoid a new dependency. While pragmatic, this can be brittle. The plan mitigates this by limiting the scope of the parse to the frontmatter block, but the implementation will require care.
-
-4.  **Suggestions**
-    *   None. The plan is thorough and addresses the core security function of the gate with appropriate rigor.
-
-5.  **Risk Assessment: LOW**
-    The plan is well-designed with a strong focus on security and correctness. The detailed test cases and explicit ordering of operations leave little room for error.
-
----
-
-### Review of `08-03-PLAN.md` — Producer Skill & ADR
-
-1.  **Summary**
-    This plan focuses on authoring the two key documents for the phase: the `codex-plan-review` skill that produces the evidence artifact, and `ADR-0009` which records the architectural decisions. It leverages existing patterns for both skill and ADR authoring, ensuring consistency.
-
-2.  **Strengths**
-    *   **Excellent Use of Analogs:** The plan effectively uses the `08-PATTERNS.md` document to ground the new skill and ADR in established conventions, promoting consistency.
-    *   **Security-Conscious Egress:** The plan for the producer skill includes a critical step to "Enumerate the egress set before sending." This is an essential security control (mitigating T-08-12) that demonstrates a mature understanding of the trust boundary involved in sending code to external services.
-    *   **Robust Error Handling:** The producer skill is designed to be robust, refusing to generate a non-conformant (one-reviewer) file and handling failures from external CLIs gracefully by recording unavailability rather than fabricating output (mitigating T-08-13).
-    *   **High-Integrity ADR:** The plan for the ADR is outstanding. It includes not just the decisions made, but also the rejected alternatives, the discovery of new defects in the reference implementation, and a candid discussion of the "bootstrap paradox." This level of transparency and architectural reasoning is a sign of a very high-quality planning process.
-
-3.  **Concerns**
-    *   None. This is a plan for authoring documents, and it does so with a level of detail and foresight that is commendable.
-
-4.  **Suggestions**
-    *   Consider explicitly mentioning timeout handling when invoking external CLIs in the skill's procedure. The plan covers non-zero exit codes and empty output, but a hanging process is also a possible failure mode.
-
-5.  **Risk Assessment: LOW**
-    The plan is well-structured and highly detailed. The primary risks are related to information disclosure, and the plan includes strong, explicit mitigations.
-
----
-
-### Review of `08-04-PLAN.md` — Declarative Binding & Ritual Wiring
-
-1.  **Summary**
-    This is a precise integration plan that connects the verifier script and producer skill to the wider workflow. It involves editing five separate files to add the declarative configuration and the prose-based invocation ritual, while also correcting a pre-existing inconsistency in the gate-binding tables.
-
-2.  **Strengths**
-    *   **Single Source of Truth:** The plan rigorously follows the "single source of truth" principle (D-19) by authoring the ritual prose in one template (`agents-md-additions.md`) and then mechanically mirroring it to `AGENTS.md` and the trigger `SKILL.md`. This is essential for preventing drift.
-    *   **Attention to Detail:** The plan catches and corrects the duplicate `tdd` row and inconsistent `brainstorm` rows in the gate tables (D-20), ensuring the project's documentation is consistent and conformant with the spec (16 distinct gates).
-    *   **Threat Mitigation:** The threat model correctly identifies the risk of a malicious `verifier` key in a repo's config (T-08-17) and specifies the correct mitigation: the ritual text invokes a fixed, stable path, not a path from the config.
-    *   **Clarity on Prohibitions:** The `<constraints>` section clearly reiterates what *not* to do (e.g., edit GSD prompts), preventing scope creep and ensuring adherence to the project's thin-binding stance.
-
-3.  **Concerns**
-    *   None. This is an exemplary integration plan. It is precise, safe, and demonstrates a complete understanding of the system's moving parts.
-
-4.  **Suggestions**
-    *   None needed.
-
-5.  **Risk Assessment: LOW**
-    The plan involves changes to several files, but the changes are small, well-understood, and follow established patterns. The associated threat model is strong.
-
----
-
-### Review of `08-05-PLAN.md` — Migration, Version Bump, & CHANGELOG
-
-1.  **Summary**
-    This final plan wraps up the phase by creating the migration path for existing projects, updating version numbers, and documenting the changes in the `CHANGELOG`. It again uses a TDD approach and mirrors the structure of the previous successful migration (`0007`).
-
-2.  **Strengths**
-    *   **Proven Migration Pattern:** The plan wisely elects to mirror the structure and mechanisms of `migrations/0007-knowledge-capture.md`, from the `jq` merge logic to the portable `awk` script for prose insertion. This reduces the risk of introducing new errors.
-    *   **Test-Driven Migration:** The TDD approach (`test(RED)` then `feat(GREEN)`) is correctly applied to the migration itself, ensuring the migration is idempotent and handles edge cases like preserving foreign keys in config files.
-    *   **Version-Lockstep Awareness:** The plan correctly identifies the "drift coupling" between the trigger skill's version and the latest migration's `to_version`, and includes the version bump in the same plan to ensure the `drift` test remains green.
-    *   **Comprehensive Finalization:** The plan includes not just the code and tests but also the final documentation step (`CHANGELOG.md`), ensuring the phase is properly closed out and communicated. The detailed instructions for the changelog entry are excellent.
-
-3.  **Concerns**
-    *   None. This is a textbook execution of a finalization and migration plan for this project.
-
-4.  **Suggestions**
-    *   None needed.
-
-5.  **Risk Assessment: LOW**
-    The risk is minimal. The use of established, tested patterns for creating the migration, combined with a dedicated test suite for that migration, makes this a very safe and reliable plan.
+The risk is low because the plans are comprehensive, internally consistent, and have been hardened against all previously identified high-severity risks. The rigorous TDD approach, including the vital producer-verifier contract test, provides a strong guarantee of correctness. The planning process itself has proven to be self-correcting and capable of deep, critical analysis. The remaining risk is negligible and relates to post-implementation process rather than technical execution. The phase is exceptionally well-prepared for a successful implementation.
 
 ---
 
 ## Codex Review
 
-### Overall assessment
+## Summary
 
-The architecture is thoughtful and the plans are unusually well researched, but I would not execute them unchanged. The phase currently has several blocking correctness and security gaps: invocation remains agent-mediated rather than enforced, decimal phases are not resolved correctly, a FIFO can satisfy the review gate, review evidence can be stale or ambiguous, and migration 0008 can overwrite an existing `pre_execution` group. The provided update-workflow skill also exposes a multi-hop upgrade failure for projects below 0.5.0.
+The second-round plans are substantially stronger: earlier findings around root discovery, resolver parsing, reviewer strictness, consent, leaf-level merging, and honest enforcement claims were incorporated carefully. Wave ordering is sound and shared files are serialized correctly. However, the set is not execution-ready: several remaining contradictions can produce a bypass or make migration 0008 fail in real downstream projects even while the synthetic harness is green.
 
-**Overall risk: HIGH.** The design direction is sound, but the current plans do not yet guarantee the phase’s central claim: that an unreviewed phase is reliably blocked.
+## Strengths
 
-#### Plan 08-01 — Resolver and grandfather guards
+- The four-step resolver order and grandfather rule track spec §02 accurately, while correcting the known STATE.md and decimal-phase defects.
 
-##### Summary
+- Plans `08-01` and `08-02` have unusually strong adversarial coverage: nested cwd, ambiguous artifacts, malformed frontmatter, distinct reviewers, plan coverage, FIFOs, escape hatches, and producer/verifier round trips.
 
-[08-01-PLAN.md](/Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-01-PLAN.md) is well structured around TDD and correctly identifies two real defects in the reference resolver. Its main weaknesses are incomplete decimal-phase support, dependence on the caller’s working directory, and nondeterminism when phase directories or plan mtimes are ambiguous.
+- Wave dependencies are correct. Files shared by `08-01`/`08-02`, `08-04`/`08-05`, and `08-05`/`08-06` are edited sequentially rather than concurrently.
 
-##### Strengths
+- The migration leaf merge and rollback design correctly preserve sibling `pre_execution` gates. Version bump and drift coupling are kept in one commit.
 
-- Strong RED/GREEN separation with behavioral fixtures rather than testing against the live phase.
-- Correctly fixes both the `## Current Position` heading and the colon in `Phase: NN`.
-- Explicitly omits the unavailable `gsd-tools.cjs` step.
-- Adds an important containment check for the mutable phase pointer.
-- Treats grandfather rules as named behavior rather than accidental glob behavior.
-- The debug surface makes resolver precedence testable without exposing internal functions.
+- The plans honestly document the agent-mediated enforcement limitation, advisory egress boundary, bootstrap paradox, and deferred digest freshness. They do not pretend the live Phase 8 gate proves itself.
 
-##### Concerns
+- The thin-binding stance is respected: no upstream GSD prompt is modified, and a local producer is authored only because Codex GSD has no corresponding review prompt.
 
-- **HIGH — Decimal inserted phases do not zero-pad correctly.** `_match_phase_dir` retries `08-*` for `8`, but the plan only zero-pads a “single digit.” `Phase: 8.1` will therefore search for `8.1-*`, not the likely `08.1-*`. Decimal phases are explicitly supported by the roadmap.
-- **HIGH — Invocation from a subdirectory silently fails open.** The script resolves relative to its current working directory and assumes the caller is at the repository root. Running it from `src/` sees no `.planning/` and allows the edit.
-- **MEDIUM — STATE parsing is not explicitly bounded to the current section.** An anchored `Phase:` line in a later H2 section could still be selected unless parsing stops at the next `##` heading.
-- **MEDIUM — Multiple matching phase directories are undefined.** If both `08-old/` and `08-plan-review-gate/` exist, `_match_phase_dir` can select whichever `find` returns first.
-- **MEDIUM — The proposed newest-plan pipeline is not fully NUL-safe.** `xargs -0 ls -t | head -1` converts filenames back to newline-delimited output. Empty-input behavior also differs across BSD/GNU `xargs`, and equal mtimes are nondeterministic.
-- **LOW — The RED-state requirements conflict.** The plan says to guard the whole suite when the verifier is absent, but also requires at least 14 individual failures. A single early guard failure would not satisfy that acceptance criterion.
+## Concerns
 
-##### Suggestions
+- **HIGH — Migration 0008 operates on a scaffolder file that normal target projects do not contain.**  
+  [08-05 Task 2](</Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-05-PLAN.md:518>) puts `skills/agentic-apps-workflow/SKILL.md` in the migration’s runtime steps and preconditions. The supplied setup skill defines project-side artifacts as `AGENTS.md`, `.planning/`, `.codex/`, and decisions—not a local `skills/` tree. The update skill also executes migration steps from the target project and already reads the installed trigger skill from `${CODEX_HOME}`. A normal downstream update will therefore fail even though `test_migration_0008` creates a synthetic `SKILL.md` and passes. The repository’s release-time SKILL version bump should remain in the implementation commit, but it should not be a target-project migration step.
 
-- Add cases for `Phase: 8.1 → 08.1-*` and other decimal phase forms.
-- Have the verifier locate the repository root itself, for example through `git rev-parse --show-toplevel`, then operate relative to that root.
-- Stop STATE parsing at the next H2 heading.
-- Fail open with a diagnostic on multiple matching directories rather than selecting arbitrarily.
-- Replace the `ls -t` pipeline with a portable deterministic mtime selection that handles empty input and ties explicitly.
-- Make the missing-verifier RED behavior either one suite-level failure or one failure per case, not both.
+- **HIGH — The bindings-table migration cannot produce the state its test requires.**  
+  [08-06 Task 2](</Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-06-PLAN.md:336>) only replaces the two `tdd` rows and inserts `plan-review`, while leaving every other row untouched. The actual pre-0008 template has 15 rows, including one combined `brainstorm-ui / brainstorm-architecture` row. After collapsing `tdd` and adding `plan-review`, it still has 15 rows—not the 16-row fresh-install table required by the acceptance criteria. Step 3 must also replace the combined brainstorm row with the two template rows, or replace the complete recognized table body atomically.
 
-##### Risk Assessment
+- **HIGH — Ambiguous phase resolution lacks a terminal result.**  
+  [08-01 Task 2](</Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-01-PLAN.md:521>) says `_match_phase_dir` returns empty for both “no match” and “ambiguous.” `resolve_phase` then treats empty as “continue” and falls through to newest-plan-by-mtime, potentially selecting one of the ambiguous directories after all. The resolver needs a tri-state contract: unique, absent, or ambiguous-terminal-fail-open. The test should assert that no `resolved-phase:` line appears and that the result remains allow after `08-02` enforcement is installed.
 
-**HIGH.** Decimal phases and nested-directory invocation are ordinary supported scenarios, not exotic edge cases, and both can cause incorrect fail-open behavior.
+- **HIGH — Two verifier bypasses remain.**  
+  [08-02 Task 2](</Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-02-PLAN.md:528>) uses `[ -f "$REVIEWS" ]`; `-f` follows symlinks, so a live symlink named `08-REVIEWS.md` pointing to any five-line file passes the fallback. Add an explicit `-L` rejection or canonical containment check. Separately, the `--file` bypass checks only a textual `.planning/` prefix and basename. A path such as `.planning/../docs/IMPLEMENTATION-PLAN.md` satisfies both checks. Reject `..` components or normalize the path before deciding, and add negative tests for both cases.
 
-#### Plan 08-02 — Evidence enforcement
+- **HIGH — Migration skip semantics can mark incomplete installs current.**  
+  [08-05 Task 2](</Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-05-PLAN.md:539>) says the whole migration skips when `pre_execution.plan_review` already exists. Existing migration 0007 correctly makes only the corresponding step a no-op and continues later steps. Whole-migration skipping breaks recovery from partial application. Likewise, [08-06 Task 2](</Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-06-PLAN.md:336>) treats an unknown table header as a successful skip and then permits the version bump, leaving the project recorded at 0.6.0 without the table correction. Header mismatch should be a failed precondition requiring an explicit “skip with warning/partial” choice, not automatic success.
 
-##### Summary
+- **MEDIUM — The “real schema-conformant” review fixture is neither current nor fully conformant.**  
+  [08-02 Task 1](</Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-02-PLAN.md:337>) copies the current `08-REVIEWS.md`, but that artifact lists five plan files while the phase now has six, and its frontmatter lacks the D-12 `overall_verdict` and `recommendation` keys. The synthetic test hides the missing sixth plan by creating only the five files listed in the artifact. Persist this second-round review with all six plans, and make the contract test assert every D-12 key and required body section—not only the two fields consumed by the verifier.
 
-[08-02-PLAN.md](/Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-02-PLAN.md) has a clear guard order and meaningfully improves on the reference by enforcing reviewer frontmatter. However, several explicit fail-open decisions create straightforward bypasses.
+- **MEDIUM — The original success criterion 1 is amended rather than achieved.**  
+  The current ROADMAP still says an unqualified block occurs before the first code edit. Plan `08-04` changes that criterion during execution to an agent-mediated check. That is an honest and reasonable decision, but phase closure should not claim all seven original criteria were met. Amend the ROADMAP now, before execution, so the reviewed contract is the contract later used for completion.
 
-##### Strengths
+- **LOW — Two portability/drift assumptions remain inaccurate.**  
+  `08-01` requires portable mtime comparison but does not pin the BSD/GNU `stat` fallback or require process substitution so the loop’s selected value survives. Also, `08-04` says the two config files differ only in `implements_spec`; the repository config additionally lacks the template’s `per_task.tdd.strengthened_by` block. That drift is out of phase scope, but the plan should not state it does not exist.
 
-- Clear ordering of hatches, resolution, grandfathering, and evidence checks.
-- Frontmatter parsing is bounded rather than scanning arbitrary body text.
-- Long bodies cannot rescue a declared one-reviewer artifact.
-- Escape hatches are audited on stderr rather than silently accepted.
-- The block message is actionable and names the correct Codex remedy.
-- The plan correctly refuses to auto-send project content to external reviewers.
-- Tests cover positive, negative, bypass, fallback, and hang-resistance cases.
+## Suggestions
 
-##### Concerns
+1. Remove the target-runtime SKILL version step from migration 0008. Keep the repository SKILL bump in the same implementation commit for drift coupling, and add an end-to-end fixture representing a real target repo with no local `skills/` directory.
 
-- **HIGH — A FIFO or socket explicitly allows the edit.** A malicious or accidental `08-REVIEWS.md` FIFO becomes a trivial gate bypass. Avoiding a hang is correct; returning exit 0 is not.
-- **HIGH — The raw marker path bypasses pointer containment.** Even if plan 08-01 rejects a `current-phase` symlink escaping `.planning/phases`, this plan still checks `.planning/current-phase/multi-ai-review-skipped`. That can follow the rejected symlink outside the planning tree and authorize the edit.
-- **HIGH — Review evidence can be stale.** The verifier checks reviewer count but not whether `plans_reviewed` covers every current plan or whether a plan changed after review.
-- **HIGH — Any matching review file can win.** `find ... '*-REVIEWS.md' | head -1` is ambiguous when multiple review artifacts exist and can accept a nested or stale file instead of the canonical phase artifact.
-- **MEDIUM — Duplicate reviewer names count as independent reviewers.** `[gemini, gemini]` appears to satisfy a naïve comma count.
-- **MEDIUM — Malformed frontmatter is underspecified.** An unterminated `---` block should block, not fall through to the hand-written-file line-count rule.
-- **MEDIUM — The five-line fallback remains easy to spoof.** This is a locked compatibility decision, but it materially weakens the “two independent reviewers” claim.
-- **LOW — Marker auditability is overstated.** A marker is visible to `git status`, but it is not “committed” merely because it exists.
+2. Make migration Step 3 transform all three table differences: add `plan-review`, collapse `tdd`, and split the combined brainstorm row. Prefer replacing the full table body after recognizing the exact legacy shape.
 
-##### Suggestions
+3. Give resolver helpers explicit status codes, for example: `0=unique`, `1=absent`, `2=ambiguous`. Treat status 2 as immediate fail-open.
 
-- Treat a non-regular review artifact as missing and block with exit 2.
-- Check only the canonical resolved phase path for the marker, after containment validation.
-- Require exactly one canonical `<NN>-REVIEWS.md`; block on ambiguity.
-- Count distinct, normalized reviewer identifiers.
-- Block malformed frontmatter separately from absent frontmatter.
-- Validate `plans_reviewed` against the current plan set and add a content digest or another explicit freshness mechanism.
-- Describe the marker as “visible to git status and expected to be committed with rationale,” unless the verifier actually checks `git ls-files`.
+4. Reject live symlink review artifacts and traversal-bearing `--file` paths; add regression cases for both.
 
-##### Risk Assessment
+5. Change every migration skip to step-local idempotency. Treat unrecognized document shape as a precondition failure or durable partial migration, never successful 0.6.0 completion.
 
-**HIGH.** The FIFO and escaped-marker behaviors are direct authorization bypasses, while stale evidence undermines the purpose of reviewing the actual execution plans.
+6. Update `08-REVIEWS.md` from this second review and extend the producer contract test to validate the complete D-12 schema.
 
-#### Plan 08-03 — Producer skill and ADR
+7. Pin a cross-platform `_mtime` helper and the non-subshell loop shape explicitly.
 
-##### Summary
+## Risk Assessment
 
-[08-03-PLAN.md](/Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-03-PLAN.md) is honest about egress, reviewer failure, and the bootstrap paradox. The ADR scope is excellent. The producer remains operationally under-specified, however: listing files does not constrain what an agentic vendor CLI can read, and grep-based document checks do not prove that two real independent reviews can be produced safely.
-
-##### Strengths
-
-- Explicit refusal to emit a one-reviewer or fabricated artifact.
-- Honest reviewer provenance, including unavailable CLIs and failure reasons.
-- Structural Codex self-exclusion is simpler and safer than inventing an environment variable.
-- The adversarial review framing and canonical-reference inclusion improve review quality.
-- The ADR records rejected alternatives and distinguishes locally fixable resolver defects from cross-host semantic changes.
-- The bootstrap limitation is documented without manufacturing false dogfood evidence.
-- Secret-shaped files are recognized as an egress risk.
-
-##### Concerns
-
-- **HIGH — The egress boundary is not actually enforced.** Passing paths to an agentic CLI running in the repository can let it inspect the whole working tree, `$HOME`, tool configuration, or other files. Enumerating approved paths does not constrain tool access.
-- **HIGH — No behavioral producer test exists.** The acceptance checks prove that a Markdown skill contains words such as `reviewers:` and `refuse`; they do not prove successful two-reviewer output, failure handling, or schema validity.
-- **MEDIUM — Informed consent is implicit.** Operator invocation may indicate general consent, but the plan should require confirmation after displaying the exact vendor/file manifest and before transmission.
-- **MEDIUM — CLI names do not guarantee vendor diversity.** `opencode` is a client and may use the same model provider as another reviewer. Diversity should be recorded and checked by provider/model, not executable name alone.
-- **MEDIUM — Vendor invocation contracts are vague.** “Adapt per vendor” leaves flags, non-interactive behavior, authentication failure, sandboxing, and exit semantics to implementation-time guesswork.
-- **MEDIUM — Reviewer independence is not explicit.** Reviewers should receive the same immutable bundle independently and must not see prior reviewer output.
-- **MEDIUM — Untrusted reviewer output is embedded verbatim.** Full §14 work may be deferred, but the artifact still needs clear fencing and instructions that later agents must treat reviewer text as data, not executable instructions.
-- **LOW — `wc -l >= 100` is not meaningful quality evidence.**
-
-##### Suggestions
-
-- Build a temporary read-only review bundle containing only approved files; invoke each reviewer from that bundle with no access to the original repository.
-- Require an explicit confirmation after printing the egress manifest.
-- Specify and test exact non-interactive commands for each supported CLI.
-- Add a mock-CLI integration test covering two successes, one failure, empty output, schema generation, and refusal below two.
-- Record provider and model in provenance, then enforce distinct providers where “vendor-diverse” is required.
-- Run reviewers independently, preferably concurrently after consent.
-- Fence verbatim output and add a clear untrusted-content notice.
-
-##### Risk Assessment
-
-**HIGH.** This plan creates the phase’s only external data-egress surface, but its stated file boundary is not technically enforced.
-
-#### Plan 08-04 — Declarative binding and ritual wiring
-
-##### Summary
-
-[08-04-PLAN.md](/Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-04-PLAN.md) carefully synchronizes templates, self-host configuration, documentation, and gate counts. Its central weakness is architectural: the verifier still runs only if the agent remembers and obeys the ritual, which is the same category of compliance failure the phase says it is closing.
-
-##### Strengths
-
-- Updates both the self-host config and fresh-install template.
-- Correctly treats the verifier path as documentation rather than trusting arbitrary target-repo executable paths.
-- Preserves the pre-existing `implements_spec` values.
-- Corrects the table’s one-gate/one-row structure.
-- Uses a single source for ritual prose and tests byte identity.
-- Avoids editing upstream GSD prompts.
-- Correctly states that phase 09, not phase 08, is the first genuinely enforceable phase.
-
-##### Concerns
-
-- **HIGH — There is no automatic enforcement point.** An `AGENTS.md` instruction plus a script is still agent-mediated. If the agent omits the invocation, no program runs and no edit is blocked. This does not fully support success criterion 1 or the “hard stop” language.
-- **HIGH — The ritual inherits the repository-root assumption.** Unless plan 08-01 self-locates the root, invoking the verifier from a nested directory silently allows execution.
-- **MEDIUM — Ritual prose duplicates verifier skip logic.** Teaching the agent to decide grandfather and fail-open cases can cause it to skip running the script. The agent should run the verifier and let the verifier decide.
-- **MEDIUM — `${CODEX_HOME}` lacks the documented fallback.** The config uses `${CODEX_HOME}/...`, while executable instructions elsewhere use `${CODEX_HOME:-$HOME/.codex}/...`.
-- **MEDIUM — Byte identity is only proven for template versus `AGENTS.md`.** The trigger skill’s mirrored section should be included in the same three-way comparison.
-- **LOW — Many acceptance checks are textual rather than behavioral.** Correct row counts do not prove that the invocation happens at the required lifecycle point.
-
-##### Suggestions
-
-- Either wire a real enforcement surface now or explicitly downgrade the claim to “agent-mediated programmatic check” and defer hard enforcement.
-- Make the ritual always invoke the verifier; describe skip conditions only as verifier behavior.
-- Use a root-independent verifier invocation.
-- Normalize the installed path expression to the fallback form.
-- Add a three-way byte-identity test across the template, `AGENTS.md`, and trigger skill.
-- Add an end-to-end lifecycle test demonstrating that a simulated first code edit cannot proceed without a successful verifier result.
-
-##### Risk Assessment
-
-**HIGH.** All other implementation work can be correct while the gate remains bypassable simply by not invoking it.
-
-#### Plan 08-05 — Migration and release closure
-
-##### Summary
-
-[08-05-PLAN.md](/Users/donald/Sourcecode/agenticapps/codex-workflow/.planning/phases/08-plan-review-gate/08-05-PLAN.md) follows the established migration structure well, but its proposed merge is unsafe and the migration does not make upgraded installs equivalent to fresh installs. The supplied [update-workflow skill](/Users/donald/Sourcecode/agenticapps/codex-workflow/skills/update-codex-agenticapps-workflow/SKILL.md:45) also reveals an untested multi-hop upgrade failure.
-
-##### Strengths
-
-- Strong emphasis on idempotency and byte-identical second runs.
-- Preserves unrelated top-level and hook keys in the intended test fixture.
-- Reuses installed templates rather than embedding duplicate config or prose.
-- Carries forward the BSD/macOS `awk` portability constraint.
-- Couples the migration, trigger version, and workflow version in one GREEN commit.
-- Explicitly preserves `implements_spec: 0.4.0`.
-- Adds drift, layout, migration, and full-suite verification.
-
-##### Concerns
-
-- **HIGH — The idempotency check is too broad.** Testing `.hooks.pre_execution` skips migration when another pre-execution gate already exists but `plan_review` does not.
-- **HIGH — The merge is shallow.** `.hooks += {pre_execution: $pe}` replaces an existing `pre_execution` object, potentially deleting sibling gates. The test fixture only protects other top-level hook groups, so it will not catch this.
-- **HIGH — Rollback is destructive.** `del(.hooks.pre_execution)` removes any pre-existing sibling pre-execution bindings.
-- **HIGH — Existing installs do not receive the table corrections.** Migration 0008 inserts the ritual section but does not add the `plan-review` row or collapse the duplicate `tdd` row in an existing project’s `AGENTS.md`. Fresh and migrated installs therefore diverge.
-- **HIGH — Multi-hop updates are broken under the provided update skill.** Pending migrations are selected once using the initial project version. A project at 0.4.0 selects 0007 but not 0008; after 0007 it stops at 0.5.0 and fails the final target-version check. Plan 08-05 assumes installations are already at 0.5.0 instead of testing the supported upgrade chain.
-- **MEDIUM — Migration tests duplicate mechanics rather than exercising the updater contract.** The updater’s selection, dry-run, apply order, and final-version behavior are not tested end to end.
-- **LOW — Exact migration-count assertions are brittle.** `wc -l == 9` fails if another valid migration lands without indicating a real defect.
-- **LOW — The checksum command is unspecified.** Use a portable command such as `cksum` or an existing harness helper.
-
-##### Suggestions
-
-- Change the leaf check to `.hooks.pre_execution.plan_review`.
-- Deep-merge the new object, conceptually:
-
-  ```jq
-  .hooks.pre_execution =
-    ((.hooks.pre_execution // {}) + $pre_execution)
-  ```
-
-- Add a fixture with a pre-existing `.hooks.pre_execution.other_gate` and prove it survives both apply and rollback.
-- Roll back only `.hooks.pre_execution.plan_review`, deleting the parent only if it becomes empty.
-- Migrate the bindings table as well as the ritual section, preferably from the same template source.
-- Fix or extend the update skill to walk a contiguous migration chain, recomputing the current version after each migration.
-- Add end-to-end fixtures for 0.5.0→0.6.0 and at least 0.4.0→0.5.0→0.6.0.
-- Replace the exact total migration count with continuity and uniqueness checks.
-
-##### Risk Assessment
-
-**HIGH.** The shallow merge can delete future bindings, upgraded projects do not match fresh installs, and older projects cannot reliably reach 0.6.0 in one update.
-
-### Prioritized revisions
-
-Before execution, I recommend these changes in order:
-
-1. Decide whether phase 8 provides genuine automatic enforcement or only an agent-mediated verifier; align the success criteria and ADR accordingly.
-2. Fix resolver root discovery and decimal-phase handling.
-3. Make all suspicious review artifacts fail closed; remove the raw escaped-pointer marker check.
-4. Define canonical, fresh review evidence with distinct reviewers.
-5. Constrain reviewer CLIs to an approved read-only bundle and add behavioral producer tests.
-6. Replace migration 0008’s shallow merge with a leaf-level deep merge and migrate the table changes.
-7. Repair and test multi-hop migration selection in the update workflow.
-
-With those addressed, the overall risk should fall from **HIGH** to **MEDIUM/LOW**. No files were modified during this review.
+**Overall risk: HIGH.** The architecture and sequencing are strong, and most first-round findings were genuinely resolved. The remaining issues are concentrated but consequential: one can make downstream migration fail, two permit gate bypasses, and two create false-success migration states. After those are corrected, the residual risk should fall to MEDIUM, dominated by the agent-mediated invocation model and prose-only external reviewer producer.
 
 ---
 
 ## OpenCode Review
 
+## 1. Summary
 
-#### Summary
+The plans are unusually rigorous: red/green TDD pairing across two verifier suites, explicit honesty about three accepted limitations (agent-mediated enforcement, advisory egress, spoofable 5-line fallback), a fully traceable bootstrap-paradox admission with a "no manufactured dogfood" rule, and a threat register whose revised-after-review threats cite the finding that produced them. Wave ordering and `files_modified` are clean — sibling plans in the same wave touch disjoint file sets, and the 08-05/08-06 split (both editing `migrations/0008-*.md` + `run-tests.sh`) is well-justified and serial. The biggest substantive defect is a D-19/D-20 contract violation between the fresh-install path and the migrated path: plan 08-04 splits the brainstorm row in the template (Part A2) and removes the duplicate `tdd` row (Part A), but plan 08-06's migration step applies only the `tdd` collapse and the `plan-review` insert — leaving a v0.5.0 downstream install with a still-combined brainstorm row while fresh installs get a split one. 08-06's own assertion "the row count equals the template's row count" is unachievable against a realistic pre-migration fixture, so the test will either be unrealistic (constructed to already match the new template) or it will catch the gap as RED. Either way, the "migrated install reaches the same bound state as a fresh one" claim does not hold for row shape.
 
-The five-plan bundle is unusually disciplined: tight TDD pairing (RED → GREEN commits), honest disclosure of the bootstrap paradox (the gate cannot gate its own construction), explicit thread of locked decisions (D-01 through D-20) carried faithfully into threat models and acceptance criteria, and a strong structural map to 0007/knowledge-capture precedent. The single most important judgment call — porting `multi-ai-review-gate.sh` *with* two named corrections and a third discovered defect — is documented with executable evidence (the `awk` repro that proves the reference's line regex cannot match the canonical `Phase: NN` line). The main residual risk is **contract coupling** between the producer (`08-03`) and verifier (`08-02`) on the REVIEWS.md frontmatter shape, which the two plans assert independently but never exercise together as a round-trip.
+## 2. Strengths
 
-#### Strengths
+- **Bootstrap paradox honesty.** Every plan that touches the verifier (08-01, 08-02, 08-04, 08-06) carries a "Gate coverage" section establishing that phase 08 is grandfathered against its own gate from wave 1's first SUMMARY onward, and forbids manufacturing a passing dogfood. The choice to root coverage in `test_check_plan_review_*` suites rather than the live repo is the correct call.
+- **Reference port discipline.** Three named defects in the reference resolver (dead `## Current Phase` heading, missing `gsd-tools` step, colon-blocked regex) are corrected locally; the resolver-requirements added by review (root self-location, section bounding, decimal padding, ambiguity fail-open, mtime determinism) are deliberately *not* folded into ADR's "three defects" count. That boundary is asserted in 08-01's criteria and re-checked in 08-03's.
+- **`set -u` discipline is stated as a cross-plan invariant.** The `${VAR:-}` mandate spanning 08-01 and 08-02, with an explicit "a single bare `$1` is a defect" reminder in 08-02, anticipates the silent-abort bypass failure.
+- **Contract test ownership is explicit.** 08-03 produces the `reviews-skeleton` marker; 08-02 owns the round-trip test that extracts it. The plan refuses to add a duplicate test or a mock-CLI integration test, and the refusal is reasoned rather than hand-waved.
+- **D-13 divergence is documented as the operationally load-bearing one.** The warn-and-allow → exit-2 change at the ≥5-line fallback is called out as the "single deliberate behavioral divergence from the reference" in 08-02, with a call-site comment instructing a future	reader not to "restore" it.
+- **T-08-32 (ritual never teaches the agent to skip).** 08-04's `<enforcement_claim>` distinguishes the two failure modes — gate doesn't fire when invoked (ADR-0009's residual), and gate silently isn't invoked when the prose lets the agent decide. The "always invoke; verifier decides" rule is asserted section-scoped, including the deliberate divergence from the Knowledge Capture section's `**Skip** — when any holds:` shape.
+- **Three-way byte identity.** 08-04 Task 3 fixed the earlier draft's two-way diff (template ↔ AGENTS.md) to a three-way diff with a non-emptiness guard, so the trigger SKILL.md cannot silently drift.
+- **Merge safety corrections in 08-05.** The five review findings (leaf-idempotency, leaf-merge, leaf-rollback, sibling-gate fixture that actually catches 2 and 3, deferred multi-hop chain) are individually adjudicated and tied to specific `jq` shapes. The `cksum` POSIX pinning closes a class of BSD/GNU `sha256sum` and `md5` divergence.
+- **08-06's header-shape guard.** Migration Step 3 declines rather than guesses: a target table whose header doesn't match the template's is left byte-identical and the skip is recorded. Asserting byte-identity via `cksum` (not row-absence) is the right shape — it catches mangling as well as omission.
 
-- **Honest bootstrap-paradox disclosure across every plan.** 08-01, 08-02, 08-04, 08-05 each carry a "Gate coverage" section that explicitly forbids manufacturing a fake dogfood and tracks the real coverage mechanism to `run-tests.sh`'s synthetic fixtures. This is rare and correct.
-- **TDD discipline is structural, not cosmetic.** Each TDD plan has RED/GREEN as two separate commits with `^test(RED):` / `^feat(GREEN):` regex assertions. Acceptance criteria assert the RED state (`exits 1` with `>= 14 FAIL`) before any GREEN work.
-- **Third resolver defect found-and-evidenced during planning.** 08-01's `<resolver_defects>` section provides a runnable `awk` proof that the reference's `[Pp]hase[[:space:]]+[0-9]+` cannot match `Phase: 08` because the colon blocks `[[:space:]]+`, then verifies against `claude-workflow`'s own STATE.md that the regex silently resolves phase 24 from incidental prose. This is the kind of finding that elevates a port above a copy.
-- **Tight threat models per plan, not boilerplate.** T-08-01 (path containment), T-08-08 (FLAG-A fix), T-08-09 (FIFO DoS), T-08-13 (fabricated reviewer output), T-08-17 (don't execute paths read from a target repo's config), T-08-22 (`.hooks = {}` vs `.hooks += {}` typo), T-08-25 (binds a verifier that doesn't exist) are all specific, plausible, and mitigated in the plan that owns them.
-- **D-19 single-source-of-truth is enforced mechanically**, not as a promise: 08-04 Task 3's acceptance criterion diffs the awk-extracted section between the template and `AGENTS.md` and demands zero output. 08-05 Task 1 asserts the extraction is non-empty *before* asserting the insert, so heading-regex drift reports as itself.
-- **D-20 row arithmetic is worked out per-file**, acknowledging that `AGENTS.md` already lists brainstorm as two rows while the template combined it (`Part A2` only applies to the template). Easy thing to get wrong; the plan gets it right.
-- **08-03's egress threat model (T-08-12) is concrete.** The producer is the phase's only out-of-machine data surface, so the plan refuses the auto-invoke temptation (D-10) explicitly, enumerates the file set before sending, refuses secret-shaped paths even when a canonical ref names one, and bounds the egress set to phase dir + ROADMAP-declared refs.
+## 3. Concerns
 
-#### Concerns
+### HIGH
 
-- **HIGH — No round-trip integration test between producer (08-03) and verifier (08-02).** Both plans assert the D-12 schema independently. 08-02's `test_check_plan_review_enforcement` builds `*-REVIEWS.md` fixtures by hand reproducing the schema; 08-03's acceptance criterion checks the producer's documented skeleton carries `reviewers:`. Nothing runs real producer output through the real verifier. If `codex-plan-review` later emits YAML block style (`reviewers:\n  - a\n  - b`) — which is valid YAML and arguably still "D-12" — the verifier's one-line-flow-sequence `awk` parse silently returns 0 entries and the gate blocks a legitimate review. The producer and verifier ship in the same phase; it is the phase's job to prove they compose. Suggested fix: add a single `test_check_plan_review_producer_contract` case to `08-05` that pipes a minimal producer-emitted fixture (or a copy of the dashboard's real `11-REVIEWS.md`) through `check-plan-review.sh` and asserts `exit 0`.
-- **MEDIUM — `_cpr_case` helper semantics under `set -uo pipefail` in 08-01.** Capturing `$?` immediately after `( cd "$sandbox" && bash "...check-plan-review.sh" )` is correct, but the helper must invoke the verifier as a subprocess exactly once and not let any intervening `local` declaration or color-var interpolation clobber `$?`. The plan acknowledges this in prose ("capture `$?` immediately (do not let `set -uo pipefail` ... clobber it)") but the helper itself is unnamed in detail — implementor has latitude to get it subtly wrong (e.g., wrapping the bash call in a `local rc=$?` line after a `set +e` toggle that itself resets context). Suggest explicit skeleton: `_cpr_case() { local label="$1" exp="$2"; shift 2; ...; set +e; ( cd "$sandbox" && bash "$REPO_ROOT/.../check-plan-review.sh" "$@" ) 2>"$err"; local rc=$?; set -e; ... }` — or the implementor must be highly disciplined.
-- **MEDIUM — `set -uo pipefail` interacts with `$1` and unprefixed env reads.** 08-02's argv parsing accepts `--file <path>` and also reads `GSD_SKIP_REVIEWS`, `GSD_PLAN_REVIEW_DEBUG`, `CODEX_HOME`. Under `set -u`, `${GSD_SKIP_REVIEWS:-}` and `${1:-}` patterns are mandatory, but the plan never spells this out. A single unguarded `$1` in argv parsing aborts the verifier mid-resolution — exactly the T-08-05 failure mode. Suggest an explicit "use `${VAR:-}` throughout; `set -u` is in effect" note in 08-02's `<interfaces>` or `<ordering>`.
-- **MEDIUM — Path canonicalization for T-08-01 containment check is unspecified.** 08-01 Task 2 says "Canonicalize the resolved pointer and require containment inside `.planning/phases/`". On macOS, `realpath -m` doesn't ship by default; `readlink -f` differs between BSD and GNU. The actual portable idiom is `( cd "$dir" 2>/dev/null && pwd -P )`. The plan leaves the implementor to pick. Given that the two Unreleased bugs were *both* relative-path-resolution failures, this is exactly the surface the plan should be opinionated about. Suggest: `( cd "$resolved" 2>/dev/null && pwd -P )` and prefix-compare against `( cd .planning/phases && pwd -P )`.
-- **MEDIUM — 08-04 Task 3 on `skills/agentic-apps-workflow/SKILL.md` is conditional.** The action says "If the groups mirror the config's, `plan-review` needs its own pre-execution group, added ahead of the existing four." Implementor must verify the SKILL.md's gate-table structure rather than just mirror the action of adding a row. There's no acceptance criterion asserting the SKILL.md table has a correct `plan-review` row in the right lifecycle group — only `grep -c 'plan-review' ... >= 1`. A misplaced row (e.g., appended to `per_task` group) would pass.
-- **MEDIUM — Acceptance-criterion grep fragility.** Multiple criteria are `grep -c` over the SKILL/CHANGELOG body. E.g., 08-03's `grep -ci 'refuse' >= 1` passes on the word "refusal" anywhere; `grep -c 'claude' >= 1` passes on "claude-workflow" in a context line, not reviewer enumeration. Mostly OK in practice because the test author has context, but the conceptual review wants stronger anchors (e.g., `grep -c 'reviewers:.*claude'` or frontmatter-keyed checks).
-- **LOW — The `<ordering>` block in 08-02 places the `*-REVIEWS.md` regular-file guard before the frontmatter parse but the bypass list before resolution.** Step 2 (bypass) is gated on `--file` being supplied. The plan tests "no `--file` at all → exit 2" which proves the bypass doesn't fire on absence. But bypass also runs *before* resolution — meaning an edit to `docs/IMPLEMENTATION-PLAN.md` when `.planning/current-phase` doesn't resolve at all would still... let me re-check: step 2 says "only when `--file <path>` was supplied → allow". So a `.planning/`-rooted PLAN file would allow whatever the phase state. That's the design (you don't gate `.planning/` edits). Then step 3 resolves the phase; if no phase resolves, step 4's fail-open exits 0. The bypass needs the path prefix match. This is consistent. Low risk.
-- **LOW — FIFO test depends on `mkfifo` and `timeout`.** 08-02 Task 1 allows this one case to `SKIP`. On the systems most likely to actually run codex (macOS + Linux), both exist, so this is fine. But "this ONE case may SKIP" means the regression is theoretically unguarded on a stripped environment. Acceptable.
-- **LOW — CHANGELOG narrative on the three corrected reference defects** (08-05 Task 3) may be more detail than a CHANGELOG entry wants. CHANGELOG entries typically live at release-summary altitude; ADR-0009 carries the depth. Tighten to one sentence pointing at the ADR.
+- **08-04 Task 2 Part A2 + 08-06 Step 3 — brainstorm split not propagated to migrated installs.** 08-04 splits the template's combined `brainstorm-ui / brainstorm-architecture` row into two separate rows, taking the template from 15→16 rows and bumping its distinct-gate count toward 16. But 08-06's Step 2 (Task 2) explicitly extracts only the `plan-review` row and the collapsed `tdd` row from the template; its `Apply` text says *"Leave every other row untouched"* — including the combined brainstorm row an install at 0.5.0 actually carries (inherited from the v0.4.0/v0.5.0 template, since neither 0007 nor 0008's prose step touches it). Net math for a realistic downstream install:
+  - Pre-migration: combined brainstorm + 2 tdd rows + 12 others + 0 plan-review = 15 rows, 15 distinct gates
+  - Post-migration (collapse tdd + add plan-review): combined brainstorm + 1 tdd + 12 others + 1 plan-review = **15 rows, 16 distinct gates**
 
-#### Suggestions
+  The fresh-install template post-08-04 has **16 rows, 16 distinct gates** (split brainstorm + 1 tdd + 12 others + 1 plan-review). The migrated and fresh states disagree on row shape — which is exactly the D-19/D-20 class the phase is supposed to close. Compounding: 08-06 Task 1's assertion *"the row count equals the template's row count"* (= 16) cannot pass against a fixture representative of a real v0.5.0 install (15 rows). The fixture would have to be constructed with split brainstorm to make the assertion hold — in which case it is not representative, and the test gives false confidence. Either resolution needs to land before this phase: (a) remove Part A2 from 08-04 entirely (the brainstorm-row split is outside the locked D-20 authority, which names only the tdd collapse — see below); or (b) extend 08-06's migration Step 3 to also split the brainstorm row, sourced from the template. The plan's `must_haves` claiming "A migrated install reaches the same bound state as a fresh one" is misleading as written.
 
-- **Add a producer↔verifier contract test in 08-05.** Either: (a) drop a copy of the dashboard's real `11-REVIEWS.md` into `08-01`/`08-02`'s fixtures (already cited as the schema source) and assert `check-plan-review.sh` exits 0 against it, and (b) add a case that lab-mutates the producer's *expected output shape* (frontmatter `reviewers: [claude, gemini]`) through the verifier. This is the single highest-leverage addition.
-- **Spell out the `${VAR:-}` discipline** for both 08-01 and 08-02 (since they share the `set -uo pipefail` header) with one explicit line in each plan's `<interfaces>`.
-- **Pin a portable path-canonicalization idiom** in 08-01 Task 2's `<action>` — suggest `( cd "$x" 2>/dev/null && pwd -P )` — and add an acceptance case that exercises `current-phase -> /tmp/escape` and asserts the resolver falls through rather than reading outside the tree.
-- **Tighten 08-04 Task 3's SKILL.md grouping assertion.** Add a criterion like: `awk '/^## Step 3/{f=1} /plan-review/{if(f) print "found-in-step3"}' skills/agentic-apps-workflow/SKILL.md` produces a non-empty print, or assert the new pre-execution group exists in SKILL.md's section structure mirroring the config.
-- **Acceptance criterion on the `<ordering>` invariant.** 08-02 ships a guard order it calls "load-bearing". Add a criterion that asserts the order directly: `grep -n 'GSD_SKIP_REVIEWS\|multi-ai-review-skipped\|exit 2\|reviewers:' check-plan-review.sh` shows the hatch line number < the REVIEWS line number < the frontmatter parse line number. Protects against a future reorder.
-- **08-03: make the producer's emitted `reviewers:` shape machine-checkable against the verifier's parse shape.** Even just a comment in both files naming the same regex / YAML-flow-sequence shape so a future maintainer patching one sees the other as a sibling concern.
-- **08-05 Task 1 fixture for the AGENTS.md insert:** assert the inserted text is byte-identical to the template's section via a checksum diff, not just non-empty + section-present. The acceptance criterion mentions byte-identical but uses a `diff` of awk extractions — that's good. Consider adding `cmp` after extract to be unambiguous about "no whitespace drift".
-- **Consider documenting in 08-03's ADR** (or in 08-05's CHANGELOG) the resolution-order asymmetry: this host ports the resolver's *fixed*-locally defects but only *reports* the cross-host grandfather-conflation defect upstream (not unilaterally diverging). 08-03 captures this; ensure the implementor doesn't soften the wording.
+- **08-04 Task 2 Part A2 — scope beyond locked decision D-20.** D-20 in 08-CONTEXT.md only locks "Collapse the duplicate `tdd` row." Part A2 introduces the inverse operation — splitting a combined row — on the authority that "config-hooks.json models them as two separate gates." The reasoning is sound, but no decision in 08-CONTEXT.md or the discussion log authorizes the brainstorm split, and the migration's not touching it (the HIGH above) confirms the asymmetry was not fully adjudicated. If 08-04 is bound by D-20's exact scope, Part A2 is over-reach; if it is intended, the migration has to mirror it.
 
-#### Risk Assessment
+### MEDIUM
 
-**Overall: MEDIUM-LOW**
+- **08-06 Task 1 Step-2 idempotency pre fixture is under-specified re: brainstorm shape.** The fixture description (`| Gate | Bound skill | Scope |`, no `plan-review` row, two `| tdd` rows) does not say whether brainstorm is combined or split. Per the HIGH above, that ambiguity is what permits the test to be either realistic-failing or unrealistic-passing. Pin it: state which shape the fixture uses and that the assertion accounts for it (or fails noisily). If the fixture is the realistic "old template" shape, either the assertion changes to distinct-gate-count semantics, or the migration's Step 3 grows a brainstorm-split sub-step.
 
-The plans are exceptionally well-researched, the locked decisions are visibly carried into each task, the threat models are specific and actionable, and the bootstrap paradox is addressed with intellectual honesty rather than dogfood theatre. The dominant residual risk is the **producer↔verifier schema contract** having no end-to-end test — a HIGH-severity gap that is bounded by both plans' faithful attention to D-12 but is real. Secondary risks (set -u discipline, path-canonicalization portability, conditional SKILL.md grouping placement) are LOW-to-MEDIUM and individually small. None of them blocks confidence that the phase will reach its 7 success criteria; one of them (the missing round-trip test) is the kind of gap that surfaces in phase 09 as a first-dogfood surprise — exactly the scenario the phase's own honesty cautions against. Add one integration test and the bundle's risk profile drops to LOW.
+- **08-02 Task 2 — `plans_reviewed` coverage check shares the Summary-grandfather bypass issue.** The verifier requires `plans_reviewed:` to list every current `*-PLAN.md`, but only when frontmatter is present and well-formed. A bare `*-SUMMARY.md` blocks via the grandfather guard before the REVIEWS.md check runs (`<ordering>` step 5 sits before step 6), so the verifier never consults `plans_reviewed` for an already-shipping phase — the same defect family 08-06/ADR-0009's "grandfather-conflation defect" names upstream (per-plan SUMMARY + Summary-check precedes REVIEWS-check). Plan 08-02 acknowledges this grandfathers on the SUMMARY path but does not record that `plans_reviewed` freshness is *structurally unenforceable* once any SUMMARY exists for the phase — i.e., the freshness check fires only mid-flight, never for shipped phases. The plan should at minimum call this out: the coverage rule is "the cheap half of freshness" only for un-shipped phases, and ADR-0009's deferral of digest-based freshness should note that the *coverage* half is also bypassed post-SUMMARY.
+
+- **08-05 Task 2 — `del(.hooks.pre_execution)` rollback placement.** The criteria require `grep -cE "del\(\.hooks\.pre_execution\)[^.]" migrations/0008-plan-review-gate.md` return 0 *outside the empty-parent conditional*, verified by reading the rollback block. That is a human-read check, not a mechanical one. If a future editor moves the `del(.hooks.pre_execution)` form above the conditional during the renumber 08-06 performs, the acceptance criteria will still pass mechanically (`grep -cE ... [^.]` only catches non-leaf forms; the leaf-del form had `.plan_review` after it). Either add a structural assertion that the bare `del(.hooks.pre_execution)` appears *only inside* the empty-parent conditional, or accept this as a documented reading-only invariant.
+
+- **08-04 Task 2 Part D — re-wording a locked ROADMAP success criterion.** ROADMAP success criterion 1 is a spec obligation that was stated as "A phase with plans and no reviews is blocked before its first code-touching edit." 08-04 rewrites it to describe an agent-mediated check, justified by 08-REVIEWS.md's adjudication. The rewrite is *correct* given D-01/D-02, but ROADMAP criteria are typically treated as locked; the reworded text should at least carry a one-line notation that the original was relaxed by D-02 + Cross-AI adjudication, so a future reader sees the deviation was deliberate. (The plan does say "Keep it to one criterion line plus at most one clarifying sub-line" — but it doesn't say to note the change of strength.)
+
+- **08-03 — timeout value is left to executor discretion.** `<review_findings_bound_here>` requires "a per-invocation timeout; a timeout is recorded as an unavailable reviewer" with "Choose a timeout generous enough for a real review and state it." Letting the executor pick a value is fine, but the provenance table format and the failure-mode enumeration are firm while the timeout is not — a slight inconsistency in firmness that invites drift across phases. Pin a default (e.g. 300s) with a comment that the operator may override, comparable to how `<interfaces>` pins `_canon_dir` exactly rather than leaving it to the executor.
+
+### LOW
+
+- **08-04 Task 2 Part D + 08-06 Task 3 — CHANGELOG altitude vs. ADR citation.** V/V finding V correctly compresses the three-defect paragraph to one sentence in the CHANGELOG. But criterion `awk '/^## \[Unreleased\]/{f=1} /^## \[0/{f=0} f' CHANGELOG.md | grep -ci 'Current Phase'` returns 0 and `grep -ci 'gsd-tools'` and `grep -ci 'colon'` return 0 — these forbid those tokens even when used inside a sentence pointing *at* the ADR ("see ADR-0009 for the heading, regex, and grandfather issues" would pass; "the dead `## Current Phase` heading — see ADR-0009" would fail). The intent is fine; the assertion is sharp enough to be brittle if the CHANGELOG names the defect at all in release altitude. Consider relaxing to "no enumeration, ≤ one sentence" rather than a token denylist.
+
+- **08-05/08-06 — checksum comments may collide with the `sha256sum`/`md5sum` denylist.** The assertions require test streams to return 0 for `sha256sum` and `md5sum`. If an executor adds a comment like *"# use cksum, not md5sum, because macOS ..."*, the assertion fires even though the implementation is correct. Either allow those tokens inside `#` comment lines, or instruct the executor to avoid them in literal form. Reference: 08-05 Task 1 acceptance.
+
+- **08-02 Task 1 — `_cpr_case` stderr exposure.** The helper is required to expose the captured stderr to callers asserting on debug lines, but the plan leaves the mechanism unspecified ("either return its path in a well-known variable or accept an out-path argument"). This is fine for execution, but each direction has subtle consequences: a `local` variable holding the path is scope-fragile across nested calls; an out-path argument lengthens the call signature. Pin one shape — out-path argument, defaults to a per-call `mktemp` — to prevent two implementers in different tasks choosing differently.
+
+- **Cross-plan — `08-04` Task 1's `<interfaces>` block inserts a `$CODEX_HOME/.../check-plan-review.sh` path.** The config's `verifier` value uses the bare `${CODEX_HOME}` form intentionally (no shell expansion), per the explanation. The invocation prose in 08-04 Task 2 Part C uses the fallback form intentionally. Good — but the rationale is asserted as a "deliberate asymmetry" by the plan author; a one-line note in the config block (a JSON comment is unavailable, but the brief or ADR can carry the rationale) future-proofs against someone "harmonizing" the two.
+
+## 4. Suggestions
+
+1. **Resolve the brainstorm-split defect before execution.** Pick one: (a) remove Part A2 from 08-04 entirely, keeping the template's existing combined brainstorm row (the AGENTS.md(template) asymmetry is a pre-existing cosmetic inconsistency between this repo's two files; the phase's locked scope is D-19/D-20, and this isn't either); or (b) extend 08-06's Step 3 to extract the two brainstorm rows from the template and apply them to the target on top of the tdd-collapse + plan-review add. Option (a) is the smaller change, restores row-shape parity between fresh and migrated installs, and shrinks 08-04's scope.
+2. **Tighten 08-06 Task 1's idempotency-pre fixture description** to name whether brainstorm is split or combined. If the brainstorm-split is removed (option a above), the fixture is the unambiguous "old template" shape and the row-count assertion is meaningfully equal between fixtures and post-edit template.
+3. **Add one line to ADR-0009's deferred list acknowledging the `plans_reviewed`-freshness post-SUMMARY gap** — "the coverage half of freshness is bypassed once any SUMMARY exists for the phase, the same grandfather-conflation defect as the heading/regex issue." Otherwise a future reader may believe the coverage rule fires for shipped phases.
+4. **Pin the producer timeout default** (e.g. 300s) in `<interfaces>` of 08-03, mirroring the `_canon_dir` pin's exactitude, and let the operator override via an env var or a documented constant.
+5. **Note the strength-change in ROADMAP criterion 1 explicitly** (one inline parenthetical: "(reworded from an unconditional block per D-02; see ADR-0009 decision 9)"). This is lassen-on-drift: signal that the criterion is not the spec's verbatim phrasing.
+6. **Resolve 08-06 Task 1's "row count = template's" ambiguity by replacing the assertion with "row count + distinct-gate-count" semantics** that are robust to the brainstorm question. Even after fix 1, asserting both row-count and distinct-count makes the test self-documenting.
+7. **In 08-02 Task 1 acceptance**, relax the `sha256sum`/`md5sum` denylist to `[^#]*sha256sum` etc., or instruct the executor explicitly to avoid the literal tokens even in comments — same for 08-05 and 08-06.
+8. **In 08-06 Task 2 acceptance**, change "`del(.hooks.pre_execution)` appears only inside the empty-parent conditional" from a human-read check to a structural one: assert `awk` finds the bare `del(.hooks.pre_execution)` line only when it is immediately preceded by `if.*==.*\{\}.*then` within N lines.
+
+## 5. Risk Assessment
+
+**MEDIUM.** The plans are well-engineered and unusually disciplined — the cross-AI review process genuinely improved them (merge-safety corrections, contract test ownership, three-way byte identity, ritual-prose always-invoke rule, deferred-update-chain-not-fixed-here). Most execution risks are owned and asserted. The single HIGH concern (the brainstorm-split fresh/migrated divergence, with an unachievable-or-unrealistic test) is concrete and caught by the plans' own assertions — which is either evidence the test will be authored wrong (unrealistic fixture) or that the divergence is intentionally unfixed (in which case the `must_haves` text "same bound state" is misleading). One plan-side decision (reset of wave 1 teachings via the producer's marker) depends on 08-03 finishing before 08-02 starts; the dependency graph reflects that, so the risk is sequencing, not the binding. Deferred items (native `hooks.json`, §14, multi-hop chain, grandfathe-conf defect upstream) are honestly attributed to their own phases rather than folded in. With the brainstorm-split issue resolved (suggestion 1, the smallest achievable), residual risk drops to LOW. Left as written, the phase will pass its own acceptance criteria but ship a row-shape divergence between fresh and migrated installs, which is exactly the D-19 failure class this phase exists to close — worth resolving before this phase is marked terminal.
 
 ---
 
 ## Consensus Summary
 
-Three independent reviewers (Gemini, Codex, OpenCode/glm-5.2) read the same
-bundle — ROADMAP, 08-CONTEXT, 08-PATTERNS, and all five plans — with no access to
-each other's output. They agree the design direction is sound and the planning
-craft is unusually high. They disagree sharply on whether the bundle is ready to
-execute unchanged.
+Three independent reviewers read the same six-plan bundle with no access to each
+other's output. All three agree the revision round worked: the round-1 HIGH
+consensus concern — that the producer and verifier shipped in the same phase with
+nothing proving they compose — is **closed**. All three credit the
+`test_check_plan_review_contract` round-trip test in 08-02 and the
+`reviews-skeleton` marker ownership boundary between 08-03 and 08-02. Root
+self-location, leaf-merge safety, and the honest enforcement claim are likewise
+credited as genuinely resolved rather than papered over.
 
-**Risk verdicts diverge across the full range:** Gemini LOW (no blocking
-concerns on any plan), OpenCode MEDIUM-LOW (one HIGH, fixable with one test),
-Codex HIGH (would not execute unchanged; seven prioritized revisions).
-
-Weigh these accordingly. Gemini's review is uniformly laudatory — five plans,
-five LOW verdicts, two minor suggestions, and "None" under Concerns for three of
-the five plans. It reads as a rubber stamp and carries little independent signal.
-Codex and OpenCode both did adversarial work and both landed on the same
-top-priority gap from different angles, which is the strongest signal in this
-review round.
+**The verdicts still diverge across the full range, and for the same reason as
+round 1.** Gemini returned LOW with a single LOW-severity concern about a
+process nicety, calling the phase "exceptionally well-prepared." That is a rubber
+stamp and carries little independent signal — it found no new defect that the
+other two found, in a bundle where the other two independently found the same
+one. Codex (HIGH) and OpenCode (MEDIUM) both did adversarial work and **converged
+on the same top defect from different directions**, which is the strongest signal
+in this round.
 
 ### Agreed Strengths
 
 Mentioned by 2+ reviewers:
 
-- **TDD discipline is structural, not cosmetic** — all three note the RED/GREEN
-  commit separation and the acceptance criteria that assert the RED state before
-  any implementation work.
-- **The third resolver defect, found and evidenced during planning** — all three
-  single out the runnable `awk` proof that the reference's
-  `[Pp]hase[[:space:]]+[0-9]+` cannot match `Phase: NN`. Gemini and OpenCode both
-  call this the thing that elevates the port above a copy.
-- **Honest disclosure of the bootstrap paradox** — Gemini, Codex, and OpenCode
-  all credit the plans for documenting that the gate cannot gate its own
-  construction rather than manufacturing false dogfood evidence.
-- **Per-plan threat models are specific rather than boilerplate** — Codex and
-  OpenCode both name individual threats (T-08-01, T-08-12, T-08-17) as plausible
-  and correctly mitigated in the plan that owns them.
-- **Refusal to emit a one-reviewer or fabricated artifact** — all three credit
-  the producer's failure semantics, including recording reviewer unavailability
-  instead of inventing output.
-- **D-19 single-source-of-truth is enforced mechanically** — Gemini and OpenCode
-  both note the byte-identity diff between template and `AGENTS.md` is a test,
-  not a promise.
-- **D-20 gate-table row arithmetic is worked out per-file** — Gemini and OpenCode
-  both flag that catching the duplicate `tdd` row and the template-vs-AGENTS.md
-  brainstorm asymmetry is an easy thing to get wrong, and the plan gets it right.
-- **Migration 0008 mirrors the proven 0007 pattern** — all three credit reusing
-  the `jq` merge shape, the portable BSD/macOS `awk` insert, and the
-  idempotency-focused test structure. (Codex credits the structure while
-  disputing the merge itself — see below.)
+- **Round-1 findings were genuinely closed, not deflected** — all three verify
+  the specific fixes: verifier root self-location (T-08-28), the `jq` leaf-merge
+  correction (T-08-22), fail-closed non-regular artifact handling (T-08-09), and
+  the reworded enforcement claim (T-08-33).
+- **The producer/verifier contract test closes round 1's top gap** — all three
+  single this out. Gemini calls it the transformation "from plausible designs
+  into verifiable contracts"; OpenCode credits the explicit ownership boundary
+  (08-03 emits the marker, 08-02 extracts it) and the *reasoned* refusal to add a
+  duplicate mock-CLI test.
+- **Wave ordering and `files_modified` serialization are correct** — Codex and
+  OpenCode both independently verified that 08-01/08-02, 08-04/08-05, and
+  08-05/08-06 edit shared files sequentially, never concurrently, and both credit
+  the 08-05/08-06 split rationale.
+- **Reference port discipline — three defects corrected, and the boundary held** —
+  all three credit correcting the dead `## Current Phase` heading, the missing
+  `gsd-tools` step, and the colon-blocked regex. OpenCode specifically credits
+  *not* inflating the ADR's "three defects" count with the review-added resolver
+  requirements.
+- **Bootstrap paradox honesty** — all three credit the per-plan "Gate coverage"
+  sections and the explicit rule forbidding manufactured dogfood evidence.
+- **Thin-binding stance (ADR-0007) respected** — Codex and Gemini both confirm no
+  upstream GSD prompt is modified and the local producer exists only because
+  Codex GSD has no corresponding review prompt.
+- **Threat models are specific rather than boilerplate** — Gemini and OpenCode
+  both name individual threats (T-08-12 consent gate, T-08-17 fixed verifier
+  path, T-08-32 ritual-never-teaches-skip) as plausible and correctly mitigated.
 
 ### Agreed Concerns
 
 Raised by 2+ reviewers — highest priority first:
 
-1. **HIGH — The producer and verifier ship in the same phase but nothing proves
-   they compose.** This is the round's strongest consensus, reached
-   independently from two directions. OpenCode: 08-02 hand-builds `*-REVIEWS.md`
-   fixtures reproducing the D-12 schema while 08-03 only greps its own skill body
-   for `reviewers:` — if the producer emits YAML block style
-   (`reviewers:\n  - a`), which is valid YAML and arguably still D-12, the
-   verifier's one-line flow-sequence `awk` parse silently reads zero entries and
-   blocks a legitimate review. Codex, separately: 08-03 has no behavioral
-   producer test at all — its acceptance checks prove a Markdown file contains
-   the words `reviewers:` and `refuse`, not that two-reviewer output, failure
-   handling, or schema validity actually work. Both propose the same class of
-   fix: run real (or realistic) producer output through the real verifier and
-   assert exit 0. OpenCode calls this "the single highest-leverage addition."
-2. **HIGH/MEDIUM — Resolver path handling is underspecified in exactly the area
-   where this phase's own bugs live.** Codex (HIGH): the script resolves
-   relative to the caller's working directory, so invoking it from `src/` sees no
-   `.planning/` and silently fails open — an ordinary scenario, not an exotic
-   one; he suggests the verifier self-locate via `git rev-parse --show-toplevel`.
-   OpenCode (MEDIUM): 08-01 Task 2 says "canonicalize the resolved pointer" but
-   never pins an idiom — `realpath -m` is absent on stock macOS and `readlink -f`
-   differs BSD vs GNU; he proposes `( cd "$x" 2>/dev/null && pwd -P )` and notes
-   that since both Unreleased bugs were relative-path-resolution failures, this
-   is precisely the surface the plan should be opinionated about.
-3. **MEDIUM — Acceptance criteria lean on textual greps that pass for the wrong
-   reason.** OpenCode: `grep -ci 'refuse' >= 1` passes on the word "refusal"
-   anywhere; `grep -c 'claude' >= 1` passes on "claude-workflow" in a context
-   line rather than reviewer enumeration. Codex, on 08-04: correct row counts do
-   not prove the invocation happens at the required lifecycle point. Both want
-   frontmatter-keyed or structurally anchored assertions instead.
-4. **MEDIUM — Shell-robustness details are left to implementor discipline.**
-   OpenCode raises this twice: the `_cpr_case` helper must capture `$?` from the
-   verifier subprocess without an intervening `local` or `set +e` toggle
-   clobbering it, and under `set -u` every `${GSD_SKIP_REVIEWS:-}` / `${1:-}`
-   read must be guarded or the verifier aborts mid-resolution — which is the
-   T-08-05 failure mode the plan is trying to prevent. Codex touches the same
-   area from a different angle (08-01's RED-state acceptance criteria conflict:
-   a suite-level guard when the verifier is absent cannot also produce the
-   required 14 individual failures).
+1. **HIGH — The bindings-table migration cannot reach the fresh-install state it
+   claims parity with.** This is the round's strongest consensus, reached
+   independently by Codex and OpenCode with matching arithmetic. 08-04 Task 2
+   Part A2 splits the template's combined `brainstorm-ui / brainstorm-architecture`
+   row, taking the template 15→16 rows. 08-06 Step 3 applies only the `tdd`
+   collapse and the `plan-review` insert, and its Apply text says *"Leave every
+   other row untouched"* — so a real v0.5.0 install lands at **15 rows / 16
+   distinct gates** while a fresh install is **16 rows / 16 gates**. 08-06 Task 1's
+   assertion "row count equals the template's row count" is therefore
+   *unachievable against a representative fixture*: the test either fails, or it
+   passes only because the fixture was built with an already-split brainstorm row
+   and is not representative. Both reviewers note this is precisely the D-19/D-20
+   fresh-vs-migrated divergence class the phase exists to close, and that the
+   `must_haves` claim "a migrated install reaches the same bound state as a fresh
+   one" is misleading as written. **The two disagree on the fix — see Divergent
+   Views.**
+
+2. **MEDIUM — ROADMAP success criterion 1 is amended during execution rather than
+   achieved.** Codex and OpenCode both flag that 08-04 Part D rewrites criterion 1
+   from an unconditional block to an agent-mediated check. Both agree the rewrite
+   is *correct* given D-01/D-02 — and both object to the timing and the silence.
+   Codex: amend the ROADMAP **now, before execution**, so the reviewed contract is
+   the contract used at completion; phase closure must not claim all seven
+   original criteria were met. OpenCode: at minimum carry an inline notation
+   ("reworded from an unconditional block per D-02; see ADR-0009") so a future
+   reader sees the deviation was deliberate.
+
+3. **MEDIUM — 08-06 Task 1's idempotency fixture is under-specified in exactly the
+   place concern 1 lives.** OpenCode raises this directly; Codex's HIGH #2 implies
+   it. The fixture description never says whether brainstorm is combined or split
+   — and that ambiguity is what lets the test be either realistic-and-failing or
+   unrealistic-and-passing. Pin the shape explicitly, and consider asserting
+   *both* row count and distinct-gate count so the test is self-documenting and
+   robust to the brainstorm question either way.
 
 ### Divergent Views
 
-Worth investigating — the reviewers actively disagree here:
+Where reviewers disagreed — worth adjudicating before execution:
 
-- **Whether the gate is actually enforced at all.** Codex's central objection
-  (HIGH, and first in his prioritized list): an `AGENTS.md` instruction plus a
-  script is still agent-mediated — if the agent omits the invocation, no program
-  runs and no edit is blocked, which is the same category of compliance failure
-  the phase claims to close. He argues this does not fully support success
-  criterion 1 or the "hard stop" language, and asks the phase to either wire a
-  real enforcement surface or downgrade the claim. Neither Gemini nor OpenCode
-  raises this; OpenCode instead credits 08-04's own admission that phase 09 is
-  the first genuinely enforceable phase. **This is the one finding that
-  questions the phase's premise rather than its execution, and it deserves an
-  explicit accept-or-reject decision.**
-- **FIFO handling — direct contradiction.** Codex (HIGH): a FIFO or socket
-  `08-REVIEWS.md` explicitly returns exit 0, making it a trivial gate bypass;
-  avoiding a hang is correct, allowing the edit is not — treat a non-regular file
-  as missing and block with exit 2. OpenCode (LOW): reads T-08-09 as adequately
-  mitigated and only worries the `mkfifo`/`timeout` test may SKIP on stripped
-  environments. Same mechanism, opposite verdicts. Check what the plan actually
-  specifies.
-- **Whether the egress boundary is real.** Gemini and OpenCode both credit
-  08-03's egress control as a standout security strength — OpenCode calls
-  enumerating the file set before sending "concrete." Codex (HIGH) argues the
-  enumeration is theater: passing paths to an agentic CLI running inside the
-  repository does not constrain what it can read — it can still reach the whole
-  working tree, `$HOME`, and tool configuration. He wants a temporary read-only
-  bundle containing only approved files, with reviewers invoked from that bundle.
-  **This session's own run is evidence for Codex's reading:** the first OpenCode
-  invocation ignored the prompt and spent ten minutes autonomously exploring the
-  repo and running `migrations/run-tests.sh` before it was re-invoked with tool
-  use discouraged.
-- **Migration 0008's merge safety.** Gemini calls 08-05 "a textbook execution"
-  with no concerns; OpenCode reviews 08-05 only lightly (one LOW note on
-  CHANGELOG altitude). Codex raises five HIGH findings against it that are
-  concrete and cheaply checkable: the idempotency check tests `.hooks.pre_execution`
-  rather than the `.plan_review` leaf, so it skips when a sibling gate exists;
-  `.hooks += {pre_execution: $pe}` is a shallow merge that replaces the whole
-  object and can delete sibling gates (the fixture only guards other *top-level*
-  hook groups, so it will not catch this); rollback via
-  `del(.hooks.pre_execution)` is destructive for the same reason; migration 0008
-  inserts the ritual but never adds the `plan-review` row or collapses the
-  duplicate `tdd` row, so migrated installs diverge from fresh ones; and the
-  update skill selects pending migrations once from the initial version, so a
-  0.4.0 project picks 0007, lands at 0.5.0, and fails the final target check —
-  meaning the supported upgrade chain is untested. Given Gemini's blanket LOW
-  carries little weight, these should be adjudicated on their merits rather than
-  treated as outvoted.
-- **Reviewer independence and vendor diversity** (Codex only, MEDIUM): CLI names
-  do not guarantee distinct model providers — `opencode` is a client, and this
-  run proves the point by resolving to glm-5.2. He argues provenance should
-  record provider/model, not executable name, wherever "vendor-diverse" is
-  claimed. Worth noting criterion 4 says "2 independent external reviewers"
-  without defining independence.
-- **Timeout handling for external CLIs** (Gemini only, minor): the producer plan
-  covers non-zero exits and empty output but not a hanging process. This run hit
-  exactly that failure mode, so the suggestion is better-founded than its LOW
-  framing implies.
+- **How to fix the brainstorm-row divergence (concern 1).** OpenCode prefers
+  **removing Part A2 from 08-04** — it is the smaller change, restores row-shape
+  parity, shrinks 08-04's scope, and (OpenCode argues separately, as its own HIGH)
+  Part A2 is *outside locked decision D-20*, which authorizes only "collapse the
+  duplicate `tdd` row." Nothing in 08-CONTEXT.md or the discussion log authorizes
+  the inverse split operation. Codex prefers the opposite: **extend 08-06 Step 3**
+  to transform all three differences, ideally by replacing the recognized legacy
+  table body atomically. This is a real fork — one shrinks the phase, one grows
+  the migration. D-20's literal scope favors OpenCode; long-term
+  template/config-hooks.json coherence favors Codex.
+
+- **Overall risk, again spanning the full range** (Gemini LOW / OpenCode MEDIUM /
+  Codex HIGH). OpenCode: residual drops to LOW once the brainstorm issue is
+  resolved. Codex: residual falls to MEDIUM after his five corrections, dominated
+  by the agent-mediated invocation model. Gemini found nothing blocking. Weight
+  Codex and OpenCode; Gemini's review does not survive contact with the two
+  concrete defects the others found.
+
+- **Codex-only HIGH findings** (no second reviewer corroborated — evaluate on
+  merit, not on vote count; Codex ran at xhigh reasoning and these are specific):
+  - **Migration 0008 operates on a file target projects do not have.** 08-05 Task 2
+    puts `skills/agentic-apps-workflow/SKILL.md` in the migration's runtime steps
+    and preconditions, but the setup skill defines project-side artifacts as
+    `AGENTS.md`, `.planning/`, `.codex/`, and decisions — no local `skills/` tree.
+    A normal downstream update would fail while `test_migration_0008` passes on a
+    synthetic `SKILL.md`. Fix: keep the repo SKILL bump in the implementation
+    commit for drift coupling, but drop it from the target-project migration steps.
+    *If correct, this is the most consequential finding in the round* — it means
+    the harness is green and the product is broken.
+  - **Two verifier bypasses remain.** `[ -f "$REVIEWS" ]` follows symlinks, so a
+    symlink named `08-REVIEWS.md` pointing at any five-line file passes the
+    fallback. And the `--file` bypass checks a textual `.planning/` prefix, so
+    `.planning/../docs/IMPLEMENTATION-PLAN.md` satisfies it. Both need negative
+    tests.
+  - **Ambiguous phase resolution has no terminal state.** `_match_phase_dir`
+    returns empty for both "no match" and "ambiguous"; `resolve_phase` treats
+    empty as "continue" and falls through to newest-plan-by-mtime — potentially
+    selecting one of the ambiguous directories anyway. Needs a tri-state contract
+    (`0=unique, 1=absent, 2=ambiguous-terminal-fail-open`).
+  - **Migration skip semantics can mark incomplete installs current.** 08-05 skips
+    the *whole* migration when `pre_execution.plan_review` exists, where 0007
+    correctly makes only the corresponding step a no-op. And 08-06 treats an
+    unknown table header as successful skip, then permits the version bump —
+    recording the project at 0.6.0 without the table correction.
+
+- **OpenCode-only MEDIUM/LOW findings** worth folding in cheaply:
+  - `plans_reviewed` freshness is **structurally unenforceable once any SUMMARY
+    exists** (the grandfather guard at step 5 precedes the REVIEWS check at step
+    6) — the same grandfather-conflation defect family the ADR names upstream.
+    ADR-0009's deferred list should say the *coverage* half is bypassed too.
+  - The producer timeout is left to executor discretion while everything around it
+    is pinned — pin a default (e.g. 300s) as `<interfaces>` pins `_canon_dir`.
+  - Several acceptance criteria are token denylists brittle enough to fire on a
+    correct implementation: the CHANGELOG `grep -ci 'Current Phase'` check fails
+    on a sentence *pointing at* the ADR, and the `sha256sum`/`md5sum` denylist
+    fires on an explanatory comment. Relax to `[^#]*` forms or non-enumeration
+    semantics.
+  - `del(.hooks.pre_execution)` placement is a human-read check that a mechanical
+    `grep` would not catch if a future editor moved it — make it structural.
+
+- **Gemini-only LOW:** no task consolidates the upstream defects this phase found
+  (in `claude-workflow`'s resolver and the core spec's gate count) into a report
+  filed upstream — the findings live only in this repo's deferred list.
+
+### Self-correcting note
+
+Codex's MEDIUM about the 08-02 fixture — that it copies an `08-REVIEWS.md`
+listing five plans when the phase now has six, and lacking the D-12
+`overall_verdict` and `recommendation` keys — is **partially resolved by this
+file**, which lists all six plans. The missing D-12 frontmatter keys remain a real
+gap: this artifact is produced by `/gsd-review`, whose schema predates D-12. If
+08-02 Task 1 is to copy a real artifact as its fixture, either this file gains the
+D-12 keys or the fixture must be authored to the D-12 schema directly rather than
+copied.
