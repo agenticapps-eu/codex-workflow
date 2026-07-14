@@ -152,6 +152,7 @@ make that claim.
 
 ### Artifact schema
 - `../agenticapps-dashboard/.planning/phases/DASH-11-coverage-trends-skill-drift/11-REVIEWS.md` — a real REVIEWS.md exhibiting the family-wide schema D-12 adopts.
+- `.planning/phases/08-plan-review-gate/08-REVIEWS.md` — this phase's own cross-AI review, produced out-of-band by the operator before execution. A second real, schema-conformant artifact (`reviewers: [gemini, codex, opencode]`), on this host rather than Claude's, exhibiting flow-style `plans_reviewed`, a provider/model provenance table, and an untrusted-content notice. Plan `08-02`'s contract test uses it as a fixture.
 
 </canonical_refs>
 
@@ -187,11 +188,22 @@ make that claim.
 <deferred>
 ## Deferred Ideas
 
-- **Native `~/.codex/hooks.json` PreToolUse enforcement** — Codex ships the surface; point it at the same verifier. Needs a self-scoping guard (global hooks fire in every repo) and a trust-ledger story. Own phase.
-- **§14 prompt-injection defense** — spec v0.6.0. Applicability turns on whether ADR-0002's `codex exec` reviewer path counts as an LLM prompt-building surface; the repo has never adjudicated it. `injection-guard` already ships to Codex via `agenticapps-observability/install-codex.sh`, so it is wiring, not authoring. Own phase.
+- **Native `~/.codex/hooks.json` PreToolUse enforcement** — Codex ships the surface; point it at the same verifier. Needs a self-scoping guard (global hooks fire in every repo) and a trust-ledger story. Own phase. Cross-AI review (`08-REVIEWS.md`, Codex, HIGH) named this as the phase's central architectural gap: without it, invocation is agent-mediated and an agent that omits the invocation is not blocked. The operator adjudicated: align the claim (ROADMAP criterion 1, plan `08-04`) rather than build the surface here. ADR-0009 decision 9 records the residual risk and names this as the documented upgrade path — the verifier's `--file` argument exists so the upgrade is a wiring change, not a rewrite.
+
+- **§14 prompt-injection defense** — spec v0.6.0. Applicability turns on whether ADR-0002's `codex exec` reviewer path counts as an LLM prompt-building surface; the repo has never adjudicated it. `injection-guard` already ships to Codex via `agenticapps-observability/install-codex.sh`, so it is wiring, not authoring. Own phase. Phase 8 ships only the cheap half: reviewer output is fenced and carries an untrusted-content notice (plan `08-03`, T-08-15) — a notice is not a defense.
+
+- **A read-only reviewer bundle** — copy only the approved files into a temporary directory and invoke each reviewer from there with no access to the original repository. Proposed by cross-AI review (`08-REVIEWS.md`, Codex, HIGH) on the grounds that enumerating approved paths does not constrain what an agentic vendor CLI reads. Considered and deferred: it would not constrain `$HOME` or tool-config access either, so it buys a stronger-sounding claim rather than a stronger control. Phase 8's answer is a consent gate plus honest documentation (plan `08-03` Task 1 step 3; ADR-0009 decision 10). Revisit if a vendor ships a genuinely sandboxed non-interactive mode.
+
+- **Digest-based review freshness** — cross-AI review (`08-REVIEWS.md`, Codex, HIGH: "review evidence can be stale") noted the verifier checks reviewer count but not whether a plan changed after it was reviewed. Phase 8 implements the **cheap half only**: `plans_reviewed` must list every current `*-PLAN.md` in the resolved phase dir, so a review that predates a new plan does not satisfy the gate (plan `08-02`, T-08-30). The expensive half — a content digest per plan, recorded at review time and re-checked at gate time — is deferred. It needs a hashing scheme, a schema addition that every host in the family would have to adopt (D-12 is a cross-host convention, not this repo's to extend unilaterally), and an answer for the whitespace-only-edit case. Residual accepted: a plan whose *content* changed after review still passes the coverage check.
+
+- **Multi-hop migration chain in the update skill** — `skills/update-codex-agenticapps-workflow/SKILL.md` selects the set of pending migrations **once**, from the project's *initial* version, and does not recompute the current version after each migration is applied. So a project at 0.4.0 selects 0007 but not 0008, applies 0007, lands at 0.5.0, and then fails the final target-version check — the supported upgrade chain is broken for any project more than one migration behind. Found by cross-AI review of this phase's plans (`08-REVIEWS.md`, Codex, HIGH against plan `08-05`). **Real defect, different skill, outside this phase's criteria** (criterion 7 asks only that `run-tests.sh` pass with an idempotent `test_migration_0008`). Deferred deliberately rather than folded in: fixing it means changing the updater's selection loop to walk a contiguous chain recomputing the version after each hop, plus end-to-end fixtures for at least 0.5.0→0.6.0 and 0.4.0→0.5.0→0.6.0 — its own scope. Migration 0008's supported floor stays 0.5.0→0.6.0, which is where every live project already sits after 0007, so the defect does not block this phase. ADR-0009's follow-ups name it.
+
 - **`implements_spec` 0.4.0 → 0.5.0** — requires the full audit the field represents, not just this gate.
+
 - **Migrate `.planning/phases/` 00–07 to GSD-native layout** — closes ADR-0007 point 4 non-compliance.
-- **Upstream bug report to `claude-workflow`** — resolver step 2 greps a heading no STATE.md uses (D-06).
+
+- **Upstream bug report to `claude-workflow`** — the resolver defects, now **three**: (1) step 2 greps a heading no STATE.md uses (D-06); (2) the line regex `[Pp]hase[[:space:]]+[0-9]+` cannot match the canonical `Phase: NN` line because the colon blocks `[[:space:]]+`, so it silently matches incidental prose instead — verified against `claude-workflow`'s own STATE.md, where it resolves phase 24 from the words "Phase 24 (most recent shipped)"; (3) the **grandfather-conflation defect** — with one `*-SUMMARY.md` written per *plan* rather than per phase, and the SUMMARY check sitting before the REVIEWS check, any phase that adopts the gate mid-flight is silently disarmed from its second plan onward and `REVIEWS.md` is never consulted at all. This repo ports the family behavior faithfully (D-08) and does not unilaterally diverge on (3), since a one-host divergence in a rule that decides whether a gate fires is worse than the shared bug. Carry all three upstream. ADR-0009 decisions 2 and 8b record them.
+
 - **Upstream bug report to `agenticapps-workflow-core`** — `spec/09:61` says 15 gates; `spec/02` defines 16. Also the stale `reference-implementations/README.md` row for this host.
 
 </deferred>
@@ -200,3 +212,5 @@ make that claim.
 
 *Phase: 8-Plan-Review Gate*
 *Context gathered: 2026-07-14*
+*Deferred list extended 2026-07-14 after cross-AI plan review (`08-REVIEWS.md`): read-only reviewer bundle, digest-based review freshness, multi-hop migration chain in the update skill. Locked decisions D-01..D-20 are unchanged.*
+</content>
