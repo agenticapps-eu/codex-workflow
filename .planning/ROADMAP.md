@@ -42,10 +42,14 @@ source. GSD roadmap tracking starts at Phase 8.
   5. Both escape hatches (`GSD_SKIP_REVIEWS=1`, `multi-ai-review-skipped`) allow the edit
   6. The resolver selects the active phase in the spec's documented order and fails open when nothing resolves
   7. `migrations/run-tests.sh` passes, including a `test_migration_0008` that is a no-op on second run
-**Plans**: TBD (set during `/gsd-plan-phase 08`)
+**Plans**: 5 plans in 4 waves
 
 Plans:
-- [ ] 08-01: TBD
+- [ ] 08-01-PLAN.md — Verifier core: phase resolver (4 steps) + grandfather guards, TDD [wave 1] → criteria 2, 3, 6
+- [ ] 08-02-PLAN.md — Verifier enforcement: REVIEWS strictness (D-13), escape hatches, block message, TDD [wave 2] → criteria 1, 5
+- [ ] 08-03-PLAN.md — Producer skill `codex-plan-review` + ADR-0009 [wave 1] → criterion 4
+- [ ] 08-04-PLAN.md — Declarative binding (`pre_execution`) + ritual wiring + 16-gate table (D-20) [wave 3] → criteria 1, 4
+- [ ] 08-05-PLAN.md — Migration 0008 + `test_migration_0008` + version bump + CHANGELOG, TDD [wave 4] → criterion 7
 
 ## Progress
 
@@ -54,4 +58,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 0/TBD | In progress | - |
+| 8. Plan-Review Gate | 0/5 | In progress | - |
