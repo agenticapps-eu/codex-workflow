@@ -198,7 +198,7 @@ rather than falsely parallelized; wave 2 is the only genuine parallelism.
 - [x] 09.1-01-PLAN.md — Criterion 0 RED: strip `_m0009_mk_project`'s synthetic SKILL.md, port 0008's `no-scaffolder-tree` fixture; suite OBSERVED RED (MIGR-01, TEST-02) — wave 1
 - [x] 09.1-02-PLAN.md — Criterion 0 GREEN: pre-flight floor reads `.codex/workflow-version.txt`; Step 2 deleted, MIGR-08/MIGR-09 separated (MIGR-01, MIGR-08, MIGR-09) — wave 2
 - [x] 09.1-03-PLAN.md — Criterion 8: `test_drift`'s consumer-side third leg (free RED), V-03 version split closed (MIGR-09, TEST-02) — wave 2
-- [ ] 09.1-04-PLAN.md — Criteria 1/2/3/7 RED: fixtures 13/14/15 runaway + 11-prose-mention ported from `f9354cc`; off-anchor `state-a` + mirror single-`##` guard (ANCHOR-05, TEST-02, TEST-03, MIGR-07) — wave 3
+- [x] 09.1-04-PLAN.md — Criteria 1/2/3/7 RED: fixtures 13/14/15 runaway + 11-prose-mention ported from `f9354cc`; off-anchor `state-a` + mirror single-`##` guard (ANCHOR-05, TEST-02, TEST-03, MIGR-07) — wave 3
 - [ ] 09.1-05-PLAN.md — Criteria 2/3/4 GREEN: anchored `PROV_RE`, the Q1 refuse gate, the END fail-closed guard, a distinguishable strip diagnostic (ANCHOR-05, MIGR-01, MIGR-04) — wave 4
 - [ ] 09.1-06-PLAN.md — Criteria 5/6: `test -s` made live, `12-idempotent-rerun`; both proven by verified deletion mutations (MIGR-06, TEST-03, ANCHOR-05) — wave 5
 - [ ] 09.1-07-PLAN.md — Criteria 9/10: ADR-0010 corrections, WR-02, upstream CR-01 filing (DOC-01) — wave 6
@@ -302,7 +302,7 @@ sequence matters):
 | ------------------------------- | --------- | --------------- | ----------- | ---------- |
 | 8. Plan-Review Gate             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
 | 9. Region-Aware §11 Placement   | v0.7.0    | 5/5             | In progress | —          |
-| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 3/7 | In Progress|  |
+| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 4/7 | In Progress|  |
 
 ## Known Follow-ups
 
