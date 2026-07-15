@@ -6,8 +6,7 @@ from_version: 0.6.0
 to_version: 0.7.0
 applies_to:
   - AGENTS.md                              # §11 block placement healed (Step 1)
-  - skills/agentic-apps-workflow/SKILL.md  # version bump 0.6.0 -> 0.7.0 (Step 2)
-  - .codex/workflow-version.txt            # project version recorded (Step 3)
+  - .codex/workflow-version.txt            # project version recorded (Step 2)
 requires: []
 optional_for: []
 ---
@@ -364,45 +363,33 @@ this is `0004:87`'s precedent.
 
 **Rollback:** `git checkout AGENTS.md`.
 
-### Step 2: Bump the scaffolder version (implements_spec unchanged)
-
-**Idempotency check:** `grep -q '^version: 0.7.0$' skills/agentic-apps-workflow/SKILL.md`
-**Pre-condition:** `grep -q '^version: 0.6.0$' skills/agentic-apps-workflow/SKILL.md`
-**Apply:**
-```bash
-sed -i.0009.bak -E 's/^version: 0\.6\.0$/version: 0.7.0/' skills/agentic-apps-workflow/SKILL.md
-rm -f skills/agentic-apps-workflow/SKILL.md.0009.bak
-```
-(`implements_spec: 0.4.0` is unchanged — do NOT touch it. That field tracks a
-full spec conformance audit, not this one placement gate, and resolving it is
-explicitly out of this migration's scope.)
-**Rollback:** `sed -i.0009.bak -E 's/^version: 0\.7\.0$/version: 0.6.0/' skills/agentic-apps-workflow/SKILL.md && rm -f skills/agentic-apps-workflow/SKILL.md.0009.bak`
-
-### Step 3: Record the new project version
+### Step 2: Record the new project version
 
 **Idempotency check:** `grep -q '^0.7.0$' .codex/workflow-version.txt 2>/dev/null`
 **Pre-condition:** `.codex/` exists
 **Apply:** `echo "0.7.0" > .codex/workflow-version.txt`
 **Rollback:** `echo "0.6.0" > .codex/workflow-version.txt`
 
-**Steps 2 and 3 run unconditionally — including when Step 1 took its
+**Step 2 runs unconditionally — including when Step 1 took its
 informational-skip path because the project has no `AGENTS.md`.** Do not
 "helpfully" gate the version bump on Step 1 having actually moved a block. The
 update engine marks a migration pending iff
 `installed >= from_version && installed < to_version`, so a project whose Step 1
 legitimately had nothing to do would never record `0.7.0`, would keep 0009
 pending forever, and would never see `0010+` become pending either — stranded
-below `to_version` permanently. Step 1's job is the heal; Steps 2 and 3's job is
+below `to_version` permanently. Step 1's job is the heal; Step 2's job is
 the version, and they are independent by design.
+
+**There is no step in this migration that bumps this repo's own scaffolder
+trigger skill's SKILL.md, and none should be added.** No target project has a
+local `skills/` tree to bump — see the MIGR-08/MIGR-09 separation note under
+`## Notes`.
 
 ## Verification
 
 After applying, a human can check:
 
 - `.codex/workflow-version.txt` reads `0.7.0`.
-- `grep '^version:' skills/agentic-apps-workflow/SKILL.md` reads `version: 0.7.0`.
-- `grep '^implements_spec:' skills/agentic-apps-workflow/SKILL.md` still reads
-  `implements_spec: 0.4.0` (unchanged — D-17).
 - If `AGENTS.md` exists: the `<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->`
   provenance line sits **above** any leading `<!-- gitnexus:start -->` marker, and
   the region's markers are still paired exactly once each.
@@ -410,11 +397,11 @@ After applying, a human can check:
 
 ## Skip cases
 
-- **Already healed** (Step 1 idempotency returns 0) — Step 1 no-ops; Steps 2/3
-  still record the version.
+- **Already healed** (Step 1 idempotency returns 0) — Step 1 no-ops; Step 2
+  still records the version.
 - **Healthy but off-anchor** — provenance present, not in a region: left exactly
   where it is, by the same predicate. Not a special case.
-- **No `AGENTS.md`** — Step 1 emits an informational message; Steps 2/3 still run.
+- **No `AGENTS.md`** — Step 1 emits an informational message; Step 2 still runs.
 - **Unmanaged `## Coding Discipline (NON-NEGOTIABLE)` heading** — Step 1 aborts
   with `exit 3` and leaves the file untouched; resolve per its message.
 
