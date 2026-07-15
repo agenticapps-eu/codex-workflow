@@ -161,11 +161,11 @@ nothing. An abort is unrecoverable.
 
 ```bash
 [ -f AGENTS.md ] \
-  && grep -q '<!-- spec-source: agenticapps-workflow-core@0\.4\.0 §11 -->' AGENTS.md \
+  && grep -q '^<!-- spec-source: agenticapps-workflow-core@0\.4\.0 §11 -->$' AGENTS.md \
   && ! awk '
        /^<!-- gitnexus:start -->$/ { r = 1; next }
        /^<!-- gitnexus:end -->$/   { r = 0; next }
-       r && /<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->/ { f = 1 }
+       r && /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ { f = 1 }
        END { exit(f ? 0 : 1) }
      ' AGENTS.md
 ```
@@ -204,7 +204,7 @@ and is not truncated (its final section is present).
 
 ```bash
 PROV='<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->'
-PROV_RE='<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->'
+PROV_RE='^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$'
 MIRROR="${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
 
 if [ ! -f AGENTS.md ]; then
@@ -257,7 +257,7 @@ else
   # AGENTS.md untouched, and cleans up the partial temp file.
   if awk '
     BEGIN { in_block = 0; swallowed_own_h2 = 0 }
-    /<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->/ {
+    /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ {
       in_block = 1
       next
     }
@@ -406,6 +406,28 @@ After applying, a human can check:
   with `exit 3` and leaves the file untouched; resolve per its message.
 
 ## Notes
+
+- **`PROV_RE` anchoring, ported from upstream `f9354cc` (not re-derived).** All
+  four sites where this migration matches the provenance marker as a regex
+  (the idempotency check's provenance grep and its in-region awk trigger, the
+  `PROV_RE` definition, and the strip pass's entry regex) are whole-line
+  anchored (`^...$`). This closes CR-02: an unanchored substring match also
+  fires on prose that merely *mentions* the marker — including a guard
+  comment inside `AGENTS.md` itself quoting the marker — which would
+  misjudge a healthy file as region-led or, worse, latch the strip's
+  `in_block` state onto a prose line and eat everything up to the next
+  terminator. Anchored per upstream `claude-workflow @ f9354cc`
+  (`migrations/0029-region-aware-spec-11-placement.md:142,146,175,223`, PR
+  #89), which fixed the identical defect there before this migration was
+  written. Ported rather than re-derived: the fix is already validated across
+  six repos, and re-deriving it here would risk prose divergence from the
+  repo this migration is a port of. The `@[^[:space:]]+` any-version class is
+  preserved at every site except the idempotency check's provenance grep
+  (`:164`), which stays pinned to the current version `0.4.0` by design — that
+  predicate is *idempotency* ("is the current version already applied"), a
+  different question from the strip's *entry* condition ("is there a
+  provenance line of any version to heal"), and narrowing it would leave a
+  stale-version provenance line unstrippable.
 
 - **The pre-flight version-floor porting error (fixed here, not inherited).**
   0009 v1's pre-flight guard 2 greped the project-relative path
