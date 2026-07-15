@@ -2,7 +2,160 @@
 
 **Status**: Accepted  **Date**: 2026-07-15
 **Core contract**: `agenticapps-workflow-core/spec/12-authoring-conventions.md` §"Placement of behavior-critical prose (advisory)" (lines 93-113)
-**Sibling host**: claude-workflow — design doc `docs/superpowers/specs/2026-07-15-spec-11-region-aware-placement-design.md` / migration-0029, pinned at `8520f90d235e0c50b0484b170d595ab6f2cd1173`
+**Sibling host**: claude-workflow — design doc `docs/superpowers/specs/2026-07-15-spec-11-region-aware-placement-design.md` / migration-0029, re-pinned at `f9354cc` (upstream HEAD, PR #89 squash-merge; see the Correction section for why the original `8520f90d235e0c50b0484b170d595ab6f2cd1173` pin — a PR-branch commit that never landed on main — is superseded, not deleted)
+
+## Correction (2026-07-15, Phase 9.1)
+
+Phase 9.1 audited this ADR against `migrations/0009-spec-11-region-aware-placement.md`
+**as shipped**, not as planned, and found one falsified decision claim and one dead
+upstream citation. Both are corrected here, in place, rather than silently
+rewritten — this section records what was believed, what is now known, and what
+changed it. It also records three items that were never wrong in the ADR but
+belong here per DOC-01: the runaway's reachability argument, V-01's root cause,
+and the Q1 refuse-gate ruling with its rejected alternative.
+
+### (1) The runaway (CR-01)
+
+The strip's entry was decoupled from its exit: a drifted
+`## Coding Discipline (NON-NEGOTIABLE)` heading latches `in_block = 1`, and
+because the exit rule is gated behind `swallowed_own_h2` (only ever set by the
+*exact* heading), `in_block { next }` never un-latches and eats every line to
+EOF. Reproduced (`.planning/phases/09-region-aware-11-placement/09-CR-01-REPRO.md`):
+16 lines → 4, destroying `## Critical Project Rules` and `## Deployment`. All
+three post-strip guards passed — the third, `grep -q '^## Coding Discipline
+(NON-NEGOTIABLE)$' AGENTS.md.0009.tmp`, is satisfied by the **insert pass that
+runs after it**, re-adding the exact heading the guard checks for. A guard meant
+to detect a bad strip is satisfied by the pass that follows the bad one.
+
+**The reachability argument** — this is the part that makes "drifted heading"
+non-exotic. The Step 1 Apply's existing conflict/abort branch fires on
+`grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md && ! grep -qE
+"$PROV_RE" AGENTS.md` — i.e. **heading present AND provenance absent**. CR-01
+needs the **inverse**: provenance present, heading absent/drifted. That state
+falls straight through the existing `else` into the strip, reachable via a
+hand-edited/drifted heading, old-version provenance from an earlier migration,
+or the orphaned-provenance state the migration document itself acknowledges it
+can produce (`:282`).
+
+### (2) The D-26 correction
+
+Decision 3, as originally written, claimed: *"the boundary is bounded by construction,
+so a drifted block cannot cause a runaway."* **This claim is
+FALSE**, and it was load-bearing — reproduced above. D-26's underlying
+*principle* survives: the strip stays blind to the block's **prose**, because
+content fidelity is 0004's job, not the strip's. The reconciliation is that
+heading drift and prose drift are different failure classes, and the canonical
+mirror proves the distinction is real — it carries exactly one `## ` line, on
+line 1, and that line is the heading (now asserted in `test_migration_0004`).
+The heading is a structural boundary marker, not content. So: **prose drift →
+stay blind and repair** (D-26's principle, intact); **heading drift → the
+boundary is gone, refuse** (D-26's original claim, corrected). The corrected
+claim: **bounded only when the heading matches — enforced by the refuse gate
+and the END fail-closed guard** (both closed in 09.1-05, see item 4 below).
+This is D-25's rejected content-sentinel bug class resurfacing *inside* the
+structural boundary chosen to prevent it.
+
+### (3) V-01 — a porting error, not an inherited defect
+
+09.1's own pre-flight regression (V-01) is a **porting error**, not an
+inherited upstream defect: it greped the project-relative
+`skills/agentic-apps-workflow/SKILL.md`, which no target project has, so it
+exited 3 on every real install and Step 1 never ran — while the suite stayed
+green, because `314 PASS / 0 FAIL` was **fully consistent with a migration that
+never ran.** This is a regression against an established, documented
+precedent: `migrations/0008-plan-review-gate.md:470-487` (**T-08-38**) names
+this *exact* defect class in migration `0007` and calls it "a defect this
+migration does not replicate," because no target project carries a local
+`skills/` tree — the project-side surface is `AGENTS.md`, `.planning/`,
+`.codex/`, and `docs/decisions/` only, and the durable per-project version
+record is `.codex/workflow-version.txt`.
+
+**Upstream is not at fault.** Upstream `claude-workflow` greps
+`.claude/skills/agenticapps-workflow/SKILL.md` — a path *its own* setup skill
+creates (`f9354cc:setup/SKILL.md:146`), so the grep is correct for that host.
+**This host's port dropped the `.claude/` prefix** and pointed at
+`skills/agentic-apps-workflow/`, which on Codex is this scaffolder repo's own
+source tree, not anything a target project carries — which is exactly why it
+looked right to its author and why the test suite manufactured a synthetic
+`SKILL.md` fixture to keep itself green around it. Root cause: MIGR-08 and
+MIGR-09 were conflated, which `0008` (T-08-38) had kept deliberately apart.
+
+### (4) The Q1 ruling, with its rejected alternative
+
+**Decision:** provenance present + exact H2 absent ⇒ **refuse**, `exit 3`, file
+byte-identical. One rule covers both reproduced runaway shapes because both are
+exactly that condition. It closes CR-01 by construction — a strip that refuses
+to run cannot run away — and is consistent with 0009's existing
+never-overwrite-a-hand-paste branch. Implemented in 09.1-05 as a pre-surgery
+`elif` that is the literal inverse of the existing hand-paste-conflict `elif`,
+plus the strip awk's `unresolved`/**`END { exit 4 }`** fail-closed guard (a
+POSIX construct, **fail-closed** by design) for the one mixed-provenance shape
+the file-global refuse gate cannot see: a healthy provenance+heading pair
+earlier in the file satisfies the gate's whole-file predicate while a drifted
+pair later in the file still runs away — confirmed empirically, not assumed
+(`09.1-05-SUMMARY.md`'s "Division of labour" section reproduces fixtures
+13/14/15 in isolation and shows the refuse gate's diagnostic firing for 13/14
+and the **END guard**'s distinct diagnostic firing for 15).
+
+**Rejected: heal-and-duplicate** (the reviewer's fix (a) in `09-REVIEW.md`,
+`:122-134` — un-latch at the structural boundary and insert anyway, rather than
+refuse). This avoids data loss but silently leaves two similar `## Coding
+Discipline` headings in the file, which a future migration's own conflict grep
+would trip on. RESEARCH (`09.1-RESEARCH.md` § "Pitfall 1") further found that
+un-latching alone still runs away to EOF on the orphaned-provenance shape (8
+lines → 4) — the un-latch rule does not even fully close CR-01 by itself. The
+refuse gate was chosen instead; the un-latch rule was **not adopted** anywhere
+in 0009 (confirmed by the alternation copy count staying at exactly 2
+throughout 09.1-05/06). The refuse gate is the primary mechanism; the END
+guard (`END { if (unresolved || (in_block && !swallowed_own_h2)) exit 4 }`) is
+its backstop for the shape the gate cannot see. Fixture
+`15-mixed-provenance-unresolved` is the END guard's falsifiability proof —
+09.1-05 mutated the guard away, observed the fixture still refuse (caught by a
+*different*, independently-reachable layer: the h2-count strip-integrity
+guard, `grep -c 'h2_out' migrations/0009-spec-11-region-aware-placement.md` →
+`3`), and restored it before shipping.
+
+### (5) D-48's re-pin
+
+Recorded per RESEARCH Q5 — citing a dead PR-branch commit as "the upstream
+reference" would send the next reader to a ref they cannot find. Both refs are
+recorded, neither is erased:
+
+- Phase 9 pinned the port at `8520f90` — a **PR-branch commit that never landed
+  on main** (`git merge-base --is-ancestor 8520f90 HEAD` → NO, re-verified this
+  phase);
+- PR #89 squash-merged as **`f9354cc`**, upstream HEAD (`28b393b8`'s 0029 is
+  byte-identical to `f9354cc`'s);
+- upstream **already fixed CR-02** there — `PROV_RE` anchored at all three of
+  its own sites, plus a new `11-prose-mention-provenance` fixture; **9.1 ported
+  that fix rather than re-inventing it** (09.1-05, Task 1);
+- 9.1 **diverges** from upstream on CR-01, which remains live at
+  `f9354cc:0029:222-241` — Task 3 of this plan files that finding upstream.
+
+`:5`, decision 4 (`:189-191`), and decision 6 (`:214-236`) are updated in place
+to cite `f9354cc`, with every `8520f90` occurrence marked "as pinned during
+Phase 9 (PR branch, never merged)" rather than deleted.
+
+### Also recorded, from 09.1-05/06's SUMMARYs
+
+- **Criterion-4 KEEP/REMOVE**: the h2-count strip-integrity guard
+  (`h2_out == h2_in - h2_own`, else abort `exit 3`) was kept, not removed, based
+  on a *verified mutation*, not an assumption — deleting only the strip awk's
+  `END { ... exit 4 }` clause left fixture 15 still refusing (`rc=3`,
+  byte-identical), caught by the h2-count guard's own distinct diagnostic
+  ("the strip removed structural headings it does not own") rather than the
+  END guard's. This is the opposite of RESEARCH's tentative expectation that
+  the guard might be "dead by construction" once the refuse gate + END guard
+  existed — the empirical mutation, not the prior reasoning, is what settled
+  it.
+- **WR-01's mirror single-`## ` coupling** the refuse gate rests on is now
+  asserted directly in `test_migration_0004` (the canonical mirror has exactly
+  one `## ` line, on line 1).
+- **Awk portability (A2)** is a known limitation, recorded rather than
+  verified: `END { exit 4 }` is POSIX and was verified on BSD awk 20200816;
+  `gawk`/`mawk` are not installed in this environment, so portability is
+  argued, not tested. This is the same exposure the pre-existing awk in this
+  migration already carried — the phase does not widen it.
 
 ## Context
 
@@ -151,11 +304,12 @@ region exactly when the region leads the file.
    the block and left the closing line intact. That is not a boundary; it is a
    boundary that has not failed yet.
 
-   **The strip asserts nothing about the block's content (D-26).** Because the
-   boundary is structural it is bounded by construction, so a drifted block cannot
-   cause a runaway, and 0009 must not refuse to *place* a block merely because its
-   prose drifted — content fidelity is 0004's job. A `diff` against the mirror
-   gating the strip with `exit 3` was explicitly considered and declined.
+   **The strip asserts nothing about the block's content (D-26).** *(Corrected
+   2026-07-15, Phase 9.1 — the original claim in this decision was reproduced
+   false; see the Correction section below for the full account.)* The surviving
+   principle: 0009 must not refuse to *place* a block merely because its prose
+   drifted — content fidelity is 0004's job. A `diff` against the mirror gating
+   the strip with `exit 3` was explicitly considered and declined.
 
 4. **Re-injection re-vendors from the mirror (D-27), guarded twice (D-28.1).**
    After stripping, the block is re-injected fresh from
@@ -186,8 +340,10 @@ region exactly when the region leads the file.
    a **different file**, anchored to a **structural heading**; it bounds nothing,
    strips nothing, and cannot run away. Different mechanism, different failure
    mode, different file. This gap is the one claude-workflow closed in its own
-   third review — the pinned commit `8520f90` is literally *"close truncated-mirror
-   gap, add its missing test"*.
+   third review — the PR-branch commit `8520f90` (as pinned during Phase 9; it
+   never merged to main as such — see decision 6's correction) is literally
+   *"close truncated-mirror gap, add its missing test"*; that fix is present,
+   squash-merged, at upstream HEAD `f9354cc`.
 
 5. **Rollback is `git checkout AGENTS.md` (D-47) — a deliberate tradeoff,
    recorded.** The alternative was porting 0029's bespoke Rollback awk, a third
@@ -210,22 +366,27 @@ region exactly when the region leads the file.
    stops a future author from "improving" `git checkout` into the awk that eats the
    region.
 
-6. **The upstream reference is pinned at
-   `8520f90d235e0c50b0484b170d595ab6f2cd1173` (D-48), not chased.** claude-workflow's
+6. **The upstream reference is pinned at `f9354cc` (D-48, re-pinned 2026-07-15
+   Phase 9.1 — see the Correction section), not chased.** claude-workflow's
    0029 changed **four times during this phase's planning session alone** (13:52
    ship → 14:08 fixture 09 → 14:27 fixture 10 → 14:34 third-review mirror fix), and
    three of those landed after this phase's context was finalized. Recording the
-   SHA is what makes the phase's scope knowable after the fact: everything this
+   SHA is what makes the phase's scope knowable after the fact: everything Phase 9's
    port read came from
-   `git -C ../claude-workflow show 8520f90:migrations/0029-region-aware-spec-11-placement.md`,
-   and any upstream change after the pin is a deliberate follow-up diff rather than
-   an invisible mid-execution scope change.
+   `git -C ../claude-workflow show 8520f90:migrations/0029-region-aware-spec-11-placement.md`
+   — **as pinned during Phase 9 (PR branch, never merged)** — and any upstream
+   change after that pin is a deliberate follow-up diff rather than an invisible
+   mid-execution scope change. Phase 9.1 re-pins the *citation* (not the port) to
+   `f9354cc`, the commit `8520f90` squash-merged into as PR #89, because
+   `8520f90` is unreachable from upstream's own `main`
+   (`git merge-base --is-ancestor 8520f90 HEAD` → NO) and citing a dead commit as
+   "the upstream reference" would send the next reader to a ref they cannot find.
 
    The pin justified itself during execution. Upstream HEAD was observed at
    `496acfc9` when validation started and at `28b393b8` roughly ten minutes later
    when its evidence was recorded — 0029 moved *again, mid-execution*, a fifth time
    (09-VALIDATION-EVIDENCE.md §3). Chasing it would have been unbounded; pinning
-   cost nothing.
+   cost nothing. `28b393b8`'s 0029 is byte-identical to `f9354cc`'s.
 
    **The two hosts converged rather than diverged.** Both shipped the same anchor
    rule and the same terminator alternation, from the same design, within hours of
@@ -233,6 +394,12 @@ region exactly when the region leads the file.
    error the same day. The pinned document's alternation appears at three sites
    (`:202` strip, `:228` insert, `:302` rollback); the two load-bearing sites are
    ported here and `:302` is deliberately not, per decision 5.
+
+   Upstream **already fixed CR-02** at `f9354cc` (`PROV_RE` anchored at all three
+   of its own sites, plus a new `11-prose-mention-provenance` fixture) — 9.1
+   **ported that fix rather than re-inventing it** (see the Correction section,
+   item 5). 9.1 **diverges** from upstream on CR-01, which remains live at
+   `f9354cc:0029:222-241` — see item 1 below and Task 3's filed report.
 
 ## Consequences
 
