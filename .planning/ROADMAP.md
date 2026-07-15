@@ -154,6 +154,46 @@ from upstream and were ported faithfully.
       upstream's "Known limitations" omits the runaway, so this is new information
       to them.
 
+**Plans**: 7 plans in 6 waves. Wave structure **structurally enforces** RED-before-GREEN
+(ordering constraint 1): the two RED plans touch only `run-tests.sh` and the two GREEN plans
+touch only `0009-*.md`, so a RED plan physically cannot fix what it reproduces. 09.1-01
+(criterion-0 RED) gates 09.1-02 (GREEN); 09.1-04 (runaway RED) gates 09.1-05 (GREEN). Nearly
+every plan touches `run-tests.sh` or `0009-*.md`, so same-file plans are wave-separated
+rather than falsely parallelized; wave 2 is the only genuine parallelism.
+
+- [ ] 09.1-01-PLAN.md — Criterion 0 RED: strip `_m0009_mk_project`'s synthetic SKILL.md, port 0008's `no-scaffolder-tree` fixture; suite OBSERVED RED (MIGR-01, TEST-02) — wave 1
+- [ ] 09.1-02-PLAN.md — Criterion 0 GREEN: pre-flight floor reads `.codex/workflow-version.txt`; Step 2 deleted, MIGR-08/MIGR-09 separated (MIGR-01, MIGR-08, MIGR-09) — wave 2
+- [ ] 09.1-03-PLAN.md — Criterion 8: `test_drift`'s consumer-side third leg (free RED), V-03 version split closed (MIGR-09, TEST-02) — wave 2
+- [ ] 09.1-04-PLAN.md — Criteria 1/2/3/7 RED: fixtures 13/14/15 runaway + 11-prose-mention ported from `f9354cc`; off-anchor `state-a` + mirror single-`##` guard (ANCHOR-05, TEST-02, TEST-03, MIGR-07) — wave 3
+- [ ] 09.1-05-PLAN.md — Criteria 2/3/4 GREEN: anchored `PROV_RE`, the Q1 refuse gate, the END fail-closed guard, a distinguishable strip diagnostic (ANCHOR-05, MIGR-01, MIGR-04) — wave 4
+- [ ] 09.1-06-PLAN.md — Criteria 5/6: `test -s` made live, `12-idempotent-rerun`; both proven by verified deletion mutations (MIGR-06, TEST-03, ANCHOR-05) — wave 5
+- [ ] 09.1-07-PLAN.md — Criteria 9/10: ADR-0010 corrections, WR-02, upstream CR-01 filing (DOC-01) — wave 6
+
+**Planning rulings** (2026-07-15, verified against live files):
+
+- **Q3's inverse trap does not fire.** There is **no `anchor-parity` count assertion** in
+  `run-tests.sh` — the only alternation check is `assert_extracted_shape … 'gitnexus:start'`
+  (substring presence, not a count). The alternation stays at **2 copies** because the
+  reviewer's un-latch rule is **not adopted**: it implements the rejected heal-and-duplicate
+  semantics, RESEARCH reproduced that it is insufficient alone, and without it the
+  mixed-provenance shape latches and the END guard refuses — which is the Q1 ruling's intent.
+- **A4 confirmed.** Pre-flight guard 4 says *"is missing its final section"*; it does **not**
+  contain `missing or empty`, so criterion 5's `case` can isolate the `test -s` layer.
+- **D-48's new pin is safe to lock.** `git fetch` confirms `f9354cc` is still upstream
+  `origin/main` HEAD (research freshness re-checked at planning time).
+- **Q4 numbering.** `07-prose-mention-not-a-region` is the *marker* twin, so `11-` is free:
+  `11-prose-mention-provenance` (upstream's port), `12-idempotent-rerun`, `13/14/15` runaway.
+  The ROADMAP's criterion-6 label `11-idempotent-rerun` is **aliased to `12-`**.
+- **Criterion 4 is a determination, not an assumption.** With refuse gate + END guard, the
+  h2-count strip-integrity guard may be dead by construction. 09.1-05 Task 3 settles it by
+  verified mutation and **removes the guard if nothing reaches it** — shipping an
+  unfalsifiable guard here would reproduce CR-03 inside CR-03's own fix.
+- **Research-added fixture 15 (`mixed-provenance-unresolved`)** is the ONLY shape the
+  file-global refuse gate cannot see, and therefore the END guard's only falsifiability proof.
+- **WR-01/Q2 folded in cheaply** (mirror single-`##` guard, 09.1-04 Task 3) — the refuse gate
+  rests on that invariant. **WR-02 included** per orchestrator ruling, overriding RESEARCH's
+  deferral. WR-05, IN-01..IN-04 and migration 0007 stay deferred.
+
 ### Phase 9: Region-Aware §11 Placement
 
 **Goal**: Ship migration `0009-spec-11-region-aware-placement.md` so the spec §11
@@ -228,7 +268,7 @@ sequence matters):
 | ------------------------------- | --------- | --------------- | ----------- | ---------- |
 | 8. Plan-Review Gate             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
 | 9. Region-Aware §11 Placement   | v0.7.0    | 5/5             | In progress | —          |
-| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 0/0             | Not planned | —          |
+| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 0/7             | Planned     | —          |
 
 ## Known Follow-ups
 
