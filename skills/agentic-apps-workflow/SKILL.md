@@ -167,13 +167,19 @@ evidence (per spec/06).
 
 ## Step 3 — Gate-to-skill bindings
 
-The 15 gates from
+The 16 gates from
 [spec/02-hook-taxonomy.md](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/spec/02-hook-taxonomy.md)
 are bound on the Codex host as follows. This table is the host's
 binding contract for `full` conformance per spec/09. Gates that have a
 Superpowers equivalent bind to `superpowers:*` (installed by the
 Superpowers-for-Codex distribution); the rest bind to this repo's
 `codex-*` gstack gates.
+
+### Pre-execution
+
+| Gate | Bound skill | Notes |
+|---|---|---|
+| plan-review | `codex-plan-review` | Fires before the phase's first code-touching edit; writes `<NN>-REVIEWS.md` with ≥2 independent external reviewers. See `AGENTS.md` §"Pre-execution Gate — Plan Review (spec §02)" for the invocation ritual |
 
 ### Pre-phase
 
@@ -188,8 +194,7 @@ Superpowers-for-Codex distribution); the rest bind to this repo's
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `tdd` | `superpowers:test-driven-development` | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically |
-| `tdd` (new TS module) | `codex-ts-declare-first` | Strengthens `tdd` for a new TypeScript module's API surface (spec §13): three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN); refuses to collapse declare + impl into one commit |
+| `tdd` | `superpowers:test-driven-development` (strengthened by `codex-ts-declare-first` for new TS modules) | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically; for a new TypeScript module's API surface (spec §13) the strengthening adds a `declare(ts):` commit before RED, giving three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN) — refuses to collapse declare + impl into one commit |
 | `ui-preview` | `codex-qa` (preview mode) | Per-task pre-commit screenshot mode of the same QA skill; the qa skill body branches on `mode=preview` vs `mode=phase-qa` |
 | `verification` | `superpowers:verification-before-completion` | Refuses task completion when `must_have` evidence is missing |
 
@@ -463,3 +468,41 @@ codex and claude running in one working tree read the **same**
 (differentiated only by the `(codex)` / `(claude)` host tag in the Log heading).
 See [ADR-0008](../../docs/decisions/0008-knowledge-capture.md) and core
 [ADR-0017](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0017-knowledge-capture-obsidian.md).
+
+## Pre-execution Gate — Plan Review (spec §02)
+
+Multi-AI plan review must run BEFORE execution begins. This gate exists
+because agent compliance alone did not hold: core ADR-0018 records that
+cparx phases 04.9 through 05 silently dropped this review for 8 consecutive
+phases, with no program ever catching the omission.
+
+Procedure (mechanical — follow exactly):
+
+1. **When** — before the FIRST code-touching edit of a phase. Not before
+   `.planning/` artifact edits; not once per edit.
+2. **Run the verifier** at the stable installed path
+   `${CODEX_HOME:-$HOME/.codex}/skills/agentic-apps-workflow/scripts/check-plan-review.sh`.
+   Always this path — never a path read out of the target repo's own config,
+   and never a relative path. The verifier locates the repo root itself, so
+   invoke it from wherever you are: no working-directory precondition applies.
+3. **Run it every time. Do not pre-judge whether it applies.** The agent's
+   job is to invoke. The verifier's job is to decide.
+4. **Exit 0 → proceed. Exit 2 → HARD STOP.** Do not edit code. Do not
+   auto-invoke external reviewers on your own initiative — that would ship
+   plan content to other vendors without consent. The verifier prints the
+   remedy; surface it to the operator and wait.
+5. **The remedy** is the `codex-plan-review` skill, which writes
+   `<NN>-REVIEWS.md` with at least 2 independent external reviewers.
+
+**The verifier decides these for you** — you do not need to check any of
+these; run the script and it will exit 0 on its own when:
+- `GSD_SKIP_REVIEWS=1` is set, or a `multi-ai-review-skipped` marker exists
+  in the phase directory (both emergency-only, both announce themselves)
+- the phase is legacy bare-number layout, already shipped (a `*-SUMMARY.md`
+  is present), has no `*-PLAN.md` at all, or nothing resolves
+
+Both `GSD_SKIP_REVIEWS` and the `multi-ai-review-skipped` marker are
+emergency-only escape hatches: each announces itself, and the marker file is
+visible to `git status` and expected to be committed with a rationale. A
+hatch is an auditable decision, not a silent bypass.
+
