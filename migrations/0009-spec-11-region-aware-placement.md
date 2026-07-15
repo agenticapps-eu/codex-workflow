@@ -329,7 +329,7 @@ else
   # failed strip (awk error, disk full) — on failure this aborts, leaves
   # AGENTS.md untouched, and cleans up the partial temp file.
   awk '
-    BEGIN { in_block = 0; swallowed_own_h2 = 0; unresolved = 0 }
+    BEGIN { in_block = 0; swallowed_own_h2 = 0; unresolved = 0; fenced = 0 }
     /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ {
       # A second provenance line arriving while a previous one never found
       # its heading (in_block still latched, swallowed_own_h2 never set) is
@@ -350,6 +350,23 @@ else
       print
       next
     }
+    # CR-02: an exact, whole-line quotation of the provenance marker and/or
+    # the §11 heading inside a markdown code fence (a troubleshooting note
+    # showing "what a healthy block looks like") is a REAL anchored match on
+    # both regexes above — not a "mention" (07/11 already close that door via
+    # anchoring) — so it latches `in_block` exactly like a genuine block and
+    # this pass is about to silently swallow whatever sits between it and the
+    # next real terminator. A bare \`\`\`/~~~ fence-delimiter line appearing
+    # THAT WOULD BE SWALLOWED is the tripwire: the real vendored mirror
+    # carries zero such lines in its own body (confirmed structurally, not
+    # assumed), so seeing one here means this pass is about to eat content it
+    # has no way to know is safe. Per the binding user ruling, this does
+    # NOT attempt to parse fence state and skip past it to keep healing
+    # (upstream calls full fence-awareness not-fixable-by-design) — it only
+    # detects the ambiguity and refuses. `next` is deliberately omitted here
+    # so the line still falls through to `in_block { next }` below and is
+    # discarded from the (about to be refused) output exactly as before.
+    in_block && /^(```|~~~)/ { fenced = 1 }
     in_block { next }
     !in_block { print }
     END {
@@ -363,10 +380,44 @@ else
       # 06-no-heading-eof) has swallowed_own_h2 == 1 at EOF and is
       # unaffected by this guard.
       if (unresolved || (in_block && !swallowed_own_h2)) exit 4
+      # CR-02 exit code, checked SECOND, deliberately: `fenced` can only ever
+      # be set while `in_block` is still open at the time the fence line was
+      # seen, and if that same span ALSO never resolved its heading, that
+      # takes exit 4 shape first (a different, more specific diagnostic
+      # exists for that). Exit 5 is reserved for the shape where the block
+      # bounded cleanly (a real terminator was found) but a fence line was
+      # seen in what got swallowed along the way — precisely the
+      # fenced-quotation hazard, not the drifted/orphaned-heading hazard
+      # exit 4 already names.
+      if (fenced) exit 5
     }
   ' AGENTS.md > AGENTS.md.0009.strip
   strip_rc=$?
-  if [ "$strip_rc" -eq 4 ]; then
+  if [ "$strip_rc" -eq 5 ]; then
+    # CR-02: the file-global refuse gates above cannot see this shape either
+    # — a fenced quotation of BOTH the exact heading and the exact provenance
+    # satisfies "heading present" AND "provenance present" simultaneously, so
+    # neither `elif`'s conjunction fires. The strip's sequential scan is what
+    # actually catches it, via the fence tripwire above.
+    rm -f AGENTS.md.0009.strip
+    echo "ABORT: migration 0009 Step 1 — a spec-11 provenance line and/or its"
+    echo "       '## Coding Discipline (NON-NEGOTIABLE)' heading was found next"
+    echo "       to a markdown code-fence delimiter (\`\`\` or ~~~) inside the"
+    echo "       span this migration would otherwise strip and re-vendor. This"
+    echo "       migration cannot reliably tell a REAL managed block apart from"
+    echo "       an EXACT quotation of one inside a fenced troubleshooting note"
+    echo "       or code example — refusing rather than risk silently deleting"
+    echo "       real content between the quotation and the next heading."
+    echo ""
+    echo "       (a) move the quoted marker/heading text out of AGENTS.md (e.g."
+    echo "           into a separate docs file), or"
+    echo "       (b) break the exact match by editing the quoted text so it no"
+    echo "           longer reproduces the marker/heading verbatim (e.g. add a"
+    echo "           word or escape a character inside the fence)."
+    echo "       Then re-run /update-codex-agenticapps-workflow."
+    echo "       Refusing to strip. AGENTS.md left untouched."
+    exit 3
+  elif [ "$strip_rc" -eq 4 ]; then
     # The refuse-gate `elif`s above are file-global and cannot see a MIXED
     # shape: a healthy provenance+heading pair elsewhere in the file makes
     # both "provenance present" and "heading present" true in aggregate, so

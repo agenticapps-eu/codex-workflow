@@ -4419,6 +4419,87 @@ test_migration_0009() {
     grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
     _m0009_ok $? "15-mixed-provenance-unresolved: '## Deployment' survives — its absence is the harm the END guard (09.1-05) exists to prevent"
 
+    # ── 18-fenced-quoted-marker (09.1-REVIEW.md CR-02 — D-38 double-sided) ──
+    # An exact, whole-line quotation of the provenance marker AND the §11
+    # heading — together, adjacent, inside a markdown code fence documenting
+    # "what a healthy block looks like" — is not a "mention" in the CR-01/
+    # 07/11 sense (those are unanchored SUBSTRING mentions). It is a real
+    # ANCHORED match on both regexes simultaneously. The strip latches
+    # `in_block` at the fenced provenance line, swallows the fenced example's
+    # own heading (exactly like a real block), and then — because neither
+    # refuse-gate `elif` is file-global-blind here too (heading present +
+    # provenance present, both true in aggregate) — keeps consuming
+    # everything that is not itself a `## ` line or a region marker: the
+    # closing code fence, an unrelated prose sentence, and a blank line —
+    # real, unrelated user content — until it reaches the next real `## `
+    # heading. Per the user's binding ruling: do not attempt fence-parsing in
+    # the strip to make it "smart" about skipping fenced content and
+    # continuing to heal (upstream calls that not-fixable-by-design). Instead
+    # detect the ambiguity — a bare \`\`\`/~~~ fence-delimiter line appearing
+    # inside the span the strip is about to silently discard is ALWAYS
+    # suspicious, since the real vendored mirror carries zero such lines in
+    # its own body — and refuse rather than guess.
+    #
+    # (a) REFUSE: the review's own concrete repro, verbatim.
+    p="$(_m0009_mk_project "$tmp" 18a)"; h="$(_m0009_mk_fake_home "$tmp" 18a "$mirror")"
+    {
+      printf '# My Project\n\n'
+      printf '## Troubleshooting\n\n'
+      printf 'If your AGENTS.md ever needs the §11 marker restored by hand, it looks\n'
+      printf 'exactly like this:\n\n'
+      printf '```\n'
+      printf '%s\n' "$PROV_LIT"
+      printf '## Coding Discipline (NON-NEGOTIABLE)\n'
+      printf '```\n\n'
+      printf 'Do not delete this troubleshooting note.\n\n'
+      printf '## Deployment\n'
+      printf 'Real deployment content that must survive.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: Apply refuses with exit 3 on a fenced whole-line quotation of provenance+heading — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: AGENTS.md is BYTE-IDENTICAL after refusal — the assertion that actually catches CR-02 (unfixed 0009 silently deletes the troubleshooting note)"
+
+    case "$out" in
+      *'fence'*|*'Fence'*) _m0009_ok 0 "18-fenced-quoted-marker (a) REFUSE: diagnostic names the fence/ambiguity as the cause" ;;
+      *)                   _m0009_ok 1 "18-fenced-quoted-marker (a) REFUSE: diagnostic names the fence/ambiguity as the cause" ;;
+    esac
+
+    grep -q -F -- 'Do not delete this troubleshooting note.' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: the troubleshooting prose survives (the exact content CR-02 found silently deleted)"
+
+    grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: '## Deployment' survives"
+
+    # (b) ACCEPT (D-38's other half) — a REAL, un-fenced, correctly-placed §11
+    # block that genuinely gets stripped-and-reinserted (so the strip's
+    # in_block span is actually exercised, not skipped like 03's zero-churn
+    # case would leave untested), PLUS a totally unrelated fenced code
+    # example living OUTSIDE that span (after the real terminator). The
+    # guard must NOT fire just because a fence exists SOMEWHERE in the file —
+    # only when one falls inside content the strip is about to discard.
+    p="$(_m0009_mk_project "$tmp" 18b)"; h="$(_m0009_mk_fake_home "$tmp" 18b "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Examples\nHere is an example:\n\n'
+      printf '```\necho hello\n```\n\n'
+      printf '## Deployment\nMore stuff.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/18b-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "18-fenced-quoted-marker (b) ACCEPT: Apply exits 0 when the fence is OUTSIDE the strip's span — the guard must not be a brick wall — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/18b-pristine.md"
+    _m0009_ok $? "18-fenced-quoted-marker (b) ACCEPT: AGENTS.md is BYTE-IDENTICAL (zero-churn heal, unrelated fence content untouched)"
+
   else
     _m0009_fail "13-runaway-drifted-h2: Apply refuses with exit 3 on a drifted H2 (CR-01) — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "13-runaway-drifted-h2: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
@@ -4434,6 +4515,13 @@ test_migration_0009() {
     _m0009_fail "15-mixed-provenance-unresolved: diagnostic names the offending provenance line — NOT ASSERTED: extraction failed"
     _m0009_fail "15-mixed-provenance-unresolved: diagnostic is NOT the misleading 'produced no output' message — NOT ASSERTED: extraction failed"
     _m0009_fail "15-mixed-provenance-unresolved: '## Deployment' survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: Apply refuses with exit 3 — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: diagnostic names the fence/ambiguity as the cause — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: the troubleshooting prose survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: '## Deployment' survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (b) ACCEPT: Apply exits 0 — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (b) ACCEPT: AGENTS.md is BYTE-IDENTICAL — NOT ASSERTED: extraction failed"
   fi
 
   # ── no-scaffolder-tree (T-08-38 port — the criterion-0 regression guard) ──
