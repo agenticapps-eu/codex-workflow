@@ -64,7 +64,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 08-04-PLAN.md — Declarative binding (`pre_execution`) + ritual wiring + 16-gate table (D-20) [wave 3] → criteria 1, 4
+- [x] 08-04-PLAN.md — Declarative binding (`pre_execution`) + ritual wiring + 16-gate table (D-20) [wave 3] → criteria 1, 4
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -83,4 +83,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 3/6 | In Progress|  |
+| 8. Plan-Review Gate | 4/6 | In Progress|  |
