@@ -121,7 +121,7 @@ review.
 
    > **Note — where §11's placement comes from (do not add it here).**
    > Setup deliberately carries **no §11 Coding Discipline placement logic**.
-   > `0000-baseline.md`'s Step 6 is a plain append of
+   > `0000-baseline.md`'s **Step 3** (`:102`) is a plain append of
    > `templates/agents-md-additions.md`, and that template contains no §11 —
    > so setup lands the project at `0.1.0` with no §11 block and no anchor
    > rule of its own. §11 arrives via **migration `0001`** in the subsequent
