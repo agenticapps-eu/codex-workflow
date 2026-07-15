@@ -3359,15 +3359,20 @@ _m0009_mk_fake_home() {
 }
 
 # _m0009_mk_project <tmp> <name>
-# Builds a scratch project root satisfying 0009's pre-flight guards other than
-# the mirror: a `.git` directory (`test -d .git`) and a SKILL.md at
-# `version: 0.6.0` (the D-39 version gate, which accepts both 0.6.0 and 0.7.0 so
-# an idempotent re-run does not abort). Prints the project root's path.
+# Builds a scratch project root shaped like a REAL target project: a `.git`
+# directory (`test -d .git`) plus `.codex/workflow-version.txt` at `0.6.0`
+# (the durable per-project version record the update skill itself reads) —
+# and DELIBERATELY NO local scaffolder-skill tree of any kind, because no
+# target project this host scaffolds has one (`run-tests.sh:917-918`: "no
+# 0008 sandbox here manufactures a synthetic SKILL.md" — the same rule
+# applied here). See 0008's T-08-38 note (`0008:470-487`): the setup skill's
+# project-side surface is `AGENTS.md`, `.planning/`, `.codex/`, and
+# `docs/decisions/` only; a locally installed scaffolder SKILL.md never
+# exists on a real install. Prints the project root's path.
 _m0009_mk_project() {
   local p="$1/$2/proj"
-  mkdir -p "$p/.git" "$p/skills/agentic-apps-workflow"
-  printf -- '---\nname: agentic-apps-workflow\nversion: 0.6.0\nimplements_spec: 0.4.0\ndescription: synthetic fixture for migration 0009 (D-39 version gate)\n---\n\n## Stub\n' \
-    > "$p/skills/agentic-apps-workflow/SKILL.md"
+  mkdir -p "$p/.git" "$p/.codex"
+  printf '0.6.0\n' > "$p/.codex/workflow-version.txt"
   printf '%s\n' "$p"
 }
 
