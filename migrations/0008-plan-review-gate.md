@@ -281,15 +281,31 @@ ROW_TDD="$(grep -m1 '^| tdd |' "$TPL")"
 # Apply all THREE corrections in one pass:
 #   1. SPLIT the combined brainstorm row into the template's two rows.
 #   2. COLLAPSE the duplicate tdd rows to the template's single row.
-#   3. ADD plan-review as the first data row (right after the separator).
+#   3. ADD plan-review as the first data row of the VALIDATED bindings table
+#      (right after the separator that follows the '| Gate |' header this
+#      step already checked above — not the first separator in the file).
 # Leave every other row untouched. Net: 15 -> 16 -> 15 -> 16 rows / 16
 # distinct gates, identical to a fresh install.
+#
+# The insertion is scoped to the validated header (WR-02, 08-REVIEW.md):
+# matching only `/^\|---/` fires on the FIRST '|---' line anywhere in
+# AGENTS.md, so a target repo whose file holds any OTHER Markdown table
+# before the bindings table gets the plan-review row inserted into that
+# unrelated table instead — leaving the real bindings table without it.
+# Worse, this self-seals: the idempotency check above this pass
+# (`grep -q '^| plan-review' AGENTS.md`) would then find the misplaced row
+# on every future run and mark Step 3 already-applied forever, permanently
+# masking that the bindings table never got the gate this migration exists
+# to bind. Setting `seen_hdr` on the already-validated `| Gate |` header and
+# gating the separator match on it correlates the insertion point with the
+# header instead of leaving the two independent.
 awk \
   -v pr="$ROW_PLAN_REVIEW" \
   -v bui="$ROW_BRAINSTORM_UI" \
   -v barch="$ROW_BRAINSTORM_ARCH" \
   -v tdd="$ROW_TDD" '
-  /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+  /^\| Gate \|/ { seen_hdr=1 }
+  /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
   /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
   /^\| tdd \(new TS module\)/ { next }
   /^\| tdd \|/ { print tdd; next }

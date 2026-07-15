@@ -1145,7 +1145,8 @@ MD
       -v bui="$row_brainstorm_ui" \
       -v barch="$row_brainstorm_arch" \
       -v tdd="$row_tdd" '
-    /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+    /^\| Gate \|/ { seen_hdr=1 }
+    /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
     /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
     /^\| tdd \(new TS module\)/ { next }
     /^\| tdd \|/ { print tdd; next }
@@ -1248,7 +1249,8 @@ MD
         -v bui="$row_brainstorm_ui" \
         -v barch="$row_brainstorm_arch" \
         -v tdd="$row_tdd" '
-      /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+      /^\| Gate \|/ { seen_hdr=1 }
+      /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
       /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
       /^\| tdd \(new TS module\)/ { next }
       /^\| tdd \|/ { print tdd; next }
@@ -1325,7 +1327,8 @@ MD
       -v bui="$row_brainstorm_ui" \
       -v barch="$row_brainstorm_arch" \
       -v tdd="$row_tdd" '
-    /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+    /^\| Gate \|/ { seen_hdr=1 }
+    /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
     /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
     /^\| tdd \(new TS module\)/ { next }
     /^\| tdd \|/ { print tdd; next }
@@ -1401,7 +1404,8 @@ MD
         -v bui="$row_brainstorm_ui" \
         -v barch="$row_brainstorm_arch" \
         -v tdd="$row_tdd" '
-      /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+      /^\| Gate \|/ { seen_hdr=1 }
+      /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
       /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
       /^\| tdd \(new TS module\)/ { next }
       /^\| tdd \|/ { print tdd; next }
