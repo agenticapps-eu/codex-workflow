@@ -1145,7 +1145,8 @@ MD
       -v bui="$row_brainstorm_ui" \
       -v barch="$row_brainstorm_arch" \
       -v tdd="$row_tdd" '
-    /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+    /^\| Gate \|/ { seen_hdr=1 }
+    /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
     /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
     /^\| tdd \(new TS module\)/ { next }
     /^\| tdd \|/ { print tdd; next }
@@ -1248,7 +1249,8 @@ MD
         -v bui="$row_brainstorm_ui" \
         -v barch="$row_brainstorm_arch" \
         -v tdd="$row_tdd" '
-      /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+      /^\| Gate \|/ { seen_hdr=1 }
+      /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
       /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
       /^\| tdd \(new TS module\)/ { next }
       /^\| tdd \|/ { print tdd; next }
@@ -1261,6 +1263,119 @@ MD
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} second run of Step 3 changed the file — not idempotent"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── The decoy-table fixture (WR-02, 08-REVIEW.md) — proves Step 3's
+  # insertion is correlated with the validated '| Gate |' bindings-table
+  # header, not with the first '|---' line anywhere in the file. Takes the
+  # SAME realistic pre-0008 bindings table the scope-shaped fixture uses and
+  # PREPENDS an unrelated Markdown table (its own header + separator) ahead
+  # of it, so the file's first '|---' line belongs to the unrelated table.
+  cat > "$tmp/AGENTS.md.decoy-table" <<'MD'
+# AGENTS.md — decoy-table fixture (WR-02 regression)
+
+## Unrelated Tooling Reference
+
+| Tool | Purpose |
+|---|---|
+| foo-cli | does foo things |
+| bar-cli | does bar things |
+
+## Gate bindings
+
+| Gate | Bound skill | Scope |
+|---|---|---|
+| brainstorm-ui / brainstorm-architecture | `superpowers:brainstorming` | pre-phase |
+| design-shotgun | `codex-design-shotgun` | pre-phase |
+| design-critique | `codex-design-critique` | pre-phase |
+| tdd | `superpowers:test-driven-development` | per-task |
+| tdd (new TS module) | `codex-ts-declare-first` | per-task |
+| ui-preview | `codex-qa` (preview mode) | per-task |
+| verification | `superpowers:verification-before-completion` | per-task |
+| spec-review | `codex-spec-review` | post-phase |
+| code-review | `superpowers:requesting-code-review` | post-phase |
+| security | `codex-cso` | post-phase |
+| database-security | `codex-database-sentinel-audit` | post-phase |
+| qa | `codex-qa` | post-phase |
+| impeccable-audit | `codex-impeccable-audit` | post-phase |
+| db-pre-launch-audit | `codex-database-sentinel-audit` | finishing |
+| branch-close | `superpowers:finishing-a-development-branch` | finishing |
+MD
+
+  # Self-guard (round 2's consensus rationale, reused): assert the fixture's
+  # OWN shape BEFORE trusting the assertions below — the file's first
+  # '|---' line must precede the '| Gate |' header, i.e. the decoy really is
+  # in front. If a future edit reorders the fixture this guard fails loudly
+  # instead of letting the WR-02 assertions pass for the wrong reason.
+  local decoy_first_sep_line decoy_gate_hdr_line_pre
+  decoy_first_sep_line="$(grep -n '^|---' "$tmp/AGENTS.md.decoy-table" | head -1 | cut -d: -f1)"
+  decoy_gate_hdr_line_pre="$(grep -n '^| Gate |' "$tmp/AGENTS.md.decoy-table" | head -1 | cut -d: -f1)"
+  if [ -n "$decoy_first_sep_line" ] && [ -n "$decoy_gate_hdr_line_pre" ] \
+     && [ "$decoy_first_sep_line" -lt "$decoy_gate_hdr_line_pre" ]; then
+    echo "  ${GREEN}PASS${RESET} decoy-table fixture self-guard: first '|---' line ($decoy_first_sep_line) precedes '| Gate |' header ($decoy_gate_hdr_line_pre) — decoy really is in front"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} decoy-table fixture self-guard failed — first '|---' line ($decoy_first_sep_line) does not precede '| Gate |' header ($decoy_gate_hdr_line_pre); fixture has rotted"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Apply the SAME Step 3 pass (production logic, template-sourced rows) to
+  # the decoy-table fixture.
+  ( cd "$tmp" && awk \
+      -v pr="$row_plan_review" \
+      -v bui="$row_brainstorm_ui" \
+      -v barch="$row_brainstorm_arch" \
+      -v tdd="$row_tdd" '
+    /^\| Gate \|/ { seen_hdr=1 }
+    /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
+    /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
+    /^\| tdd \(new TS module\)/ { next }
+    /^\| tdd \|/ { print tdd; next }
+    { print }
+  ' AGENTS.md.decoy-table > AGENTS.md.decoy-table.tmp && mv AGENTS.md.decoy-table.tmp AGENTS.md.decoy-table )
+
+  # The plan-review row lands in the BINDINGS table, not the decoy: its line
+  # number must be GREATER than the '| Gate |' header's. A plain integer
+  # comparison, not an awk range one-liner — trivially verifiable by eye.
+  local decoy_pr_line decoy_gate_hdr_line_post
+  decoy_pr_line="$(grep -n '^| plan-review' "$tmp/AGENTS.md.decoy-table" | head -1 | cut -d: -f1)"
+  decoy_gate_hdr_line_post="$(grep -n '^| Gate |' "$tmp/AGENTS.md.decoy-table" | head -1 | cut -d: -f1)"
+  if [ -n "$decoy_pr_line" ] && [ -n "$decoy_gate_hdr_line_post" ] \
+     && [ "$decoy_pr_line" -gt "$decoy_gate_hdr_line_post" ]; then
+    echo "  ${GREEN}PASS${RESET} decoy-table fixture: plan-review row (line $decoy_pr_line) lands AFTER the '| Gate |' header (line $decoy_gate_hdr_line_post) — the bindings table, not the decoy"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} decoy-table fixture: plan-review row (line $decoy_pr_line) did NOT land after the '| Gate |' header (line $decoy_gate_hdr_line_post) — WR-02 (row misinserted into the decoy table)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The unrelated table is untouched: zero plan-review lines appear BEFORE
+  # the '| Gate |' header.
+  local decoy_pr_before_hdr
+  decoy_pr_before_hdr="$(sed -n "1,${decoy_gate_hdr_line_post}p" "$tmp/AGENTS.md.decoy-table" 2>/dev/null | grep -c '^| plan-review')"
+  if [ "$decoy_pr_before_hdr" = "0" ]; then
+    echo "  ${GREEN}PASS${RESET} decoy-table fixture: unrelated table has zero plan-review lines before the '| Gate |' header"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} decoy-table fixture: $decoy_pr_before_hdr plan-review line(s) found before the '| Gate |' header — row landed in the unrelated table"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The bindings table still reaches 16 rows / 16 distinct gates —
+  # _table_data_rows is already scoped to start at the first '| Gate |'
+  # line, so it correctly skips the decoy table regardless of where the
+  # pass actually inserted the row.
+  local decoy_post_row_count decoy_post_gate_count
+  decoy_post_row_count="$(_table_data_rows "$tmp/AGENTS.md.decoy-table" | grep -c '^|')"
+  decoy_post_gate_count="$(_table_data_rows "$tmp/AGENTS.md.decoy-table" \
+    | awk -F'|' '{print $2}' | tr '/' '\n' \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | sort -u | grep -c .)"
+  if [ "$decoy_post_row_count" -eq 16 ] && [ "$decoy_post_gate_count" -eq 16 ]; then
+    echo "  ${GREEN}PASS${RESET} decoy-table fixture: bindings table still reaches 16 rows / 16 distinct gates"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} decoy-table fixture: bindings table row/gate count wrong (rows=$decoy_post_row_count, gates=$decoy_post_gate_count, expected 16/16)"
     FAIL=$((FAIL+1))
   fi
 
@@ -1289,7 +1404,8 @@ MD
         -v bui="$row_brainstorm_ui" \
         -v barch="$row_brainstorm_arch" \
         -v tdd="$row_tdd" '
-      /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+      /^\| Gate \|/ { seen_hdr=1 }
+      /^\|---/ && seen_hdr && !ins_pr { print; print pr; ins_pr=1; next }
       /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
       /^\| tdd \(new TS module\)/ { next }
       /^\| tdd \|/ { print tdd; next }
