@@ -3296,6 +3296,282 @@ test_repo_layout() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0009 — Region-aware §11 placement  (TEST-02 / TEST-03)
+#
+# ⚠⚠ THIS SUITE IS **EXPECTED TO BE RED** UNTIL PLAN 09-04 SHIPS
+#     migrations/0009-spec-11-region-aware-placement.md. THAT IS THE POINT.
+#
+# ROADMAP hard ordering 2 ("RED before GREEN"). Every assertion below is written
+# against a migration document that does not exist yet, so the three extraction
+# gates report empty-extraction failures and every case reports "not asserted".
+#
+#   DO NOT create or stub 0009 to make this pass — that is 09-04's job.
+#   DO NOT weaken these assertions.
+#   DO NOT add a "skip if the document is missing" guard. A conditional skip is
+#   PRECISELY how a suite that never fails ships as coverage — the Phase 8
+#   defect class this phase exists to close (D-36: "non-empty is not the same
+#   as correct"; 08-05 shipped two assertions that could never match and read
+#   as coverage). When 0009 lands, this function turns GREEN on its own.
+#
+# FIXTURE IDIOM IS LOCKED (D-34): ten case labels inside ONE function, each
+# synthesized at test time via `printf` into `$tmp`. This is this repo's native
+# idiom (`test_migration_0001`) and the documented fallback in
+# migrations/test-fixtures/README.md § "Limits" (fixtures cannot capture state
+# outside the repo, e.g. ~/.codex/skills/). Do NOT port claude-workflow's
+# per-fixture directory layout (test-fixtures/0029/01-.../{setup,verify}.sh) —
+# README.md § "Why no static fixture files" rejects exactly that, and porting it
+# would introduce a second, competing fixture idiom.
+#
+# UPSTREAM REFERENCE IS PINNED (D-48): claude-workflow @
+#   8520f90d235e0c50b0484b170d595ab6f2cd1173
+# Fixture INTENT and content-generation logic are adopted from
+# migrations/test-fixtures/0029/{common-setup.sh,common-verify.sh,NN-*/setup.sh}
+# at that SHA; the layout is rejected. Read with `git -C ../claude-workflow show
+# 8520f90:<path>`. Upstream HEAD has already moved past this pin (it moved twice
+# during phase 9's planning alone); any later upstream change is a deliberate
+# follow-up diff, not an invisible mid-execution scope change.
+#
+# SUBSHELL WRAPPING IS MANDATORY (T-09-07): two extracted paths deliberately
+# `exit 3` (State D conflict; corrupt mirror). An un-subshelled eval would
+# terminate the whole harness mid-suite and hide every later assertion.
+# CODEX_HOME + cwd are always redirected into $tmp (T-09-10 / T-09-11): the
+# fixtures perform real file surgery and deliberately build corrupt mirrors, so
+# pointing them at the real repo or the real ~/.codex would rewrite the
+# developer's own AGENTS.md / corrupt their installed scaffolder.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Helpers for test_migration_0009. File-scope with a `_m0009_` prefix, following
+# this harness's established convention for per-test helpers (`_cpr_case`,
+# `_cpr_check_resolved`, `_table_data_rows`, …) — shell has no function-local
+# functions, and the prefix keeps them out of the shared namespace.
+
+# _m0009_mk_fake_home <tmp> <name> <mirror_src>
+# Builds a fake ${CODEX_HOME} carrying the spec mirror at the installed path, so
+# an extracted block's `${CODEX_HOME:-$HOME/.codex}`-derived MIRROR/SPEC_BLOCK
+# resolves to a controlled file under $tmp instead of the developer's real
+# ~/.codex (T-09-10). Prints the fake home's path.
+_m0009_mk_fake_home() {
+  local h="$1/$2/codexhome"
+  local m="$h/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors"
+  mkdir -p "$m"
+  cp "$3" "$m/11-coding-discipline-0.4.0.md"
+  printf '%s\n' "$h"
+}
+
+# _m0009_mk_project <tmp> <name>
+# Builds a scratch project root satisfying 0009's pre-flight guards other than
+# the mirror: a `.git` directory (`test -d .git`) and a SKILL.md at
+# `version: 0.6.0` (the D-39 version gate, which accepts both 0.6.0 and 0.7.0 so
+# an idempotent re-run does not abort). Prints the project root's path.
+_m0009_mk_project() {
+  local p="$1/$2/proj"
+  mkdir -p "$p/.git" "$p/skills/agentic-apps-workflow"
+  printf -- '---\nname: agentic-apps-workflow\nversion: 0.6.0\nimplements_spec: 0.4.0\ndescription: synthetic fixture for migration 0009 (D-39 version gate)\n---\n\n## Stub\n' \
+    > "$p/skills/agentic-apps-workflow/SKILL.md"
+  printf '%s\n' "$p"
+}
+
+# _m0009_ok <rc> <label> — PASS iff rc is 0.
+_m0009_ok() {
+  if [ "$1" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} $2"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $2"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# _m0009_fail <label> — unconditional FAIL. Used when an extraction gate is down
+# so a case reports FAILED rather than silently vanishing. A case that quietly
+# disappears when its input is missing is the dead-assertion defect itself.
+_m0009_fail() {
+  echo "  ${RED}FAIL${RESET} $1"
+  FAIL=$((FAIL+1))
+}
+
+test_migration_0009() {
+  echo ""
+  echo "${YELLOW}=== Migration 0009 — Region-aware §11 placement ===${RESET}"
+
+  local mirror="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  if [ ! -f "$mirror" ]; then
+    echo "  ${RED}FAIL${RESET} mirror missing: skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local MIGRATION_0009="$REPO_ROOT/migrations/0009-spec-11-region-aware-placement.md"
+  local PROV_LIT='<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->'
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Extract 0009's own shell from 0009's own document (TEST-01), and gate every
+  # consumer on a shape assertion first (D-36). Ported from the pin's
+  # common-verify.sh, which sequences all three extractions + guards BEFORE any
+  # fixture runs, so a document-shape drift reports as "extraction wrong" rather
+  # than as a confusing downstream surgery failure.
+  # ───────────────────────────────────────────────────────────────────────────
+  local pf_block idem_block apply_block
+  pf_block="$(extract_preflight_block "$MIGRATION_0009" 2>/dev/null)"
+  idem_block="$(extract_step_block "$MIGRATION_0009" 1 "Idempotency check" 2>/dev/null)"
+  apply_block="$(extract_step_block "$MIGRATION_0009" 1 Apply 2>/dev/null)"
+
+  local pf_ok=1 idem_ok=1 apply_ok=1
+
+  # Pre-flight shape guard.
+  #
+  # ANCHORED ON THE MIRROR PATH, deliberately — NOT on `test -s`, and NOT on a
+  # variable name. Two reasons, both load-bearing:
+  #
+  #  1. The pin's common-verify.sh states the rule explicitly: anchor the shape
+  #     check on what identifies the block STRUCTURALLY, "NOT on the specific
+  #     guard operators (`test -s`, the tail-sentinel grep) that fixture 10
+  #     exists to mutation-test. Coupling this shape check to the guard text
+  #     itself would make reverting a guard trip the loader for EVERY fixture
+  #     that sources this file, not just fixture 10 — masking the real signal
+  #     behind a loader error instead." Case 10 below mutation-tests exactly
+  #     those two operators, so gating the loader on one of them would hide the
+  #     signal case 10 exists to produce.
+  #  2. Upstream names this variable SPEC_BLOCK; this repo's 0004 precedent
+  #     names it MIRROR, and 09-04 may legitimately pick either. The mirror
+  #     PATH is invariant under that choice; a variable name is not.
+  #
+  # `test -s` and the tail-sentinel are still asserted — as explicit D-28.1
+  # document-contract assertions immediately below, where a missing guard names
+  # itself instead of masquerading as an extractor failure.
+  assert_extracted_shape "0009 Pre-flight" "$pf_block" \
+    'spec-mirrors/11-coding-discipline-0.4.0.md' || pf_ok=0
+
+  # D-28.1 contract, layer 1 (zero-byte): `test -f` alone passes a zero-byte
+  # mirror, and D-27 makes the mirror the SOLE re-injection source — so a
+  # zero-byte mirror would strip §11 and inject nothing, silently committing a
+  # maimed AGENTS.md on every heal. Asserted behaviorally by case 10(a).
+  case "$pf_block" in
+    *'test -s'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+    *)           _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+  esac
+
+  # D-28.1 contract, layer 2 (truncation): the mirror's heading is on L1, so a
+  # tail-truncated mirror satisfies `test -s` AND Apply's pre-`mv` heading grep.
+  # Only a tail sentinel closes that gap. Verified present at
+  # 11-coding-discipline-0.4.0.md:57 (last of four `### ` sections, 79 lines).
+  # This is NOT D-25's rejected content sentinel: that coupled a STRIP
+  # TERMINATOR to §11's last prose line (runaway-strip hazard). This is a
+  # read-only integrity check on a different file, anchored to a structural
+  # heading; it bounds nothing and cannot run away. Asserted by case 10(b).
+  case "$pf_block" in
+    *'Goal-Driven Execution'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
+    *)                         _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
+  esac
+
+  # Idempotency-check shape guard: it must be identifiably the provenance-aware
+  # region check.
+  assert_extracted_shape "0009 Step 1 Idempotency check" "$idem_block" \
+    'spec-source: agenticapps-workflow-core' || idem_ok=0
+
+  # Apply shape guard: `gitnexus:start` is D-36's exact antidote here. A block
+  # that carries no marker alternation is NOT Step 1's region-aware apply,
+  # whatever else it is — 0001's and 0004's naive `/^## / && !done` apply blocks
+  # both extract cleanly and both fail this guard, which is the point.
+  assert_extracted_shape "0009 Step 1 Apply" "$apply_block" \
+    'gitnexus:start' || apply_ok=0
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # The four-state DOUBLE-SIDED idempotency table (D-38 / 09-VALIDATION.md).
+  #
+  # A check asserted in only one direction catches nothing: a too-permissive
+  # check skips unapplied work, a too-strict one re-applies applied work. Each
+  # state gets its own directory because the extracted check hardcodes
+  # `AGENTS.md`, and assert_check cd's into the fixture dir.
+  # ───────────────────────────────────────────────────────────────────────────
+
+  # State A — correctly anchored block, current provenance, region present but
+  # LATER in the file. This repo's own real AGENTS.md shape (§11 at L18, region
+  # at L271-313) ⇒ this host is SAFE and the defect is LATENT.
+  local sa="$tmp/state-a"; mkdir -p "$sa"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Project Overview\nStuff.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus\n\n## Always Do\n- x\n<!-- gitnexus:end -->\n'
+  } > "$sa/AGENTS.md"
+
+  # State B — provenance present BUT the block sits INSIDE the region.
+  local sb="$tmp/state-b"; mkdir -p "$sb"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Always Do\n- MUST run impact analysis.\n<!-- gitnexus:end -->\n\n'
+    printf '## Workflow\nProject stuff.\n'
+  } > "$sb/AGENTS.md"
+
+  # State C — no provenance at all.
+  local sc="$tmp/state-c"; mkdir -p "$sc"
+  printf '# Title\n\n## Some Section\n\nbody\n' > "$sc/AGENTS.md"
+
+  # D-32 variant — UNTERMINATED `<!-- gitnexus:start -->` (no matching end) with
+  # provenance after it. No separate branch and no extra predicate: it rides on
+  # State B's region predicate, which is exactly why D-32 chose the fail-closed
+  # shape. Rejected alternatives: fail-open (leaves the block inside something
+  # gitnexus may still regenerate — the very defect this closes) and exit 3
+  # (adds a fifth state and blocks the version bump on a possibly benign shape).
+  local sbu="$tmp/state-b-unterminated"; mkdir -p "$sbu"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Always Do\n- MUST run impact analysis.\n'
+  } > "$sbu/AGENTS.md"
+
+  if [ "$idem_ok" = "1" ]; then
+    # State A ⇒ applied (exit 0 → skip). This is ALSO MIGR-07's guard: a
+    # healthy-but-off-anchor block must be left alone, and per D-31 that falls
+    # out of THIS predicate rather than a special case — do not add code to
+    # detect "off-anchor but healthy", and do not move it.
+    assert_check "state A: anchored + current provenance + region later → skip (D-31/MIGR-07)" \
+      "$idem_block" "$sa" "applied"
+
+    # State B ⇒ not-applied (exit NON-ZERO **despite provenance being present**).
+    #
+    # ⚠ THIS ROW IS THE WHOLE POINT (D-38). The design calls this conjunction
+    # exactly that: provenance alone must NOT short-circuit the heal. The check
+    # must be `provenance present AND NOT in-region`, not `provenance present`.
+    # A check that returns `applied` here IS THE DEFECT — it would skip a block
+    # sitting inside a region that `gitnexus analyze` will later regenerate and
+    # destroy. Expected argument is `not-applied`; if a future edit "fixes" this
+    # to `applied` to make something pass, it has reintroduced the bug.
+    assert_check "state B: provenance present BUT block in region → heal, not skip (D-38 — the whole point)" \
+      "$idem_block" "$sb" "not-applied"
+
+    # State C ⇒ not-applied. Plain absent case.
+    assert_check "state C: no provenance at all → inject" \
+      "$idem_block" "$sc" "not-applied"
+
+    # D-32 fail-closed ⇒ not-applied, via State B's predicate.
+    assert_check "state B (D-32 variant): unterminated gitnexus:start → fails closed, treated as in-region" \
+      "$idem_block" "$sbu" "not-applied"
+  else
+    _m0009_fail "state A: anchored + current provenance + region later → skip (D-31/MIGR-07) — NOT ASSERTED: 0009's Step 1 Idempotency check could not be extracted"
+    _m0009_fail "state B: provenance present BUT block in region → heal, not skip (D-38 — the whole point) — NOT ASSERTED: extraction failed"
+    _m0009_fail "state C: no provenance at all → inject — NOT ASSERTED: extraction failed"
+    _m0009_fail "state B (D-32 variant): unterminated gitnexus:start → fails closed — NOT ASSERTED: extraction failed"
+  fi
+
+  # State D — a `## Coding Discipline (NON-NEGOTIABLE)` heading with NO
+  # provenance — is deliberately NOT asserted here. Per D-30 branch 1 and
+  # 09-VALIDATION.md's table it is gated by the APPLY's conflict branch
+  # (`exit 3`, file untouched), not by the idempotency check. It is asserted by
+  # case `05-unmanaged-conflict` below. The four-state table is therefore
+  # complete across this function: A/B/C (+ D-32) here, D at case 05.
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -3333,6 +3609,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
   test_migration_0008
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
+  test_migration_0009
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
