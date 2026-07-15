@@ -40,13 +40,15 @@ source. GSD roadmap tracking starts at Phase 8.
 
 **Success Criteria** (what must be TRUE):
 
-  1. A phase with plans and no reviews is blocked before its first code-touching edit
+  1. A phase with plans and no reviews is blocked before its first code-touching edit, via an **agent-mediated programmatic check**: the verifier returns exit 2 and the ritual instructs a hard stop *once the verifier runs*
   2. A phase that already shipped (`*-SUMMARY.md` present) is allowed — never retroactively blocked
   3. A legacy bare-number phase is allowed
   4. `codex-plan-review` produces `<NN>-REVIEWS.md` carrying at least 2 independent external reviewers, and refuses rather than emitting a one-reviewer file
   5. Both escape hatches (`GSD_SKIP_REVIEWS=1`, `multi-ai-review-skipped`) allow the edit
   6. The resolver selects the active phase in the spec's documented order and fails open when nothing resolves
   7. `migrations/run-tests.sh` passes, including a `test_migration_0008` that is a no-op on second run
+
+<sub>**Deviation notice — criterion 1 was relaxed on 2026-07-14, before execution.** It originally read "A phase with plans and no reviews is blocked before its first code-touching edit" — an unconditional block. Reworded from an unconditional block per D-02; see ADR-0009 decision 9. The mechanism is `AGENTS.md` ritual text plus a verifier script: `AGENTS.md` is always in context, but nothing *executes* it, so an agent that omits the invocation is not blocked. D-02 defers the native `~/.codex/hooks.json` `PreToolUse` surface — pointed at this same verifier, which is why the verifier carries a `--file` argument — to its own phase; when it lands, criterion 1 can be restated as an unconditional block. Amended during replanning after Cross-AI plan review (`08-REVIEWS.md` round 2, Codex + OpenCode agreed) so the reviewed contract is the contract used at closure. **Phase closure must not claim the original unconditional criterion 1 was met.**</sub>
 
 **Plans**: 6 plans in 5 waves
 
