@@ -75,8 +75,7 @@ from upstream and were ported faithfully.
 3. **No assertion weakening.** As in 09-04: the fixtures must be satisfied by the
    code, never the reverse.
 
-**Requirements**: ANCHOR-05, MIGR-01, MIGR-04, MIGR-06, MIGR-07, MIGR-08, MIGR-09,
-TEST-02, TEST-03, DOC-01
+**Requirements**: ANCHOR-05, MIGR-01, MIGR-04, MIGR-06, MIGR-07, MIGR-08, MIGR-09, TEST-02, TEST-03, DOC-01
 
 **Success Criteria** (what must be TRUE):
 
@@ -141,9 +140,7 @@ sequence matters):
    document-sourced extraction replaces the `run-tests.sh:119` copy rather
    than patching it.
 
-**Requirements**: ANCHOR-01, ANCHOR-02, ANCHOR-03, ANCHOR-04, ANCHOR-05,
-MIGR-01, MIGR-02, MIGR-03, MIGR-04, MIGR-05, MIGR-06, MIGR-07, MIGR-08,
-MIGR-09, TEST-01, TEST-02, TEST-03, TEST-04, SETUP-01, DOC-01, DOC-02
+**Requirements**: ANCHOR-01, ANCHOR-02, ANCHOR-03, ANCHOR-04, ANCHOR-05, MIGR-01, MIGR-02, MIGR-03, MIGR-04, MIGR-05, MIGR-06, MIGR-07, MIGR-08, MIGR-09, TEST-01, TEST-02, TEST-03, TEST-04, SETUP-01, DOC-01, DOC-02
 
 **Success Criteria** (what must be TRUE):
 
