@@ -3960,6 +3960,174 @@ test_migration_0009() {
     _m0009_fail "10-corrupt-mirror-refused (c) healthy mirror — NOT ASSERTED: Pre-flight extraction failed"
   fi
 
+  # ═════════════════════════════════════════════════════════════════════════
+  # 09.1-04 Task 1 — the three reproduced runaway-strip fixtures (CR-01/ANCHOR-05).
+  #
+  # Each is a fixture that has NOT YET been observed RED against the current,
+  # unfixed 0009 the moment it is written is an assertion, not evidence. All
+  # three MUST fail against this plan's unmodified `migrations/0009-*.md`:
+  # the strip's exit condition (`in_block && swallowed_own_h2 && (...)`) is
+  # gated behind `swallowed_own_h2`, which ONLY the EXACT
+  # `## Coding Discipline (NON-NEGOTIABLE)` heading ever sets. When that exact
+  # heading never appears after a provenance line, the exit rule can never
+  # fire, `in_block` latches at 1 forever, and `in_block { next }` consumes
+  # every remaining line to EOF — silently, with exit 0. Fixed by 09.1-05.
+  #
+  # All three assert the SAME four-part contract (Q1 ruling — REFUSE, not
+  # heal): exit 3, AGENTS.md byte-identical, a diagnostic naming the offending
+  # provenance line, and NOT the misleading "produced no output" message that
+  # `0009:332` would emit for an unrelated failure class (disk full / awk
+  # error) — that message is false for this failure and would misdirect an
+  # operator. Gated on `[ "$apply_ok" = "1" ]`, mirroring every case above: a
+  # down extraction gate reports FAILED via `_m0009_fail`, never silence.
+  # ═════════════════════════════════════════════════════════════════════════
+  if [ "$apply_ok" = "1" ]; then
+
+    # ── 13-runaway-drifted-h2 (CR-01 — the exact 09-CR-01-REPRO.md shape) ──
+    # BEFORE: provenance present, H2 drifted to
+    # "## Coding Discipline (RENAMED — drifted)", followed by two real project
+    # headings ("## Critical Project Rules", "## Deployment"). 16 lines in.
+    # Reproduces 09-CR-01-REPRO.md verbatim, not an approximation: that repro
+    # recorded 16 → 4 lines, with everything from the provenance line to EOF
+    # destroyed while all three of 0009's own post-strip guards report success.
+    p="$(_m0009_mk_project "$tmp" 13)"; h="$(_m0009_mk_fake_home "$tmp" 13 "$mirror")"
+    {
+      printf '# My Project\n\nIntro prose.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      printf '## Coding Discipline (RENAMED — drifted)\n'
+      printf 'Some body text describing the drifted heading.\n\n'
+      printf '## Critical Project Rules\n'
+      printf 'Critical rules body text that must not be destroyed.\n\n'
+      printf '## Deployment\n'
+      printf 'Deployment body text line 1.\n'
+      printf 'Deployment body text line 2.\n'
+      printf 'Deployment body text line 3.\n\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "13-runaway-drifted-h2: Apply refuses with exit 3 on a drifted H2 (CR-01) — before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines, got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "13-runaway-drifted-h2: AGENTS.md is BYTE-IDENTICAL after refusal — the assertion that actually catches CR-01 (current 0009 truncates the file)"
+
+    case "$out" in
+      *"$PROV_LIT"*) _m0009_ok 0 "13-runaway-drifted-h2: diagnostic names the offending provenance line" ;;
+      *)              _m0009_ok 1 "13-runaway-drifted-h2: diagnostic names the offending provenance line" ;;
+    esac
+
+    case "$out" in
+      *'produced no output'*) _m0009_ok 1 "13-runaway-drifted-h2: diagnostic is NOT the misleading 'produced no output' message (0009:332 is the wrong branch for this failure class)" ;;
+      *)                       _m0009_ok 0 "13-runaway-drifted-h2: diagnostic is NOT the misleading 'produced no output' message (0009:332 is the wrong branch for this failure class)" ;;
+    esac
+
+    grep -q -x -- '## Critical Project Rules' "$p/AGENTS.md" 2>/dev/null && grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "13-runaway-drifted-h2: surviving-content check — '## Critical Project Rules' and '## Deployment' both present (names the harm as data loss, redundant with cmp but reads as content destruction)"
+
+    # ── 14-runaway-orphan-provenance (0009:282's own acknowledged state) ──
+    # BEFORE: provenance present, NO §11 heading at all, and NO following
+    # `## ` anywhere — the tail runs straight to EOF. 0009's own insert-pass
+    # comment (`:282-285`) documents that the migration itself can PRODUCE
+    # this exact state ("the rest of the file, plus an orphaned provenance
+    # line") when the mirror is empty; 09-REVIEW.md lists it as reachable.
+    # RESEARCH reproduced 8 lines in → 4 lines out.
+    p="$(_m0009_mk_project "$tmp" 14)"; h="$(_m0009_mk_fake_home "$tmp" 14 "$mirror")"
+    {
+      printf '# My Project\n\nIntro prose.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      printf 'Some content that follows the orphaned provenance line.\n'
+      printf 'More content that would be silently destroyed.\n'
+      printf 'Final line of content — no heading anywhere below this point.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "14-runaway-orphan-provenance: Apply refuses with exit 3 on an orphaned provenance line — before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines, got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "14-runaway-orphan-provenance: AGENTS.md is BYTE-IDENTICAL after refusal"
+
+    case "$out" in
+      *"$PROV_LIT"*) _m0009_ok 0 "14-runaway-orphan-provenance: diagnostic names the offending provenance line" ;;
+      *)              _m0009_ok 1 "14-runaway-orphan-provenance: diagnostic names the offending provenance line" ;;
+    esac
+
+    case "$out" in
+      *'produced no output'*) _m0009_ok 1 "14-runaway-orphan-provenance: diagnostic is NOT the misleading 'produced no output' message" ;;
+      *)                       _m0009_ok 0 "14-runaway-orphan-provenance: diagnostic is NOT the misleading 'produced no output' message" ;;
+    esac
+
+    # ── 15-mixed-provenance-unresolved (the END guard's ONLY falsifiability proof) ──
+    # BEFORE: provenance #1 + a HEALTHY block (exact H2 + full mirror body) +
+    # a real terminating heading (`## Workflow`) + provenance #2 + a DRIFTED
+    # H2 ("## Coding Discipline (RENAMED — drifted)") + body + `## Deployment`
+    # + EOF.
+    #
+    # WHY THIS FIXTURE EXISTS: the file-global refuse gate at the top of
+    # Apply (`grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md &&
+    # ! grep -qE "$PROV_RE" AGENTS.md`) checks the WHOLE FILE, not per-block.
+    # In this shape the exact H2 IS present — block 1 has it — so
+    # `! grep -qE "$PROV_RE"` is false and the conjunction never fires. The
+    # refuse gate is BLIND to this shape. It falls through to the strip,
+    # which heals block 1 correctly but then latches on block 2's drifted H2
+    # exactly as in fixture 13, this time consuming `## Deployment` and
+    # everything after it. Only the END guard
+    # (`END { if (unresolved || (in_block && !swallowed_own_h2)) exit 4 }`,
+    # 09.1-05's fix) can catch this shape — without this fixture that guard
+    # is defense-in-depth theater, never observed catching anything.
+    p="$(_m0009_mk_project "$tmp" 15)"; h="$(_m0009_mk_fake_home "$tmp" 15 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Workflow\nFirst project section — must survive.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      printf '## Coding Discipline (RENAMED — drifted)\n'
+      printf 'Body content under the drifted heading in the second block.\n\n'
+      printf '## Deployment\n'
+      printf 'Deployment body text — the harm the END guard exists to prevent.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "15-mixed-provenance-unresolved: Apply refuses with exit 3 on a shape the file-global refuse gate cannot see — before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines, got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "15-mixed-provenance-unresolved: AGENTS.md is BYTE-IDENTICAL after refusal"
+
+    case "$out" in
+      *"$PROV_LIT"*) _m0009_ok 0 "15-mixed-provenance-unresolved: diagnostic names the offending provenance line" ;;
+      *)              _m0009_ok 1 "15-mixed-provenance-unresolved: diagnostic names the offending provenance line" ;;
+    esac
+
+    case "$out" in
+      *'produced no output'*) _m0009_ok 1 "15-mixed-provenance-unresolved: diagnostic is NOT the misleading 'produced no output' message" ;;
+      *)                       _m0009_ok 0 "15-mixed-provenance-unresolved: diagnostic is NOT the misleading 'produced no output' message" ;;
+    esac
+
+    grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "15-mixed-provenance-unresolved: '## Deployment' survives — its absence is the harm the END guard (09.1-05) exists to prevent"
+
+  else
+    _m0009_fail "13-runaway-drifted-h2: Apply refuses with exit 3 on a drifted H2 (CR-01) — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: diagnostic names the offending provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: diagnostic is NOT the misleading 'produced no output' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: surviving-content check — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: Apply refuses with exit 3 on an orphaned provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: diagnostic names the offending provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: diagnostic is NOT the misleading 'produced no output' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: Apply refuses with exit 3 on a shape the file-global refuse gate cannot see — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: diagnostic names the offending provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: diagnostic is NOT the misleading 'produced no output' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: '## Deployment' survives — NOT ASSERTED: extraction failed"
+  fi
+
   # ── no-scaffolder-tree (T-08-38 port — the criterion-0 regression guard) ──
   # Ports 0008's OWN `no-scaffolder-tree` fixture (`run-tests.sh:1638-1707`,
   # named without a number to match 0008's own naming — numbered fixtures
