@@ -3763,6 +3763,45 @@ test_migration_0009() {
     [ -n "$prov_line" ] && [ "$prov_line" -gt 3 ]
     _m0009_ok $? "06-no-heading-eof: block was APPENDED at EOF (provenance at line ${prov_line:-ABSENT}, below the 3 lines of pre-existing prose)"
 
+    # ── 09-two-provenance-heal (D-46.3 — the `swallowed_own_h2` stale-state guard) ──
+    # BEFORE: TWO provenance+block pairs, each properly terminated by a real
+    # project `## ` heading (not back-to-back). Must heal down to exactly one.
+    #
+    # THE MECHANISM THIS GUARDS, PRECISELY: the strip pass must swallow each
+    # block's OWN `## Coding Discipline (NON-NEGOTIABLE)` heading before it starts
+    # hunting for that block's terminator — otherwise the block's own heading
+    # terminates its own strip immediately. That is what `swallowed_own_h2` is for.
+    # But it MUST RESET at the terminator. If it is stale-true when the SECOND
+    # provenance line arrives, the second block's own `## Coding Discipline`
+    # heading is mistaken for ITS terminator, so the strip stops there and the
+    # second block's body is left orphaned in the output — two blocks in, two
+    # blocks out, healed nothing. Upstream hit this and fixed it; without this
+    # fixture we would not catch the regression.
+    #
+    # The surviving-headings assertion is the other half: a terminator that
+    # over-runs would eat `## Workflow` / `## Deployment` along with the block.
+    p="$(_m0009_mk_project "$tmp" 09)"; h="$(_m0009_mk_fake_home "$tmp" 09 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n'
+      printf '## Workflow\nFirst project section.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n'
+      printf '## Deployment\nSecond project section.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "09-two-provenance-heal: healed down to exactly ONE provenance line (found $nprov) — swallowed_own_h2 reset at the terminator"
+
+    grep -q -x -- '## Workflow' "$p/AGENTS.md" 2>/dev/null \
+      && grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "09-two-provenance-heal: both terminating '## ' headings survived (## Workflow, ## Deployment) — the strip did not over-run"
+
   else
     # The Apply extraction gate is DOWN. Report every case as FAILED rather than
     # skipping it. A case that silently vanishes when its input is missing is the
@@ -3774,6 +3813,126 @@ test_migration_0009() {
     _m0009_fail "04-no-agentsmd — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "05-unmanaged-conflict — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "09-two-provenance-heal — NOT ASSERTED: Step 1 Apply extraction failed"
+  fi
+
+  # ── 07-prose-mention-not-a-region (D-46.1 — forces D-21's ANCHORED regex) ──
+  # BEFORE: an HTML comment near the top MENTIONS the marker inside backticks, so
+  # the line is NOT exactly `<!-- gitnexus:start -->`; the §11 block is correctly
+  # anchored right after that comment; there is NO real region anywhere.
+  #
+  # THIS CASE IS A DEAD-ASSERTION DETECTOR BY DESIGN (09-VALIDATION.md Dimension 8
+  # item 4). A SUBSTRING marker match passes every OTHER fixture in this suite and
+  # fails ONLY here: it would see the prose mention, judge the file in-region, and
+  # return `not-applied` — proposing to "heal" a perfectly healthy file by moving
+  # §11 above a region that does not exist. The anchored `/^...$/` regex returns
+  # `applied` (skip). If this case ever passes with a substring match, the fixture
+  # is wrong and must be rewritten, not the assertion relaxed.
+  if [ "$idem_ok" = "1" ]; then
+    local s07="$tmp/state-07"; mkdir -p "$s07"
+    {
+      printf '<!--\n'
+      printf '  This block MUST stay ABOVE the `<!-- gitnexus:start -->` region below.\n'
+      printf '  This is prose ONLY — this fixture file has no real region.\n'
+      printf -- '-->\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff. No GitNexus region anywhere in this file.\n'
+    } > "$s07/AGENTS.md"
+    assert_check "07-prose-mention-not-a-region: a prose mention of the marker is NOT a region → skip (D-21 anchored regex)" \
+      "$idem_block" "$s07" "applied"
+  else
+    _m0009_fail "07-prose-mention-not-a-region — NOT ASSERTED: Step 1 Idempotency check extraction failed"
+  fi
+
+  # ── 08-rollback-region-led (D-46.2, kept even under D-47) ──
+  # 0009's Rollback is `git checkout AGENTS.md` (D-47), so the region-eating-
+  # rollback bug class is STRUCTURALLY UNREACHABLE here — there is no terminator
+  # to get wrong. This case is therefore a REGRESSION GUARD ON THAT CHOICE, and it
+  # is asserted against the migration DOCUMENT rather than by executing awk.
+  #
+  # Its purpose is to fail loudly if a future author "improves" Rollback into the
+  # custom awk that upstream's fixture 08 exists to catch a file-destroying bug in
+  # (running that awk on a healed region-led file eats the start marker and the
+  # region's real content, leaving an orphaned, unpaired `<!-- gitnexus:end -->` —
+  # verified empirically upstream, and replayed as 09-01's counter-case B).
+  #
+  # Scoped from Step 1's `**Rollback:**` line to `### Step 2` deliberately, rather
+  # than via extract_step_block: with no fence inside Step 1's Rollback, that
+  # helper's `want` flag would stay armed past `### Step 2` and latch onto Step 2's
+  # Apply fence, so a "no awk here" assertion would pass by inspecting the WRONG
+  # block. (Harmless for 0009's real consumers — Apply and Idempotency check both
+  # have fences inside their own step — and assert_extracted_shape would catch it
+  # regardless. Noted, not fixed: 09-02's helper is out of this plan's scope.)
+  local rb_scope
+  rb_scope="$(awk '
+    index($0, "### Step 1") == 1 { in1=1; next }
+    index($0, "### Step 2") == 1 { exit }
+    in1 && index($0, "**Rollback:**") == 1 { r=1 }
+    r { print }
+  ' "$MIGRATION_0009" 2>/dev/null)"
+
+  case "$rb_scope" in
+    *'git checkout AGENTS.md'*) _m0009_ok 0 "08-rollback-region-led: Step 1 Rollback is 'git checkout AGENTS.md' (D-47 — structurally immune, no terminator to get wrong)" ;;
+    *)                          _m0009_ok 1 "08-rollback-region-led: Step 1 Rollback is 'git checkout AGENTS.md' (D-47 — structurally immune, no terminator to get wrong)" ;;
+  esac
+
+  # Both halves required: the literal alone would still pass if someone ADDED an
+  # awk block alongside it.
+  if [ -n "$rb_scope" ] && ! printf '%s' "$rb_scope" | grep -q 'awk'; then
+    _m0009_ok 0 "08-rollback-region-led: Step 1 Rollback carries NO fenced awk block — the region-eating bug class stays unreachable"
+  else
+    _m0009_ok 1 "08-rollback-region-led: Step 1 Rollback carries NO fenced awk block — the region-eating bug class stays unreachable"
+  fi
+
+  # ── 10-corrupt-mirror-refused (D-46.4 — binds BOTH D-28.1 guard layers) ──
+  # Exercises the PRE-FLIGHT, not Step 1, because the mirror guards live there.
+  # D-27 makes the mirror the SOLE re-injection source, so a mirror that exists
+  # but is corrupt makes 0009 strip §11 and inject garbage — destroying §11 on
+  # every heal. Each mode gets its OWN fake home so the modes are independent and
+  # cannot depend on execution order. mk_project supplies `.git` + SKILL.md at
+  # 0.6.0, so the pre-flight's other guards pass and THE MIRROR IS THE ONLY
+  # VARIABLE — otherwise a refusal could come from the version gate instead and
+  # the assertion would pass for the wrong reason.
+  if [ "$pf_ok" = "1" ]; then
+    local h10a h10b h10c p10
+    p10="$(_m0009_mk_project "$tmp" 10)"
+
+    # (a) ZERO-BYTE mirror → the `test -s` layer. `test -f` alone PASSES here —
+    #     that is the exact gap upstream closed (an interrupted `git pull` in the
+    #     scaffolder clone leaves precisely this).
+    h10a="$(_m0009_mk_fake_home "$tmp" 10a "$mirror")"
+    : > "$h10a/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    out="$(_m0009_apply "$p10" "$h10a" "$pf_block")"; rc=$?
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (a) zero-byte mirror: pre-flight refuses with exit 3 (D-28.1 layer 1, test -s) — got exit=$rc"
+
+    # (b) TRUNCATED mirror (head -20: keeps the L1 `## ` heading, drops
+    #     `### 4. Goal-Driven Execution` at L57) → the tail-sentinel layer.
+    #     WHY TRUNCATION DEFEATS BOTH `test -s` AND Apply's pre-`mv` shape
+    #     assertion: the mirror's heading is on LINE 1, and both of those guards
+    #     only look at the HEAD of a file that is truncated at the TAIL. A
+    #     head-preserving truncation is non-empty and still produces the §11
+    #     heading in the insert, so both pass it. Only a tail sentinel closes the
+    #     gap between "has a heading" and "is the whole block".
+    h10b="$(_m0009_mk_fake_home "$tmp" 10b "$mirror")"
+    head -20 "$mirror" > "$h10b/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    out="$(_m0009_apply "$p10" "$h10b" "$pf_block")"; rc=$?
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (b) truncated mirror: pre-flight refuses with exit 3 (D-28.1 layer 2, tail sentinel) — got exit=$rc"
+
+    # (c) HEALTHY mirror → MUST pass. WITHOUT THIS DIRECTION A PRE-FLIGHT THAT
+    #     REFUSED EVERYTHING WOULD PASS (a) AND (b) AND READ AS A WORKING GUARD.
+    #     This is D-38's double-sided contract applied to the mirror guards: a
+    #     guard never observed ACCEPTING is not a guard, it is a brick wall.
+    h10c="$(_m0009_mk_fake_home "$tmp" 10c "$mirror")"
+    out="$(_m0009_apply "$p10" "$h10c" "$pf_block")"; rc=$?
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (c) healthy mirror: pre-flight PASSES with exit 0 (the direction that proves it is not refusing everything) — got exit=$rc"
+  else
+    _m0009_fail "10-corrupt-mirror-refused (a) zero-byte mirror — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "10-corrupt-mirror-refused (b) truncated mirror — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "10-corrupt-mirror-refused (c) healthy mirror — NOT ASSERTED: Pre-flight extraction failed"
   fi
 }
 
