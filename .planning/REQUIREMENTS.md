@@ -78,7 +78,16 @@ Explicitly excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Which phases cover which requirements. Updated during roadmap creation.
+Which phases cover which requirements. Confirmed during roadmap creation
+2026-07-15: this milestone is a single phase (Phase 9), not a placeholder. The
+21 requirements were weighed against a split (e.g. anchor-validation vs.
+migration vs. docs) but kept together because (a) v0.6.0 shipped as one
+well-decomposed phase with 9 plans, the same order of magnitude as this
+milestone's 21 requirements, and (b) the two hard ordering constraints —
+validate the anchor rule empirically before writing the migration (ANCHOR-03/
+04), and TDD RED (TEST-02) before the migration exists — are sequencing
+constraints *within* a phase's plan waves, not natural phase boundaries; see
+ROADMAP.md Phase 9's "Ordering constraints" note.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
@@ -111,4 +120,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-07-15*
-*Last updated: 2026-07-15 after initial definition*
+*Last updated: 2026-07-15 after roadmap creation (Phase 9 confirmed as single-phase milestone)*
