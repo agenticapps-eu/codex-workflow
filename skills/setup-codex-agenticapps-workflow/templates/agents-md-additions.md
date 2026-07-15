@@ -24,11 +24,12 @@ Do not bypass a gate — accept-via-ADR is the override path.
 
 | Gate | Bound skill | Scope |
 |---|---|---|
-| brainstorm-ui / brainstorm-architecture | `superpowers:brainstorming` | pre-phase |
+| plan-review | `codex-plan-review` | pre-execution |
+| brainstorm-ui | `superpowers:brainstorming` | pre-phase |
+| brainstorm-architecture | `superpowers:brainstorming` | pre-phase |
 | design-shotgun | `codex-design-shotgun` | pre-phase |
 | design-critique | `codex-design-critique` | pre-phase |
-| tdd | `superpowers:test-driven-development` | per-task |
-| tdd (new TS module) | `codex-ts-declare-first` | per-task |
+| tdd | `superpowers:test-driven-development` (strengthened by `codex-ts-declare-first` for new TS modules) | per-task |
 | ui-preview | `codex-qa` (preview mode) | per-task |
 | verification | `superpowers:verification-before-completion` | per-task |
 | spec-review | `codex-spec-review` | post-phase |
@@ -153,5 +154,42 @@ Vault safety (hard rules): touch ONLY the configured note — never other repos'
 notes, the folder's `CLAUDE.md`, or anything else in the vault. Never write
 secrets, tokens, URLs with embedded credentials, or client-confidential data;
 redact before writing.
+
+## Pre-execution Gate — Plan Review (spec §02)
+
+Multi-AI plan review must run BEFORE execution begins. This gate exists
+because agent compliance alone did not hold: core ADR-0018 records that
+cparx phases 04.9 through 05 silently dropped this review for 8 consecutive
+phases, with no program ever catching the omission.
+
+Procedure (mechanical — follow exactly):
+
+1. **When** — before the FIRST code-touching edit of a phase. Not before
+   `.planning/` artifact edits; not once per edit.
+2. **Run the verifier** at the stable installed path
+   `${CODEX_HOME:-$HOME/.codex}/skills/agentic-apps-workflow/scripts/check-plan-review.sh`.
+   Always this path — never a path read out of the target repo's own config,
+   and never a relative path. The verifier locates the repo root itself, so
+   invoke it from wherever you are: no working-directory precondition applies.
+3. **Run it every time. Do not pre-judge whether it applies.** The agent's
+   job is to invoke. The verifier's job is to decide.
+4. **Exit 0 → proceed. Exit 2 → HARD STOP.** Do not edit code. Do not
+   auto-invoke external reviewers on your own initiative — that would ship
+   plan content to other vendors without consent. The verifier prints the
+   remedy; surface it to the operator and wait.
+5. **The remedy** is the `codex-plan-review` skill, which writes
+   `<NN>-REVIEWS.md` with at least 2 independent external reviewers.
+
+**The verifier decides these for you** — you do not need to check any of
+these; run the script and it will exit 0 on its own when:
+- `GSD_SKIP_REVIEWS=1` is set, or a `multi-ai-review-skipped` marker exists
+  in the phase directory (both emergency-only, both announce themselves)
+- the phase is legacy bare-number layout, already shipped (a `*-SUMMARY.md`
+  is present), has no `*-PLAN.md` at all, or nothing resolves
+
+Both `GSD_SKIP_REVIEWS` and the `multi-ai-review-skipped` marker are
+emergency-only escape hatches: each announces itself, and the marker file is
+visible to `git status` and expected to be committed with a rationale. A
+hatch is an auditable decision, not a silent bypass.
 
 <!-- END: agentic-apps-workflow sections -->

@@ -23,3 +23,4 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0006](0006-secret-scanner-gitleaks.md) | Secret scanner: stay on gitleaks (adopt core ADR-0015) | Accepted |
 | [0007](0007-bind-upstream-gsd.md) | Bind upstream GSD + Superpowers; stop re-porting | Accepted |
 | [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the Codex host | Accepted |
+| [0009](0009-plan-review-gate.md) | Bind the plan-review pre-execution gate on the Codex host | Accepted |
