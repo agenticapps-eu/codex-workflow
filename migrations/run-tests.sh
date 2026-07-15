@@ -3207,6 +3207,26 @@ test_drift() {
     echo "  ${RED}FAIL${RESET} drift mismatch (see message above)"
     FAIL=$((FAIL+1))
   fi
+
+  # ── Consumer-side third leg (V-03) ──────────────────────────────────────────
+  # The MECHANISM (run_drift_test above) is a pinned submodule and is NOT edited
+  # here. The POLICY below is consumer-owned per ADR-0035: this repo self-applies
+  # its own workflow, so its own version record (.codex/workflow-version.txt)
+  # must agree with the scaffolder it ships (SKILL.md's `version:`). V-03 slipped
+  # through precisely because nothing compared these two files — the leg above
+  # only checks SKILL.md against the latest migration's to_version, never against
+  # this repo's own record. 0008's `98c06f5` bumped both in one commit; this leg
+  # is what makes that precedent enforceable going forward.
+  local skill_v proj_v
+  skill_v=$(grep -m1 '^version:' "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md" | awk '{print $2}')
+  proj_v=$(cat "$REPO_ROOT/.codex/workflow-version.txt" 2>/dev/null)
+  if [ "$skill_v" = "$proj_v" ]; then
+    echo "  ${GREEN}PASS${RESET} this repo's .codex/workflow-version.txt ($proj_v) agrees with its scaffolder SKILL.md"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} version split: SKILL.md=$skill_v but .codex/workflow-version.txt=$proj_v (V-03)"
+    FAIL=$((FAIL+1))
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
