@@ -3359,15 +3359,20 @@ _m0009_mk_fake_home() {
 }
 
 # _m0009_mk_project <tmp> <name>
-# Builds a scratch project root satisfying 0009's pre-flight guards other than
-# the mirror: a `.git` directory (`test -d .git`) and a SKILL.md at
-# `version: 0.6.0` (the D-39 version gate, which accepts both 0.6.0 and 0.7.0 so
-# an idempotent re-run does not abort). Prints the project root's path.
+# Builds a scratch project root shaped like a REAL target project: a `.git`
+# directory (`test -d .git`) plus `.codex/workflow-version.txt` at `0.6.0`
+# (the durable per-project version record the update skill itself reads) —
+# and DELIBERATELY NO local scaffolder-skill tree of any kind, because no
+# target project this host scaffolds has one (`run-tests.sh:917-918`: "no
+# 0008 sandbox here manufactures a synthetic SKILL.md" — the same rule
+# applied here). See 0008's T-08-38 note (`0008:470-487`): the setup skill's
+# project-side surface is `AGENTS.md`, `.planning/`, `.codex/`, and
+# `docs/decisions/` only; a locally installed scaffolder SKILL.md never
+# exists on a real install. Prints the project root's path.
 _m0009_mk_project() {
   local p="$1/$2/proj"
-  mkdir -p "$p/.git" "$p/skills/agentic-apps-workflow"
-  printf -- '---\nname: agentic-apps-workflow\nversion: 0.6.0\nimplements_spec: 0.4.0\ndescription: synthetic fixture for migration 0009 (D-39 version gate)\n---\n\n## Stub\n' \
-    > "$p/skills/agentic-apps-workflow/SKILL.md"
+  mkdir -p "$p/.git" "$p/.codex"
+  printf '0.6.0\n' > "$p/.codex/workflow-version.txt"
   printf '%s\n' "$p"
 }
 
@@ -3933,6 +3938,77 @@ test_migration_0009() {
     _m0009_fail "10-corrupt-mirror-refused (a) zero-byte mirror — NOT ASSERTED: Pre-flight extraction failed"
     _m0009_fail "10-corrupt-mirror-refused (b) truncated mirror — NOT ASSERTED: Pre-flight extraction failed"
     _m0009_fail "10-corrupt-mirror-refused (c) healthy mirror — NOT ASSERTED: Pre-flight extraction failed"
+  fi
+
+  # ── no-scaffolder-tree (T-08-38 port — the criterion-0 regression guard) ──
+  # Ports 0008's OWN `no-scaffolder-tree` fixture (`run-tests.sh:1638-1707`,
+  # named without a number to match 0008's own naming — numbered fixtures
+  # 11-15 are reserved, per Q4) to 0009. V-01 shipped 314 PASS / 0 FAIL
+  # because the OLD `_m0009_mk_project` manufactured a synthetic
+  # `skills/agentic-apps-workflow/SKILL.md` in every 0009 sandbox — the exact
+  # practice 0008's own sandbox refuses (`run-tests.sh:917-918`). Task 1 of
+  # this plan already made `_m0009_mk_project` realistic (no `skills/` tree
+  # at all); this fixture is the falsifiable proof that removal sticks, and
+  # — until 09.1-02 lands — the RECORDED RED that criterion 0 requires.
+  #
+  # Sandbox: `_m0009_mk_project` (now realistic) + `_m0009_mk_fake_home` with
+  # the healthy `$mirror`, plus an AGENTS.md carrying a healthy ON-anchor §11
+  # block ($PROV_LIT + the mirror's own bytes + a following `## Deployment`
+  # heading) — the same shape `03-healthy-noop` above uses for its pristine
+  # fixture. Gated on `[ "$pf_ok" = "1" ]`, mirroring every other case above:
+  # a down extraction gate reports FAILED via `_m0009_fail`, not silence.
+  if [ "$pf_ok" = "1" ]; then
+    local pns hns applies_to_block step2_apply_block sep_bad
+    pns="$(_m0009_mk_project "$tmp" nst)"
+    hns="$(_m0009_mk_fake_home "$tmp" nst "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Deployment\nStuff.\n'
+    } > "$pns/AGENTS.md"
+
+    # 1. The fixture guards itself — it really has no local `skills/` tree.
+    #    Without this, the fixture can silently stop testing its own premise,
+    #    which is exactly how V-01 shipped green.
+    if test ! -e "$pns/skills"; then
+      _m0009_ok 0 "no-scaffolder-tree: fixture has no local skills/ directory (self-guard — proves Task 1 landed)"
+    else
+      _m0009_ok 1 "no-scaffolder-tree: fixture has no local skills/ directory (self-guard — proves Task 1 landed)"
+    fi
+
+    # 2. Pre-flight passes with no skills/ tree present. THE CRITERION-0
+    #    ASSERTION. Run the EXTRACTED pre-flight through _m0009_apply, not an
+    #    inline copy — TEST-01's rule, so a document edit is what this
+    #    observes, not a hand-maintained duplicate.
+    out="$(_m0009_apply "$pns" "$hns" "$pf_block")"; rc=$?
+    _m0009_ok "$rc" "no-scaffolder-tree: pre-flight PASSES with no skills/ tree present (criterion 0) — got exit=$rc"
+
+    # 3. Step 1's idempotency check runs cleanly (exit <= 1, i.e. no *errors*,
+    #    per 0008's own assertion 3) in this sandbox.
+    out="$(_m0009_apply "$pns" "$hns" "$idem_block")"; rc=$?
+    [ "$rc" -le 1 ]
+    _m0009_ok $? "no-scaffolder-tree: Step 1's idempotency check runs cleanly (exit <= 1) with no skills/ tree — got exit=$rc"
+
+    # 4. The MIGR-08 / MIGR-09 separation holds as a DOCUMENT CONTRACT: no
+    #    EXECUTABLE surface of 0009 names skills/agentic-apps-workflow/SKILL.md.
+    #    Checked on three surfaces, not the raw file — 0009's own PROSE
+    #    legitimately discusses the path when it records the divergence
+    #    (0008:470-487), so a bare whole-document grep would self-invalidate
+    #    the moment 09.1-02 writes that prose.
+    applies_to_block="$(awk '/^applies_to:/{f=1;next} f && /^[^ ]/{exit} f{print}' "$MIGRATION_0009")"
+    step2_apply_block="$(extract_step_block "$MIGRATION_0009" 2 Apply 2>/dev/null)"
+    sep_bad=0
+    printf '%s' "$applies_to_block" | grep -q 'skills/' && sep_bad=1
+    printf '%s' "$pf_block" | grep -q 'skills/agentic-apps-workflow' && sep_bad=1
+    printf '%s' "$apply_block" | grep -q 'skills/agentic-apps-workflow' && sep_bad=1
+    printf '%s' "$step2_apply_block" | grep -q 'skills/agentic-apps-workflow' && sep_bad=1
+    _m0009_ok "$sep_bad" "no-scaffolder-tree: MIGR-08/MIGR-09 separation — no executable surface (applies_to frontmatter, pre-flight, every Step Apply) names skills/agentic-apps-workflow/SKILL.md"
+  else
+    _m0009_fail "no-scaffolder-tree: fixture has no local skills/ directory (self-guard) — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "no-scaffolder-tree: pre-flight PASSES with no skills/ tree present (criterion 0) — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "no-scaffolder-tree: Step 1's idempotency check runs cleanly (exit <= 1) with no skills/ tree — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "no-scaffolder-tree: MIGR-08/MIGR-09 separation — NOT ASSERTED: Pre-flight extraction failed"
   fi
 }
 
