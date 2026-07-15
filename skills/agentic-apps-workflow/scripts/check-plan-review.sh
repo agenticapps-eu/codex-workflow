@@ -534,30 +534,70 @@ _cpr_fm_list() {
 # (an unterminated block is a broken artifact, not a hand-written one;
 # conflating them lets a truncated file take the looser path).
 # ─────────────────────────────────────────────────────────────────────────────
-_cpr_fm_first_line="$(head -n 1 "$REVIEWS" 2>/dev/null || true)"
+_cpr_fm_first_line="$(head -n 1 "$REVIEWS" 2>/dev/null | tr -d '\r' | sed -e 's/[[:space:]]*$//' || true)"
 
 if [ "${_cpr_fm_first_line:-}" = "---" ]; then
-  _cpr_fm_close_line="$(awk 'NR > 1 && $0 == "---" { print NR; exit }' "$REVIEWS")"
+  # CR-01 fix: mirror the SAME normalization (strip CR + trailing whitespace)
+  # onto the closing-delimiter search that was just applied to the opening
+  # one above. Without this, a well-formed frontmatter whose opening '---'
+  # is now tolerantly matched could still miss its own closing '---' on a
+  # CRLF file and be misreported MALFORMED instead of parsed strictly --
+  # "open and close agree" is the whole point of the tolerance.
+  _cpr_fm_close_line="$(awk '
+    NR > 1 {
+      line = $0
+      gsub(/\r/, "", line)
+      gsub(/[[:space:]]+$/, "", line)
+      if (line == "---") { print NR; exit }
+    }
+  ' "$REVIEWS")"
   if [ -z "${_cpr_fm_close_line:-}" ]; then
     _cpr_block "the review artifact has an opening frontmatter '---' with no closing '---' -- MALFORMED frontmatter, distinct from a missing review (D-13)"
   fi
 
-  _cpr_fm_block="$(awk -v endline="$_cpr_fm_close_line" 'NR > 1 && NR < endline' "$REVIEWS")"
+  # tr -d '\r' makes downstream parsing encoding-independent rather than
+  # relying on awk's [[:space:]] class including CR (verified true on BSD
+  # awk 20200816 during planning, but this must not depend on that).
+  _cpr_fm_block="$(awk -v endline="$_cpr_fm_close_line" 'NR > 1 && NR < endline' "$REVIEWS" | tr -d '\r')"
 
   # Count DISTINCT reviewers. Normalize each entry (strip surrounding
   # whitespace and quotes, lowercase) before counting unique values --
   # [gemini, gemini] is one reviewer, not two (08-REVIEWS.md, Codex, MEDIUM).
-  _cpr_reviewers_distinct="$(
+  _cpr_reviewers_norm="$(
     _cpr_fm_list "$_cpr_fm_block" "reviewers" \
       | sed -e "s/^['\"]//" -e "s/['\"]\$//" \
       | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print tolower($0)}' \
       | sed '/^$/d' \
-      | sort -u \
-      | wc -l | tr -d ' '
+      | sort -u
   )"
 
+  # WR-01 / D-15 fix: exclude codex-derived identities (codex, codex-self,
+  # codex_foo, "codex bar", ...) from the count BEFORE the -lt 2 test --
+  # codex is the implementing host and self-review does not count. This is
+  # an EXCLUSION, not a strict vendor allowlist: a hard-coded allowlist
+  # (only claude/gemini/opencode count) would silently false-block a
+  # legitimate future vendor, or a cross-host REVIEWS.md naming a reviewer
+  # this host has not heard of (ADR-0007 point 5) -- exactly what D-13
+  # already warns against for the fallback. It also buys nothing against a
+  # determined spoofer: anyone willing to write `reviewers: [alice, bob]`
+  # to defeat the gate could instead `touch multi-ai-review-skipped`, which
+  # ADR-0009 decisions 10/11 already accept as openly available. Identity
+  # validation therefore only protects against the HONEST mistake, and the
+  # honest mistake D-15 actually names is counting codex, the implementing
+  # host, as an external reviewer -- exclusion closes exactly that and
+  # nothing more, which is the correct scope.
+  _cpr_reviewers_excluded="$(printf '%s\n' "$_cpr_reviewers_norm" | grep -E '^codex([-_ ].*)?$' || true)"
+  _cpr_reviewers_external="$(printf '%s\n' "$_cpr_reviewers_norm" | grep -vE '^codex([-_ ].*)?$' || true)"
+
+  _cpr_reviewers_distinct="$(printf '%s\n' "$_cpr_reviewers_external" | sed '/^$/d' | wc -l | tr -d ' ')"
+  _cpr_reviewers_excluded_count="$(printf '%s\n' "$_cpr_reviewers_excluded" | sed '/^$/d' | wc -l | tr -d ' ')"
+
   if [ "$_cpr_reviewers_distinct" -lt 2 ]; then
-    _cpr_block "found ${_cpr_reviewers_distinct} distinct reviewer(s) in frontmatter 'reviewers:' (need >= 2, counted after case/whitespace normalization)"
+    if [ "$_cpr_reviewers_excluded_count" -gt 0 ]; then
+      _cpr_block "found ${_cpr_reviewers_distinct} distinct EXTERNAL reviewer(s) in frontmatter 'reviewers:' (need >= 2); ${_cpr_reviewers_excluded_count} entry(ies) naming codex were excluded because codex is the implementing host and self-review does not count (D-15) -- add vendor-diverse reviewers such as claude, gemini, or opencode"
+    else
+      _cpr_block "found ${_cpr_reviewers_distinct} distinct reviewer(s) in frontmatter 'reviewers:' (need >= 2, counted after case/whitespace normalization)"
+    fi
   fi
 
   # plans_reviewed coverage -- the cheap half of freshness (D-12). Require

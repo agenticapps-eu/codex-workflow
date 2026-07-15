@@ -2468,6 +2468,113 @@ MD
   : > "$phasedir/08-REVIEWS.md"
   _cpr_case "frontmatter: absent, empty file -> exit 2" "$s" 2
 
+  # ── Delimiter tolerance (CR-01 regression) ──────────────────────────────────
+  # 08-VERIFICATION.md derived truth #8 / 08-REVIEW.md CR-01: a trailing space
+  # or CRLF on the opening '---' silently downgrades a well-formed frontmatter
+  # to the reviewer-check-free D-13 fallback. These four fixtures pin the fix
+  # both directions: the two "currently exits 0" repros must become exit 2,
+  # and the two over-correction guards must stay exit 0.
+
+  s="$tmp/cr01-trailing-space"; phasedir="$(_cpr_enf_phase "$s" "08-cr01-trailing-space")"
+  printf -- '--- \nphase: 8\nreviewers: [gemini]\nplans_reviewed: [08-01-PLAN.md]\n---\nBody text.\n' > "$phasedir/08-REVIEWS.md"
+  e="$errdir/cr01-trailing-space.err"
+  _cpr_case "CR-01: opening '--- ' (trailing space) + 1 reviewer -> exit 2 (strict path reached, not D-13 fallback)" "$s" 2 --err-out "$e"
+  _cpr_check_contains "CR-01: trailing-space stderr reports reviewer count (not coverage/missing-plan)" "$e" "distinct reviewer"
+
+  s="$tmp/cr01-crlf-one-reviewer"; phasedir="$(_cpr_enf_phase "$s" "08-cr01-crlf-one-reviewer")"
+  printf -- '---\r\nphase: 8\r\nreviewers: [gemini]\r\nplans_reviewed: [08-01-PLAN.md]\r\n---\r\nBody line.\r\n' > "$phasedir/08-REVIEWS.md"
+  e="$errdir/cr01-crlf-one-reviewer.err"
+  _cpr_case "CR-01: CRLF line endings + 1 reviewer -> exit 2 (strict path reached despite CRLF)" "$s" 2 --err-out "$e"
+  _cpr_check_contains "CR-01: CRLF 1-reviewer stderr reports reviewer count (not coverage/missing-plan)" "$e" "distinct reviewer"
+
+  s="$tmp/cr01-crlf-two-reviewers-ok"; phasedir="$(_cpr_enf_phase "$s" "08-cr01-crlf-two-reviewers-ok")"
+  printf -- '---\r\nphase: 8\r\nreviewers: [gemini, opencode]\r\nplans_reviewed: [08-01-PLAN.md]\r\n---\r\nBody line.\r\n' > "$phasedir/08-REVIEWS.md"
+  e="$errdir/cr01-crlf-two-reviewers-ok.err"
+  _cpr_case "CR-01 guard: CRLF + 2 valid reviewers -> exit 0 (must not over-correct into false block or MALFORMED)" "$s" 0 --err-out "$e"
+
+  s="$tmp/cr01-trailing-space-two-reviewers-ok"; phasedir="$(_cpr_enf_phase "$s" "08-cr01-trailing-space-two-reviewers-ok")"
+  printf -- '--- \nphase: 8\nreviewers: [gemini, opencode]\nplans_reviewed: [08-01-PLAN.md]\n---\nBody text.\n' > "$phasedir/08-REVIEWS.md"
+  _cpr_case "CR-01 guard: trailing-space opening delimiter + 2 valid reviewers -> exit 0" "$s" 0
+
+  # ── Reviewer identity / D-15 codex exclusion (WR-01) ────────────────────────
+  # 08-VERIFICATION.md derived truth #8 / 08-REVIEW.md WR-01: the strict path
+  # counts distinct strings, never identity, so codex (the implementing host)
+  # can supply the >=2 floor via self-review. D-15 excludes codex-derived
+  # entries from the count before the -lt 2 test.
+
+  s="$tmp/wr01-codex-self"; phasedir="$(_cpr_enf_phase "$s" "08-wr01-codex-self")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [codex, codex-self]
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict: {}
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  e="$errdir/wr01-codex-self.err"
+  _cpr_case "WR-01: reviewers: [codex, codex-self] -> exit 2 (both codex-derived, D-15 excludes both)" "$s" 2 --err-out "$e"
+  _cpr_check_contains "WR-01: [codex, codex-self] block message names codex" "$e" "codex"
+  _cpr_check_contains "WR-01: [codex, codex-self] block message cites D-15" "$e" "D-15"
+
+  s="$tmp/wr01-codex-gemini"; phasedir="$(_cpr_enf_phase "$s" "08-wr01-codex-gemini")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [codex, gemini]
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict: {}
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  e="$errdir/wr01-codex-gemini.err"
+  _cpr_case "WR-01: reviewers: [codex, gemini] -> exit 2 (1 external reviewer remains after codex exclusion)" "$s" 2 --err-out "$e"
+  _cpr_check_contains "WR-01: [codex, gemini] block message cites D-15" "$e" "D-15"
+
+  s="$tmp/wr01-zero-margin"; phasedir="$(_cpr_enf_phase "$s" "08-wr01-zero-margin")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, codex, opencode]
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  codex: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "WR-01 zero-margin: reviewers: [gemini, codex, opencode] -> exit 0 (2 external after exclusion; pins the real 08-REVIEWS.md shape)" "$s" 0
+
+  s="$tmp/wr01-case-insensitive"; phasedir="$(_cpr_enf_phase "$s" "08-wr01-case-insensitive")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [CODEX, Codex]
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict: {}
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "WR-01: reviewers: [CODEX, Codex] -> exit 2 (case-insensitive exclusion, both normalize to codex)" "$s" 2
+
+  # ── D-13 fallback is RETAINED (over-correction guard) ───────────────────────
+  # ADR-0009 decision 11 deliberately keeps the >=5-line, frontmatter-less
+  # fallback for hand-written cross-host compatibility (ADR-0007 point 5). A
+  # fix that blocks this has over-corrected.
+
+  s="$tmp/d13-fallback-retained"; phasedir="$(_cpr_enf_phase "$s" "08-d13-fallback-retained")"
+  printf 'Line 1 of a hand-written, frontmatter-less review note.\nLine 2.\nLine 3.\nLine 4.\nLine 5.\nLine 6.\n' > "$phasedir/08-REVIEWS.md"
+  _cpr_case "D-13 guard: frontmatter-less 6-line body -> exit 0 (fallback deliberately retained, ADR-0009 decision 11)" "$s" 0
+
   # ── Escape hatches (D-11) ────────────────────────────────────────────────────
 
   s="$tmp/hatch-env"; phasedir="$(_cpr_enf_phase "$s" "08-hatch-env")"
