@@ -4082,10 +4082,12 @@ test_migration_0009() {
   # D-27 makes the mirror the SOLE re-injection source, so a mirror that exists
   # but is corrupt makes 0009 strip §11 and inject garbage — destroying §11 on
   # every heal. Each mode gets its OWN fake home so the modes are independent and
-  # cannot depend on execution order. mk_project supplies `.git` + SKILL.md at
-  # 0.6.0, so the pre-flight's other guards pass and THE MIRROR IS THE ONLY
-  # VARIABLE — otherwise a refusal could come from the version gate instead and
-  # the assertion would pass for the wrong reason.
+  # cannot depend on execution order. mk_project supplies `.git` +
+  # `.codex/workflow-version.txt` at 0.6.0 (no local `skills/` tree — see
+  # `_m0009_mk_project`'s own header comment, 09.1-01), so the pre-flight's
+  # other guards pass and THE MIRROR IS THE ONLY VARIABLE — otherwise a
+  # refusal could come from the version gate instead and the assertion would
+  # pass for the wrong reason.
   if [ "$pf_ok" = "1" ]; then
     local h10a h10b h10c p10
     p10="$(_m0009_mk_project "$tmp" 10)"
