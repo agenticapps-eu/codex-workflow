@@ -91,12 +91,16 @@ test -d .git || { echo "not a git repo — initialize first with: git init"; exi
 
 # 2. The project must be at 0.6.0 — or already at 0.7.0, for a re-apply or a
 #    partial state. Accepting BOTH is deliberate: an idempotent re-run on an
-#    already-migrated project must not abort.
-SKILL_FILE=skills/agentic-apps-workflow/SKILL.md
-grep -qE '^version: 0\.(6\.0|7\.0)$' "$SKILL_FILE" || {
-  INSTALLED=$(grep -E '^version:' "$SKILL_FILE" 2>/dev/null | sed 's/version: //')
-  echo "ABORT: workflow scaffolder version is ${INSTALLED:-unknown} (need 0.6.0)."
-  echo "       Apply prior migrations first via /update-codex-agenticapps-workflow."
+#    already-migrated project must not abort. The floor is read from the
+#    project's OWN durable version record, `.codex/workflow-version.txt` —
+#    what the update skill itself reads (its Stage A step 1) — per 0008's
+#    precedent (`0008:73-79`), not from a project-relative `skills/` path
+#    (see the porting-error note under `## Notes`).
+grep -qE '^0\.(6|7)\.0$' .codex/workflow-version.txt || {
+  INSTALLED=$(cat .codex/workflow-version.txt 2>/dev/null)
+  echo "ABORT: workflow project version is ${INSTALLED:-unknown} (need 0.6.0)."
+  echo "       Apply prior migrations first via \$update-codex-agenticapps-workflow."
+  echo "       Supported upgrade floor: 0.6.0 -> 0.7.0."
   exit 3
 }
 
@@ -413,3 +417,29 @@ After applying, a human can check:
 - **No `AGENTS.md`** — Step 1 emits an informational message; Steps 2/3 still run.
 - **Unmanaged `## Coding Discipline (NON-NEGOTIABLE)` heading** — Step 1 aborts
   with `exit 3` and leaves the file untouched; resolve per its message.
+
+## Notes
+
+- **The pre-flight version-floor porting error (fixed here, not inherited).**
+  0009 v1's pre-flight guard 2 greped the project-relative path
+  `skills/agentic-apps-workflow/SKILL.md` for its version floor — a path **no
+  target project has** — so it aborted with `exit 3` on every real install and
+  the entire §11 heal (Step 1) never ran. **This was a codex-side porting
+  error, not an inherited upstream defect.** Upstream greps
+  `.claude/skills/agentic-apps-workflow/SKILL.md`, a path its own setup skill
+  creates (`f9354cc:setup/SKILL.md:146`); this host's port dropped the
+  `.claude/` prefix. On this host, skills install **globally** at
+  `${CODEX_HOME}/skills/…`, not under a project-relative `skills/` tree, and
+  the project's version lives in `.codex/workflow-version.txt`. Fixed here per
+  0008's precedent (`0008:73-79`), which named this exact class of defect in
+  migration 0007 (T-08-38, `0008:470-487`) and called it "a defect this
+  migration does not replicate" — 0009 now keeps that same discipline.
+- **MIGR-08 / MIGR-09 separation.** This migration (MIGR-08) records the new
+  version **in the target project** — Step 2, `.codex/workflow-version.txt`.
+  **This repo's own** scaffolder trigger skill's SKILL.md version bump
+  (MIGR-09) is a **direct edit in the phase's own commit**, never a migration
+  step shipped to other people's repos — per the rule `0008:337-350` states
+  verbatim: "There is no step that bumps a target project's local scaffolder
+  trigger skill's SKILL.md, and none should be added." MIGR-09 is satisfied by
+  plan 09.1-03's direct edit to this repo's own `skills/` tree, not by
+  anything in this document.
