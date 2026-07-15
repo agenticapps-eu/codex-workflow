@@ -42,7 +42,7 @@ Decision record: [ADR-0009](../docs/decisions/0009-plan-review-gate.md).
 
 </details>
 
-- [ ] **Phase 9: Region-Aware §11 Placement** - Migration 0009 heals the §11 anchor so a leading GitNexus region can no longer silently destroy the block, with the anchor rule validated empirically before it is written
+- [x] **Phase 9: Region-Aware §11 Placement** - Migration 0009 heals the §11 anchor so a leading GitNexus region can no longer silently destroy the block, with the anchor rule validated empirically before it is written (completed 2026-07-15)
 
 ## Phase Details
 
@@ -114,14 +114,14 @@ MIGR-09, TEST-01, TEST-02, TEST-03, TEST-04, SETUP-01, DOC-01, DOC-02
 - [x] 09-02-PLAN.md — Fence-scoped document extractor + shape guards; retire the inlined anchor copy at run-tests.sh:119 (TEST-01, TEST-04) — wave 1
 - [x] 09-03-PLAN.md — test_migration_0009: ten synthesized cases + four-state idempotency; suite OBSERVED RED (TEST-02, TEST-03) — wave 2
 - [x] 09-04-PLAN.md — Migration 0009 authored, suite turns GREEN; scaffolder bumped to 0.7.0 (ANCHOR-05, MIGR-01..09) — wave 3
-- [ ] 09-05-PLAN.md — ADR-0010, SETUP-01 single-source record, CHANGELOG 0.7.0 (SETUP-01, DOC-01, DOC-02) — wave 4
+- [x] 09-05-PLAN.md — ADR-0010, SETUP-01 single-source record, CHANGELOG 0.7.0 (SETUP-01, DOC-01, DOC-02) — wave 4
 
 ## Progress
 
 | Phase                          | Milestone | Plans Complete | Status      | Completed  |
 | ------------------------------- | --------- | --------------- | ----------- | ---------- |
 | 8. Plan-Review Gate             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
-| 9. Region-Aware §11 Placement   | v0.7.0    | 4/5 | In Progress|  |
+| 9. Region-Aware §11 Placement   | v0.7.0    | 5/5 | Complete   | 2026-07-15 |
 
 ## Known Follow-ups
 
