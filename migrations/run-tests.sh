@@ -749,6 +749,520 @@ MD
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0008 — Plan-review gate (spec §02, v0.5.0 -> 0.6.0)
+#
+# Three steps only (no target-project SKILL.md step — 08-05-PLAN.md
+# <target_project_surface>): (1) leaf-level config merge into
+# .planning/config.codex.json, (2) AGENTS.md ritual-section insert extracted
+# from the real template, (3) .codex/workflow-version.txt version record.
+# This repo's own scaffolder bump is a direct edit in Task 2's commit, never a
+# migration step — no 0008 sandbox here manufactures a synthetic SKILL.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_migration_0008() {
+  echo ""
+  echo "${YELLOW}=== Migration 0008 — Plan-review gate (spec §02) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — config-merge test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local hooks_tpl agents_tpl
+  hooks_tpl="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/config-hooks.json"
+  agents_tpl="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md"
+
+  # Templates must ship (single source of truth for both fresh + migrated).
+  if [ -f "$hooks_tpl" ] && [ -f "$agents_tpl" ]; then
+    echo "  ${GREEN}PASS${RESET} plan-review templates ship (config-hooks.json + agents-md-additions.md)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} plan-review template(s) missing"
+    FAIL=$((FAIL+1))
+  fi
+
+  # $PE is the pre_execution object's CONTENTS (i.e. {"plan_review": {...}}),
+  # sourced from the installed template via --argjson — never a heredoc'd
+  # literal (single-source-of-truth, D-19).
+  local PE
+  PE="$(jq -c '.hooks.pre_execution' "$hooks_tpl")"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  mkdir -p "$tmp/.planning" "$tmp/.codex"
+
+  # ── Step 1 — leaf-level config merge into .planning/config.codex.json ────
+  # Fixture carries all THREE kinds of neighbour so every preservation
+  # assertion is real, not vacuous: a sibling gate under
+  # .hooks.pre_execution.other_gate (findings 2/3/4 — the one the original
+  # fixture lacked and the only one that can catch a replaced pre_execution
+  # object), a gate under a different group (.hooks.post_phase.spec_review),
+  # and a foreign top-level key (mirrors 0007's "host": "claude" trick).
+  # NOTE: kept as a single JSON line deliberately — a multi-line pretty-print
+  # would place a bare "}" at column 0, which this repo's own
+  # acceptance-check idiom (`awk '/^test_migration_0008\(\)/{f=1} f&&/^}/{exit} f'`)
+  # uses as the function-body end marker; a stray "}" mid-fixture would
+  # truncate that extraction early and silently hide everything after it.
+  cat > "$tmp/.planning/config.codex.json" <<'JSON'
+{ "custom_operator_key": "unchanged", "hooks": { "pre_execution": { "other_gate": { "skill": "some-other-gate" } }, "post_phase": { "spec_review": { "skill": "codex-spec-review", "stage": 1 } } } }
+JSON
+
+  # Idempotency check on the LEAF, not the group (finding 1). This fixture's
+  # pre_execution GROUP already exists (holding only other_gate) — a
+  # group-level check (`jq -e '.hooks.pre_execution'`) would read "applied"
+  # here and silently skip the migration, leaving an install with a sibling
+  # gate but no plan_review while reporting success. The leaf check must read
+  # "not-applied", i.e. the migration must still run.
+  assert_check "idempotency (leaf): pre_execution exists (sibling other_gate only), plan_review absent -> needs merge" \
+    "jq -e '.hooks.pre_execution.plan_review' .planning/config.codex.json >/dev/null" \
+    "$tmp" "not-applied"
+
+  # Apply — leaf-level deep merge (finding 2). NEVER `.hooks += {pre_execution: $pe}`,
+  # which preserves other hook GROUPS but replaces the whole pre_execution
+  # object, deleting other_gate. `// {}` handles the first-run case where
+  # pre_execution does not exist at all.
+  ( cd "$tmp" && jq --argjson pe "$PE" \
+      '.hooks.pre_execution = ((.hooks.pre_execution // {}) + $pe)' \
+      .planning/config.codex.json > .planning/config.codex.json.tmp \
+      && mv .planning/config.codex.json.tmp .planning/config.codex.json )
+
+  assert_check "after merge: plan_review present at the leaf (min_reviewers == 2)" \
+    "jq -e '.hooks.pre_execution.plan_review.min_reviewers == 2' .planning/config.codex.json >/dev/null" \
+    "$tmp" "applied"
+
+  # Merge preserves the SIBLING pre-execution gate (findings 2 + 4) — the
+  # assertion the original (group-only) fixture could not make.
+  if ( cd "$tmp" && jq -e '.hooks.pre_execution.other_gate.skill == "some-other-gate" and (.hooks.pre_execution.plan_review.skill == "codex-plan-review")' .planning/config.codex.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} merge preserves sibling pre_execution gate (other_gate) alongside plan_review"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} merge clobbered the sibling pre_execution gate (other_gate)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Merge preserves other top-level hook groups and foreign top-level keys.
+  if ( cd "$tmp" && jq -e '.hooks.post_phase.spec_review.stage == 1 and .custom_operator_key == "unchanged"' .planning/config.codex.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} merge preserves other hook groups + foreign top-level key"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} merge clobbered other hook groups or a foreign top-level key"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The merged block equals the template's block exactly.
+  if ( cd "$tmp" && jq -e --argjson pe "$PE" '.hooks.pre_execution.plan_review == $pe.plan_review' .planning/config.codex.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} merged plan_review block equals the template's block"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} merged block diverges from the template"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Second run is a no-op — byte-identical file (cksum), no duplicate/nested
+  # pre_execution. cksum, not sha256sum/md5sum: POSIX, identical on macOS and
+  # Linux.
+  local cksum_applied cksum_reapplied
+  cksum_applied="$(cksum < "$tmp/.planning/config.codex.json")"
+  ( cd "$tmp" && jq --argjson pe "$PE" \
+      '.hooks.pre_execution = ((.hooks.pre_execution // {}) + $pe)' \
+      .planning/config.codex.json > .planning/config.codex.json.tmp \
+      && mv .planning/config.codex.json.tmp .planning/config.codex.json )
+  cksum_reapplied="$(cksum < "$tmp/.planning/config.codex.json")"
+
+  if [ "$cksum_applied" = "$cksum_reapplied" ]; then
+    echo "  ${GREEN}PASS${RESET} second merge run is a no-op (cksum unchanged)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} second merge run changed the file — not idempotent"
+    FAIL=$((FAIL+1))
+  fi
+
+  if ( cd "$tmp" && jq -e '(.hooks.pre_execution | keys | length) == 2' .planning/config.codex.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} re-apply did not duplicate or nest pre_execution keys (other_gate + plan_review only)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} re-apply duplicated or nested pre_execution keys"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Rollback removes only OUR leaf (finding 3), asserted against the sibling
+  # fixture: from the merged state with other_gate present, plan_review must
+  # be gone AND other_gate must survive. del(.hooks.pre_execution) alone would
+  # be destructive to the sibling for the same reason the shallow merge was.
+  ( cd "$tmp" && jq \
+      'del(.hooks.pre_execution.plan_review)
+       | if (.hooks.pre_execution // {}) == {} then del(.hooks.pre_execution) else . end' \
+      .planning/config.codex.json > .planning/config.codex.json.tmp \
+      && mv .planning/config.codex.json.tmp .planning/config.codex.json )
+
+  if ( cd "$tmp" && jq -e '(.hooks.pre_execution.plan_review == null) and (.hooks.pre_execution.other_gate.skill == "some-other-gate")' .planning/config.codex.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} rollback removes only plan_review; sibling other_gate survives"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} rollback was destructive to the sibling gate, or left plan_review behind"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Rollback drops the now-empty parent when there is NO sibling — a separate
+  # fixture, since the one above always has other_gate.
+  cat > "$tmp/.planning/config.codex.no-sibling.json" <<'JSON'
+{ "hooks": { "post_phase": { "spec_review": { "skill": "codex-spec-review" } } } }
+JSON
+  ( cd "$tmp" && jq --argjson pe "$PE" \
+      '.hooks.pre_execution = ((.hooks.pre_execution // {}) + $pe)' \
+      .planning/config.codex.no-sibling.json > .planning/config.codex.no-sibling.json.tmp \
+      && mv .planning/config.codex.no-sibling.json.tmp .planning/config.codex.no-sibling.json )
+  ( cd "$tmp" && jq \
+      'del(.hooks.pre_execution.plan_review)
+       | if (.hooks.pre_execution // {}) == {} then del(.hooks.pre_execution) else . end' \
+      .planning/config.codex.no-sibling.json > .planning/config.codex.no-sibling.json.tmp \
+      && mv .planning/config.codex.no-sibling.json.tmp .planning/config.codex.no-sibling.json )
+
+  if ! ( cd "$tmp" && jq -e '.hooks | has("pre_execution")' .planning/config.codex.no-sibling.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} rollback drops the now-empty pre_execution parent entirely (no sibling case)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} rollback left an empty pre_execution object instead of dropping it"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Step 2 — AGENTS.md ritual section insert ──────────────────────────────
+  cat > "$tmp/AGENTS.md" <<'MD'
+# AGENTS.md — fixture
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+
+## Session handoff
+
+Existing content.
+
+<!-- END: agentic-apps-workflow sections -->
+MD
+
+  assert_check "idempotency: AGENTS.md lacks Pre-execution Gate section -> needs insert" \
+    "grep -q '^## Pre-execution Gate — Plan Review (spec §02)' AGENTS.md" \
+    "$tmp" "not-applied"
+
+  local secfile; secfile="$tmp/section-0008.txt"
+  awk '
+    /^## Pre-execution Gate — Plan Review \(spec §02\)/ {f=1}
+    /^<!-- END: agentic-apps-workflow sections -->/      {f=0}
+    f
+  ' "$agents_tpl" > "$secfile"
+
+  # Extraction from the REAL template must be non-empty BEFORE the insert is
+  # asserted — a heading-regex mismatch would otherwise report as a confusing
+  # downstream insert failure instead of "extraction empty" (T-08-23).
+  if [ -s "$secfile" ]; then
+    echo "  ${GREEN}PASS${RESET} section extraction from the real template is non-empty"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} section extraction from the real template is EMPTY — heading regex drift"
+    FAIL=$((FAIL+1))
+  fi
+
+  ( cd "$tmp" && awk -v secfile="$secfile" '
+      /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
+        while ((getline line < secfile) > 0) print line
+        ins=1
+      }
+      { print }
+    ' AGENTS.md > AGENTS.md.0008.tmp && mv AGENTS.md.0008.tmp AGENTS.md )
+
+  assert_check "after insert: Pre-execution Gate section present in AGENTS.md" \
+    "grep -q '^## Pre-execution Gate — Plan Review (spec §02)' AGENTS.md" \
+    "$tmp" "applied"
+
+  # Section landed INSIDE the marker block (heading line number < END marker).
+  if awk '/^## Pre-execution Gate — Plan Review \(spec §02\)/{k=NR} /^<!-- END: agentic-apps-workflow sections -->/{e=NR} END{exit !(k>0 && e>0 && k<e)}' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} section sits inside the agentic-apps-workflow marker block"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} section landed outside the marker block"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Second run is a no-op — cksum-based, not merely a predicate re-check (a
+  # predicate re-check would pass even if the second run appended a
+  # duplicate section). Guard the re-run by the same idempotency check the
+  # real step uses, so this proves the STEP is idempotent, not just the awk.
+  local cksum_agents_first cksum_agents_second
+  cksum_agents_first="$(cksum < "$tmp/AGENTS.md")"
+  if ! grep -q '^## Pre-execution Gate — Plan Review (spec §02)' "$tmp/AGENTS.md"; then
+    ( cd "$tmp" && awk -v secfile="$secfile" '
+        /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
+          while ((getline line < secfile) > 0) print line
+          ins=1
+        }
+        { print }
+      ' AGENTS.md > AGENTS.md.0008.tmp && mv AGENTS.md.0008.tmp AGENTS.md )
+  fi
+  cksum_agents_second="$(cksum < "$tmp/AGENTS.md")"
+
+  if [ "$cksum_agents_first" = "$cksum_agents_second" ]; then
+    echo "  ${GREEN}PASS${RESET} second run of Step 2 is a no-op (cksum unchanged)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} second run of Step 2 changed AGENTS.md — not idempotent"
+    FAIL=$((FAIL+1))
+  fi
+
+  if [ "$(grep -c '^## Pre-execution Gate — Plan Review (spec §02)' "$tmp/AGENTS.md")" = "1" ]; then
+    echo "  ${GREEN}PASS${RESET} section appears exactly once after re-run (no duplicate)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} section duplicated after re-run"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The inserted text is byte-identical to the template's section.
+  local extracted_from_agents; extracted_from_agents="$tmp/agents-section-extracted.txt"
+  awk '
+    /^## Pre-execution Gate — Plan Review \(spec §02\)/ {f=1}
+    /^<!-- END: agentic-apps-workflow sections -->/      {f=0}
+    f
+  ' "$tmp/AGENTS.md" > "$extracted_from_agents"
+
+  if diff -q "$secfile" "$extracted_from_agents" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} inserted text is byte-identical to the template's section"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} inserted text diverges from the template's section"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Step 3 — .codex/workflow-version.txt records 0.6.0 ────────────────────
+  printf '0.5.0\n' > "$tmp/.codex/workflow-version.txt"
+
+  assert_check "idempotency: workflow-version.txt reads 0.5.0 -> needs bump" \
+    "grep -q '^0.6.0$' .codex/workflow-version.txt" \
+    "$tmp" "not-applied"
+
+  ( cd "$tmp" && echo "0.6.0" > .codex/workflow-version.txt )
+
+  assert_check "after Step 3: workflow-version.txt reads 0.6.0" \
+    "grep -q '^0.6.0$' .codex/workflow-version.txt" \
+    "$tmp" "applied"
+
+  local cksum_ver_first cksum_ver_second
+  cksum_ver_first="$(cksum < "$tmp/.codex/workflow-version.txt")"
+  if ! grep -q '^0.6.0$' "$tmp/.codex/workflow-version.txt"; then
+    ( cd "$tmp" && echo "0.6.0" > .codex/workflow-version.txt )
+  fi
+  cksum_ver_second="$(cksum < "$tmp/.codex/workflow-version.txt")"
+  if [ "$cksum_ver_first" = "$cksum_ver_second" ]; then
+    echo "  ${GREEN}PASS${RESET} second run of Step 3 is a no-op (cksum unchanged)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} second run of Step 3 changed the file"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── No-scaffolder-tree fixture — the regression guard for round 2's HIGH ──
+  # (T-08-38). Shaped like a REAL target project per the setup skill's own
+  # post-checks: AGENTS.md marker pair, .planning/config.codex.json,
+  # .codex/workflow-version.txt, docs/decisions/. Deliberately NO skills/
+  # directory at all — the setup skill never creates a local skills/ tree in
+  # a target project, and no step here may stat a path under it.
+  local tmp2; tmp2="$(mktemp -d)"
+  mkdir -p "$tmp2/.planning" "$tmp2/.codex" "$tmp2/docs/decisions"
+  cat > "$tmp2/.planning/config.codex.json" <<'JSON'
+{ "hooks": { "post_phase": { "spec_review": { "skill": "codex-spec-review" } } } }
+JSON
+  cat > "$tmp2/AGENTS.md" <<'MD'
+# AGENTS.md — no-scaffolder-tree fixture
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+
+## Session handoff
+
+Existing content.
+
+<!-- END: agentic-apps-workflow sections -->
+MD
+  printf '0.5.0\n' > "$tmp2/.codex/workflow-version.txt"
+
+  if test ! -e "$tmp2/skills"; then
+    echo "  ${GREEN}PASS${RESET} no-scaffolder-tree fixture has no local skills/ directory"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} no-scaffolder-tree fixture unexpectedly has a skills/ directory"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Pre-flight version floor reads the project's OWN record — no skills/ tree
+  # needed at all (the divergence from 0007's scaffolder-file floor grep).
+  if ( cd "$tmp2" && grep -qE '^0\.(5|6)\.0$' .codex/workflow-version.txt ); then
+    echo "  ${GREEN}PASS${RESET} pre-flight version floor passes reading .codex/workflow-version.txt (no skills/ tree needed)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} pre-flight version floor failed"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Every step's idempotency check runs without error in this sandbox.
+  if ( cd "$tmp2" && jq -e '.hooks.pre_execution.plan_review' .planning/config.codex.json >/dev/null 2>&1; [ $? -le 1 ] ) \
+     && ( cd "$tmp2" && grep -q '^## Pre-execution Gate — Plan Review (spec §02)' AGENTS.md >/dev/null 2>&1; [ $? -le 1 ] ) \
+     && ( cd "$tmp2" && grep -q '^0.6.0$' .codex/workflow-version.txt >/dev/null 2>&1; [ $? -le 1 ] ); then
+    echo "  ${GREEN}PASS${RESET} every step's idempotency check runs cleanly with no skills/ tree present"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} an idempotency check errored (unexpected exit status) in the no-skills/ sandbox"
+    FAIL=$((FAIL+1))
+  fi
+
+  # All three steps apply and the migration completes end to end.
+  ( cd "$tmp2" && jq --argjson pe "$PE" \
+      '.hooks.pre_execution = ((.hooks.pre_execution // {}) + $pe)' \
+      .planning/config.codex.json > .planning/config.codex.json.tmp \
+      && mv .planning/config.codex.json.tmp .planning/config.codex.json )
+  ( cd "$tmp2" && awk -v secfile="$secfile" '
+      /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
+        while ((getline line < secfile) > 0) print line
+        ins=1
+      }
+      { print }
+    ' AGENTS.md > AGENTS.md.0008.tmp && mv AGENTS.md.0008.tmp AGENTS.md )
+  ( cd "$tmp2" && echo "0.6.0" > .codex/workflow-version.txt )
+
+  if ( cd "$tmp2" && jq -e '.hooks.pre_execution.plan_review.min_reviewers == 2' .planning/config.codex.json >/dev/null 2>&1 ) \
+     && grep -q '^## Pre-execution Gate — Plan Review (spec §02)' "$tmp2/AGENTS.md" \
+     && grep -q '^0.6.0$' "$tmp2/.codex/workflow-version.txt"; then
+    echo "  ${GREEN}PASS${RESET} no-scaffolder-tree fixture migrates end-to-end (all 3 steps apply)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} no-scaffolder-tree fixture failed to complete migration"
+    FAIL=$((FAIL+1))
+  fi
+  rm -rf "$tmp2"
+
+  # ── Partial-application fixture — step-local idempotency (finding 6) ──────
+  # Step 1 already applied (plan_review present) but Step 2 is NOT (no ritual
+  # heading) -> Steps 2 and 3 must still run. This is the atomicity contract's
+  # documented recovery path (migrations/README.md:103-113); a whole-migration
+  # skip keyed on Step 1's artifact would strand the install half-migrated
+  # while reporting success. There is no migration-level skip predicate.
+  local tmp3; tmp3="$(mktemp -d)"
+  mkdir -p "$tmp3/.planning" "$tmp3/.codex"
+  jq -n --argjson pe "$PE" '{hooks: {pre_execution: $pe}}' > "$tmp3/.planning/config.codex.json"
+  cat > "$tmp3/AGENTS.md" <<'MD'
+# AGENTS.md — partial-application fixture
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+
+## Session handoff
+
+Existing content.
+
+<!-- END: agentic-apps-workflow sections -->
+MD
+  printf '0.5.0\n' > "$tmp3/.codex/workflow-version.txt"
+
+  if ( cd "$tmp3" && jq -e '.hooks.pre_execution.plan_review' .planning/config.codex.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} partial fixture set up correctly: Step 1 already applied"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} partial fixture setup wrong: Step 1 not pre-applied"
+    FAIL=$((FAIL+1))
+  fi
+  if ! ( cd "$tmp3" && grep -q '^## Pre-execution Gate — Plan Review (spec §02)' AGENTS.md 2>/dev/null ); then
+    echo "  ${GREEN}PASS${RESET} partial fixture set up correctly: Step 2 NOT yet applied"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} partial fixture setup wrong: Step 2 already applied"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Re-run the migration's step set — each step checks its OWN idempotency,
+  # none gates on another. Steps 2 and 3 must still complete.
+  if ! ( cd "$tmp3" && jq -e '.hooks.pre_execution.plan_review' .planning/config.codex.json >/dev/null 2>&1 ); then
+    ( cd "$tmp3" && jq --argjson pe "$PE" \
+        '.hooks.pre_execution = ((.hooks.pre_execution // {}) + $pe)' \
+        .planning/config.codex.json > .planning/config.codex.json.tmp \
+        && mv .planning/config.codex.json.tmp .planning/config.codex.json )
+  fi
+  if ! ( cd "$tmp3" && grep -q '^## Pre-execution Gate — Plan Review (spec §02)' AGENTS.md 2>/dev/null ); then
+    ( cd "$tmp3" && awk -v secfile="$secfile" '
+        /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
+          while ((getline line < secfile) > 0) print line
+          ins=1
+        }
+        { print }
+      ' AGENTS.md > AGENTS.md.0008.tmp && mv AGENTS.md.0008.tmp AGENTS.md )
+  fi
+  if ! ( cd "$tmp3" && grep -q '^0.6.0$' .codex/workflow-version.txt 2>/dev/null ); then
+    ( cd "$tmp3" && echo "0.6.0" > .codex/workflow-version.txt )
+  fi
+
+  if grep -q '^## Pre-execution Gate — Plan Review (spec §02)' "$tmp3/AGENTS.md" \
+     && grep -q '^0.6.0$' "$tmp3/.codex/workflow-version.txt"; then
+    echo "  ${GREEN}PASS${RESET} partial-application recovery: Steps 2 and 3 still ran to completion (already applied not gating them)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} partial-application recovery failed — a step was skipped by a whole-migration predicate"
+    FAIL=$((FAIL+1))
+  fi
+  rm -rf "$tmp3"
+
+  # Inverse: Step 2 applied (heading present), Step 1 NOT -> Step 1 still runs.
+  local tmp4; tmp4="$(mktemp -d)"
+  mkdir -p "$tmp4/.planning" "$tmp4/.codex"
+  echo '{"hooks":{"post_phase":{"spec_review":{"skill":"codex-spec-review"}}}}' > "$tmp4/.planning/config.codex.json"
+  cat > "$tmp4/AGENTS.md" <<'MD'
+# AGENTS.md — inverse partial fixture
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+
+## Session handoff
+
+Existing content.
+
+<!-- END: agentic-apps-workflow sections -->
+MD
+  ( cd "$tmp4" && awk -v secfile="$secfile" '
+      /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
+        while ((getline line < secfile) > 0) print line
+        ins=1
+      }
+      { print }
+    ' AGENTS.md > AGENTS.md.0008.tmp && mv AGENTS.md.0008.tmp AGENTS.md )
+  printf '0.5.0\n' > "$tmp4/.codex/workflow-version.txt"
+
+  if ! ( cd "$tmp4" && jq -e '.hooks.pre_execution.plan_review' .planning/config.codex.json >/dev/null 2>&1 ); then
+    ( cd "$tmp4" && jq --argjson pe "$PE" \
+        '.hooks.pre_execution = ((.hooks.pre_execution // {}) + $pe)' \
+        .planning/config.codex.json > .planning/config.codex.json.tmp \
+        && mv .planning/config.codex.json.tmp .planning/config.codex.json )
+  fi
+
+  if ( cd "$tmp4" && jq -e '.hooks.pre_execution.plan_review.min_reviewers == 2' .planning/config.codex.json >/dev/null 2>&1 ); then
+    echo "  ${GREEN}PASS${RESET} inverse partial-application: Step 1 still ran when only Step 2 was pre-applied"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} inverse partial-application: Step 1 was skipped"
+    FAIL=$((FAIL+1))
+  fi
+  rm -rf "$tmp4"
+
+  # Ship guards.
+  if [ -f "$REPO_ROOT/migrations/0008-plan-review-gate.md" ]; then
+    echo "  ${GREEN}PASS${RESET} migrations/0008-plan-review-gate.md ships"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} migrations/0008-plan-review-gate.md MISSING"
+    FAIL=$((FAIL+1))
+  fi
+
+  if [ -f "$REPO_ROOT/docs/decisions/0009-plan-review-gate.md" ]; then
+    echo "  ${GREEN}PASS${RESET} ADR-0009 (plan-review gate) ships"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} ADR-0009 missing"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # check-plan-review.sh — resolver + grandfather test suite (phase 08, plan 01)
 #
 # Verifier CLI contract: skills/agentic-apps-workflow/scripts/check-plan-review.sh
@@ -2059,6 +2573,10 @@ test_repo_layout() {
     skills/codex-ts-declare-first/templates/example.declare.ts \
     skills/codex-ts-declare-first/templates/example.test.ts \
     skills/codex-ts-declare-first/templates/example.impl.ts \
+    skills/agentic-apps-workflow/scripts/check-plan-review.sh \
+    skills/codex-plan-review/SKILL.md \
+    migrations/0008-plan-review-gate.md \
+    docs/decisions/0009-plan-review-gate.md \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -2132,6 +2650,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0007" ]; then
   test_migration_0007
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
+  test_migration_0008
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
