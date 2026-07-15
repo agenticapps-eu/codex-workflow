@@ -161,11 +161,11 @@ nothing. An abort is unrecoverable.
 
 ```bash
 [ -f AGENTS.md ] \
-  && grep -q '<!-- spec-source: agenticapps-workflow-core@0\.4\.0 §11 -->' AGENTS.md \
+  && grep -q '^<!-- spec-source: agenticapps-workflow-core@0\.4\.0 §11 -->$' AGENTS.md \
   && ! awk '
        /^<!-- gitnexus:start -->$/ { r = 1; next }
        /^<!-- gitnexus:end -->$/   { r = 0; next }
-       r && /<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->/ { f = 1 }
+       r && /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ { f = 1 }
        END { exit(f ? 0 : 1) }
      ' AGENTS.md
 ```
@@ -204,7 +204,7 @@ and is not truncated (its final section is present).
 
 ```bash
 PROV='<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->'
-PROV_RE='<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->'
+PROV_RE='^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$'
 MIRROR="${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
 
 if [ ! -f AGENTS.md ]; then
@@ -229,6 +229,30 @@ elif grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md \
   echo ""
   echo "           immediately above the heading to adopt it as managed."
   exit 3
+elif grep -qE "$PROV_RE" AGENTS.md \
+     && ! grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md; then
+  # The literal INVERSE of the guard immediately above. Provenance is present
+  # but the exact heading is not — either drifted (CR-01a) or orphaned with no
+  # heading at all (CR-01b). Both reproduced runaway-strip shapes collapse to
+  # this ONE predicate: "provenance present, exact H2 absent". Q1's ruling
+  # (see this document's <interfaces>, or 09.1-05's plan): REFUSE, not
+  # heal-and-duplicate. This check runs BEFORE any file surgery, so the file
+  # is byte-identical by construction — a strip that refuses to run cannot
+  # run away. This gate is file-global: it cannot see a shape where a HEALTHY
+  # provenance+heading pair exists elsewhere in the same file alongside a
+  # drifted one (both satisfy "some provenance is present" / "some heading is
+  # present" in aggregate). That shape is caught downstream by the strip
+  # awk's own END guard instead.
+  echo "ABORT: AGENTS.md contains a spec-11 provenance line whose"
+  echo "       '## Coding Discipline (NON-NEGOTIABLE)' heading is drifted or"
+  echo "       absent. The offending line(s):"
+  grep -nE "$PROV_RE" AGENTS.md
+  echo ""
+  echo "       (a) restore the '## Coding Discipline (NON-NEGOTIABLE)' heading"
+  echo "           immediately below the provenance line, or"
+  echo "       (b) remove the provenance line."
+  echo "       Refusing to strip. AGENTS.md left untouched."
+  exit 3
 else
   # Two passes: strip the managed block wherever it currently sits, then
   # re-insert it at the region-aware anchor. The strip is a no-op when the block
@@ -244,21 +268,33 @@ else
   # terminator so a SECOND provenance line re-enters cleanly instead of
   # inheriting a stale swallow state and leaking its own heading.
   #
-  # The strip is deliberately BLIND to the block's content: it is bounded
-  # structurally, so a drifted block cannot cause a runaway, and no verbatim
-  # assertion gates it. This migration must not refuse to PLACE a block just
-  # because its prose drifted — content fidelity is 0004's job. A consequence,
-  # stated rather than accidental: moving a drifted block also silently
-  # re-vendors it from the mirror, repairing the drift.
+  # D-26's PRINCIPLE survives: the strip stays deliberately BLIND to the
+  # block's PROSE — content fidelity is 0004's job, not this migration's, and
+  # moving a drifted block also silently re-vendors it from the mirror,
+  # repairing the drift. D-26's CLAIM does not survive: the strip is bounded
+  # ONLY when the exact heading is where it is expected — the heading is a
+  # STRUCTURAL boundary marker, not content (the canonical mirror has exactly
+  # one `## ` line, and it is the heading — asserted by
+  # `test_migration_0004`'s single-`## ` invariant guard). So: prose drift ->
+  # stay blind and repair; HEADING drift -> the boundary itself is gone, and
+  # this migration must refuse rather than run away. The two `elif` refuse
+  # branches above cover the file-global case; the `unresolved` flag and the
+  # `END` guard immediately below cover the shape they cannot see.
   #
   # The strip's output is required non-empty before anything consumes it.
   # AGENTS.md must never be replaced by a result derived from a truncated or
   # failed strip (awk error, disk full) — on failure this aborts, leaves
   # AGENTS.md untouched, and cleans up the partial temp file.
-  if awk '
-    BEGIN { in_block = 0; swallowed_own_h2 = 0 }
-    /<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->/ {
+  awk '
+    BEGIN { in_block = 0; swallowed_own_h2 = 0; unresolved = 0 }
+    /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ {
+      # A second provenance line arriving while a previous one never found
+      # its heading (in_block still latched, swallowed_own_h2 never set) is
+      # itself an unresolved shape — record it before re-entering, and reset
+      # swallowed_own_h2 so this new entry is judged on its own.
+      if (in_block && !swallowed_own_h2) { unresolved = 1 }
       in_block = 1
+      swallowed_own_h2 = 0
       next
     }
     in_block && !swallowed_own_h2 && /^## Coding Discipline \(NON-NEGOTIABLE\)$/ {
@@ -273,7 +309,63 @@ else
     }
     in_block { next }
     !in_block { print }
-  ' AGENTS.md > AGENTS.md.0009.strip && [ -s AGENTS.md.0009.strip ]; then
+    END {
+      # Fail closed: a provenance entry that never finds its heading leaves
+      # in_block latched true to EOF (or an earlier one was overwritten by a
+      # second entry above, recorded as `unresolved`). Either shape means
+      # "in_block { next }" was about to eat content it had no structural
+      # right to eat. Exit 4 — NOT exit 1 — so the caller can distinguish
+      # this refusal from a genuine awk error. A LEGITIMATE block that runs
+      # to EOF (no trailing `## ` or region marker, e.g. fixture
+      # 06-no-heading-eof) has swallowed_own_h2 == 1 at EOF and is
+      # unaffected by this guard.
+      if (unresolved || (in_block && !swallowed_own_h2)) exit 4
+    }
+  ' AGENTS.md > AGENTS.md.0009.strip
+  strip_rc=$?
+  if [ "$strip_rc" -eq 4 ]; then
+    # The refuse-gate `elif`s above are file-global and cannot see a MIXED
+    # shape: a healthy provenance+heading pair elsewhere in the file makes
+    # both "provenance present" and "heading present" true in aggregate, so
+    # neither gate fires. The strip awk sees the file sequentially instead,
+    # so it is what actually catches this shape.
+    rm -f AGENTS.md.0009.strip
+    echo "ABORT: migration 0009 Step 1 — a spec-11 provenance line was never"
+    echo "       followed by its '## Coding Discipline (NON-NEGOTIABLE)'"
+    echo "       heading before the strip pass reached EOF or a second"
+    echo "       provenance line. The offending line(s):"
+    grep -nE "$PROV_RE" AGENTS.md
+    echo ""
+    echo "       (a) restore the '## Coding Discipline (NON-NEGOTIABLE)' heading"
+    echo "           immediately below the provenance line, or"
+    echo "       (b) remove the provenance line."
+    echo "       Refusing to strip. AGENTS.md left untouched."
+    exit 3
+  elif [ "$strip_rc" -ne 0 ] || [ ! -s AGENTS.md.0009.strip ]; then
+    rm -f AGENTS.md.0009.strip
+    echo "ABORT: migration 0009 Step 1 — the strip pass produced no output;"
+    echo "       refusing to replace AGENTS.md with a possibly-truncated result."
+    exit 3
+  else
+    # Strip-integrity guard (criterion 4). The strip may remove ONLY the
+    # '## ' heading(s) it owns; every OTHER '## ' heading in the input must
+    # survive into the strip output. This is a backstop for the refuse gate
+    # and the END guard above, not a replacement for either — by itself it
+    # is defeated by the orphan-PROV-at-EOF shape (no '## ' headings are
+    # lost when there is no trailing heading to lose in the first place).
+    # Source: 09-REVIEW.md CR-01 fix (b), repositioned between the passes,
+    # before the insert regenerates the evidence this guard checks.
+    h2_in=$(grep -c '^## ' AGENTS.md | tr -d ' ')
+    h2_own=$(grep -c '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md | tr -d ' ')
+    h2_out=$(grep -c '^## ' AGENTS.md.0009.strip | tr -d ' ')
+    if [ "$h2_out" -ne "$(( h2_in - h2_own ))" ]; then
+      rm -f AGENTS.md.0009.strip
+      echo "ABORT: migration 0009 Step 1 — the strip removed structural headings"
+      echo "       it does not own (expected $(( h2_in - h2_own )) '## ' headings"
+      echo "       to survive, found $h2_out). AGENTS.md left untouched."
+      exit 3
+    fi
+
     # Re-insert at the region-aware anchor. The alternation IS the fix: 0001 and
     # 0004 had only /^## /, which selects a heading INSIDE the region on a
     # region-led file. "Whichever comes first" is what keeps the block near the
@@ -284,8 +376,12 @@ else
     # `while ((getline ...))` loop read nothing, yet awk still exits 0 with
     # non-empty output (the rest of the file, plus an orphaned provenance line).
     # `[ -s ]` alone would pass and commit that data loss. Requiring the result
-    # to actually contain the block's own heading catches it. Pre-flight's
-    # `test -s` guards the common case; this is the last line of defense.
+    # to actually contain the block's own heading catches it. This guards
+    # MIRROR integrity, not strip integrity — it cannot guard strip integrity,
+    # because it looks for the very heading the insert pass itself just wrote;
+    # strip integrity is guarded upstream by `strip_rc` instead. Pre-flight's
+    # `test -s` guards the common mirror-missing case; this is the last line
+    # of defense against a present-but-empty-or-corrupt mirror.
     if awk -v prov="$PROV" -v block_file="$MIRROR" '
       BEGIN { inserted = 0 }
       !inserted && (/^## / || /^<!-- gitnexus:start -->$/) {
@@ -327,11 +423,6 @@ else
       echo "       Refusing to replace AGENTS.md. Left untouched."
       exit 3
     fi
-  else
-    rm -f AGENTS.md.0009.strip
-    echo "ABORT: migration 0009 Step 1 — the strip pass produced no output;"
-    echo "       refusing to replace AGENTS.md with a possibly-truncated result."
-    exit 3
   fi
 fi
 ```
@@ -406,6 +497,28 @@ After applying, a human can check:
   with `exit 3` and leaves the file untouched; resolve per its message.
 
 ## Notes
+
+- **`PROV_RE` anchoring, ported from upstream `f9354cc` (not re-derived).** All
+  four sites where this migration matches the provenance marker as a regex
+  (the idempotency check's provenance grep and its in-region awk trigger, the
+  `PROV_RE` definition, and the strip pass's entry regex) are whole-line
+  anchored (`^...$`). This closes CR-02: an unanchored substring match also
+  fires on prose that merely *mentions* the marker — including a guard
+  comment inside `AGENTS.md` itself quoting the marker — which would
+  misjudge a healthy file as region-led or, worse, latch the strip's
+  `in_block` state onto a prose line and eat everything up to the next
+  terminator. Anchored per upstream `claude-workflow @ f9354cc`
+  (`migrations/0029-region-aware-spec-11-placement.md:142,146,175,223`, PR
+  #89), which fixed the identical defect there before this migration was
+  written. Ported rather than re-derived: the fix is already validated across
+  six repos, and re-deriving it here would risk prose divergence from the
+  repo this migration is a port of. The `@[^[:space:]]+` any-version class is
+  preserved at every site except the idempotency check's provenance grep
+  (`:164`), which stays pinned to the current version `0.4.0` by design — that
+  predicate is *idempotency* ("is the current version already applied"), a
+  different question from the strip's *entry* condition ("is there a
+  provenance line of any version to heal"), and narrowing it would leave a
+  stale-version provenance line unstrippable.
 
 - **The pre-flight version-floor porting error (fixed here, not inherited).**
   0009 v1's pre-flight guard 2 greped the project-relative path
