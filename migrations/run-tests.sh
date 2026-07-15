@@ -56,6 +56,124 @@ done
 # fixture-runner.sh) — no local duplication.
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Fence-scoped extraction helpers (TEST-01, D-35/D-36)
+#
+# WHY THESE EXIST: TEST-01 requires a fixture to execute the migration's shell
+# EXTRACTED FROM THE MIGRATION DOCUMENT ITSELF, never a transcribed copy. A
+# transcribed copy is a second source of truth that drifts silently from the
+# document it claims to test — `run-tests.sh:119` was exactly that (an inlined
+# copy of 0001's injection awk), and retiring it is TEST-04.
+#
+# WHY NOT `extract_to()`: the shared lib's `extract_to()` (agenticapps-shared
+# migrations/lib/fixture-runner.sh) is a GIT-SHOW extractor — it pulls a whole
+# FILE at a git ref. It deliberately does NOT solve this problem, which is
+# pulling a named FENCED BLOCK out of a markdown document. Do not mistake one
+# for the other.
+#
+# PORTED FROM (pinned, D-48): claude-workflow @ 8520f90d235e0c50b0484b170d595ab6f2cd1173
+#   migrations/test-fixtures/0029/common-verify.sh
+# Diff against that path at that SHA to see what was adapted and why. Upstream
+# HEAD has already moved past this pin; any later upstream change is a
+# deliberate follow-up diff, not an invisible mid-execution scope change.
+#
+# TWO DELIBERATE ADAPTATIONS from upstream:
+#   1. Scope/label matching is by LITERAL PREFIX (`index($0, p) == 1`), not by
+#      an interpolated regex. Upstream hardcodes `/^### Step 1/` and
+#      `/^\*\*Apply:\*\*/` because its step and label are fixed; these helpers
+#      take both as parameters, so interpolating them raw into an awk regex
+#      would let a metacharacter in a label change the match. A literal prefix
+#      compare has nothing to escape and cannot be injected. It matches the
+#      same lines upstream's anchored regexes do:
+#        - `^### Step N` prefix matches BOTH this repo's `### Step 1: <title>`
+#          (colon) and upstream's `### Step 1 — <title>` (dash).
+#        - `**Apply:**` prefix matches BOTH `0001:83` (marker alone on its line)
+#          and `0004:64` (`**Apply:** <prose>` on the same line).
+#   2. On failure these report through the harness PASS/FAIL counters rather
+#      than `exit 1` — upstream is a per-fixture subshell that may die; this is
+#      a 278-assertion in-process suite that must not.
+#
+# LOAD-BEARING: `want=0` on fence open is preserved verbatim from upstream. It
+# is why a ```bash → ```sh change cannot make the scan skip past the Apply
+# fence and latch onto the Rollback fence below it. Do not "simplify" it away.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# extract_step_block <doc_path> <step_number> <label>
+# Prints the FIRST fenced block following a `**<label>:**` line within
+# `### Step <step_number>`, scoped to end at `### Step <step_number+1>`.
+# <label> is e.g. `Apply` or `Idempotency check`.
+extract_step_block() {
+  local doc="$1" step="$2" label="$3"
+  local next_step=$((step + 1))
+  awk -v stepp="### Step ${step}" \
+      -v nextp="### Step ${next_step}" \
+      -v lblp="**${label}:**" '
+    index($0, stepp) == 1 { in_step=1; next }
+    index($0, nextp) == 1 { in_step=0 }
+    in_step && index($0, lblp) == 1 { want=1; next }
+    want && /^```/ { inb=1; want=0; next }
+    inb && /^```$/ { exit }
+    inb { print }
+  ' "$doc"
+}
+
+# extract_preflight_block <doc_path>
+# Prints the first fenced block under this repo's `## Pre-flight` heading
+# (`0001:44`, `0004:38`), scoped to end at the next `## ` heading. Unlike a
+# step block there is no `**Label:**` marker — the heading is followed directly
+# by the fence.
+extract_preflight_block() {
+  local doc="$1"
+  awk '
+    index($0, "## Pre-flight") == 1 { want=1; next }
+    want && /^## / { exit }
+    want && /^```/ { inb=1; want=0; next }
+    inb && /^```$/ { exit }
+    inb { print }
+  ' "$doc"
+}
+
+# assert_extracted_shape <label> <text> <required_substring>
+# D-36's antidote, ported from upstream's `case` shape guards: NON-EMPTY IS NOT
+# THE SAME AS CORRECT. An extractor that drifted onto the wrong fence returns
+# plenty of text. Asserts both that <text> is non-empty AND that it contains
+# <required_substring>, reporting each through the harness counters (always two
+# assertions per call). Prints the extracted text indented on failure.
+# Returns 0 if both hold, 1 otherwise — callers MUST gate execution on this.
+assert_extracted_shape() {
+  local label="$1" text="$2" want="$3"
+
+  if [ -n "$text" ]; then
+    echo "  ${GREEN}PASS${RESET} $label: extraction from the real document is non-empty"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $label: extraction is EMPTY — heading/fence shape drift"
+    FAIL=$((FAIL+1))
+    # An empty extraction cannot contain the required substring either. Report
+    # both so the assertion count stays stable whichever way the guard trips.
+    echo "  ${RED}FAIL${RESET} $label: extraction does not contain '$want' (extraction was empty)"
+    FAIL=$((FAIL+1))
+    return 1
+  fi
+
+  case "$text" in
+    *"$want"*)
+      echo "  ${GREEN}PASS${RESET} $label: extraction contains '$want'"
+      PASS=$((PASS+1))
+      ;;
+    *)
+      echo "  ${RED}FAIL${RESET} $label: extraction does NOT contain '$want' — the"
+      echo "         document's shape moved and the extractor followed it somewhere"
+      echo "         wrong. Fix the extractor rather than trusting this block."
+      echo "         Extracted:"
+      printf '%s\n' "$text" | sed 's/^/       /'
+      FAIL=$((FAIL+1))
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Migration 0000 — Baseline
 # Interactive only — placeholder substitution requires user input.
 # ─────────────────────────────────────────────────────────────────────────────
