@@ -861,6 +861,10 @@ test_check_plan_review_resolver() {
     s="$tmp/rootloc-git"
     mkdir -p "$s/.planning/phases/08-rootcase"
     touch "$s/.planning/phases/08-rootcase/08-01-PLAN.md"
+    # *-SUMMARY.md (08-01's own grandfather guard) keeps this resolution-only
+    # fixture allowed once 08-02's REVIEWS.md enforcement lands -- this case
+    # tests root-location, not the REVIEWS check.
+    touch "$s/.planning/phases/08-rootcase/08-01-SUMMARY.md"
     cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -892,6 +896,7 @@ EOF
   s="$tmp/rootloc-nogit"
   mkdir -p "$s/.planning/phases/08-rootcase2" "$s/src"
   touch "$s/.planning/phases/08-rootcase2/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-rootcase2/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -921,6 +926,7 @@ EOF
   s="$tmp/step1a"
   mkdir -p "$s/.planning/phases/08-pointer-abs"
   touch "$s/.planning/phases/08-pointer-abs/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-pointer-abs/08-01-SUMMARY.md"
   ln -s "$s/.planning/phases/08-pointer-abs" "$s/.planning/current-phase"
   e="$errdir/step1a.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 1a — absolute pointer wins" "$s" 0 --err-out "$e"
@@ -930,6 +936,7 @@ EOF
   s="$tmp/step1b"
   mkdir -p "$s/.planning/phases/08-pointer-rel"
   touch "$s/.planning/phases/08-pointer-rel/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-pointer-rel/08-01-SUMMARY.md"
   ( cd "$s/.planning" && ln -s "phases/08-pointer-rel" current-phase )
   e="$errdir/step1b.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 1b — .planning-relative pointer wins" "$s" 0 --err-out "$e"
@@ -939,6 +946,7 @@ EOF
   s="$tmp/step2a"
   mkdir -p "$s/.planning/phases/08-state-basic"
   touch "$s/.planning/phases/08-state-basic/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-state-basic/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -952,6 +960,7 @@ EOF
   s="$tmp/step2b"
   mkdir -p "$s/.planning/phases/08-heading-fallback"
   touch "$s/.planning/phases/08-heading-fallback/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-heading-fallback/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Phase
 
@@ -965,6 +974,7 @@ EOF
   s="$tmp/step2c"
   mkdir -p "$s/.planning/phases/08-zeropad"
   touch "$s/.planning/phases/08-zeropad/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-zeropad/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -979,6 +989,7 @@ EOF
   s="$tmp/step2d"
   mkdir -p "$s/.planning/phases/08-prose-decoy"
   touch "$s/.planning/phases/08-prose-decoy/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-prose-decoy/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -994,6 +1005,7 @@ EOF
   mkdir -p "$s/.planning/phases/08-older" "$s/.planning/phases/09-newer"
   touch -t 202501010000 "$s/.planning/phases/08-older/08-01-PLAN.md"
   touch -t 202601010000 "$s/.planning/phases/09-newer/09-01-PLAN.md"
+  touch "$s/.planning/phases/09-newer/09-01-SUMMARY.md"
   e="$errdir/step3.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 3 — newest *-PLAN.md by mtime wins" "$s" 0 --err-out "$e"
   _cpr_check_resolved "resolution: step 3 resolves the newer dir (09-newer)" "$e" "09-newer"
@@ -1013,6 +1025,7 @@ EOF
   s="$tmp/precedence"
   mkdir -p "$s/.planning/phases/08-pointer-wins" "$s/.planning/phases/08-state-loser" "$s/.planning/phases/09-newest-loser"
   touch "$s/.planning/phases/08-pointer-wins/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-pointer-wins/08-01-SUMMARY.md"
   touch "$s/.planning/phases/08-state-loser/08-01-PLAN.md"
   touch -t 202601010000 "$s/.planning/phases/09-newest-loser/09-01-PLAN.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
@@ -1030,6 +1043,7 @@ EOF
   s="$tmp/dec1"
   mkdir -p "$s/.planning/phases/08.1-inserted"
   touch "$s/.planning/phases/08.1-inserted/08.1-01-PLAN.md"
+  touch "$s/.planning/phases/08.1-inserted/08.1-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1042,6 +1056,7 @@ EOF
   s="$tmp/dec2"
   mkdir -p "$s/.planning/phases/08.1-inserted"
   touch "$s/.planning/phases/08.1-inserted/08.1-01-PLAN.md"
+  touch "$s/.planning/phases/08.1-inserted/08.1-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1054,6 +1069,7 @@ EOF
   s="$tmp/dec3"
   mkdir -p "$s/.planning/phases/12.3-x"
   touch "$s/.planning/phases/12.3-x/12.3-01-PLAN.md"
+  touch "$s/.planning/phases/12.3-x/12.3-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1077,6 +1093,7 @@ EOF
   s="$tmp/sec1"
   mkdir -p "$s/.planning/phases/08-bound-good"
   touch "$s/.planning/phases/08-bound-good/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-bound-good/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1094,6 +1111,7 @@ EOF
   mkdir -p "$s/.planning/phases/03-decoy" "$s/.planning/phases/08-step3-winner"
   touch -t 202501010000 "$s/.planning/phases/03-decoy/03-PLAN.md"
   touch -t 202601010000 "$s/.planning/phases/08-step3-winner/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-step3-winner/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1146,6 +1164,7 @@ EOF
   s="$tmp/absent-vs-amb"
   mkdir -p "$s/.planning/phases/08-x"
   touch "$s/.planning/phases/08-x/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-x/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1160,6 +1179,7 @@ EOF
   s="$tmp/mtime-eq"
   mkdir -p "$s/.planning/phases/08-eq-a" "$s/.planning/phases/08-eq-b"
   touch -t 202601010000 "$s/.planning/phases/08-eq-a/08-01-PLAN.md" "$s/.planning/phases/08-eq-b/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-eq-a/08-01-SUMMARY.md" "$s/.planning/phases/08-eq-b/08-01-SUMMARY.md"
   e1="$errdir/mtime-eq-1.err"; e2="$errdir/mtime-eq-2.err"; e3="$errdir/mtime-eq-3.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: mtime tie-break — invocation 1 of 3" "$s" 0 --err-out "$e1"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: mtime tie-break — invocation 2 of 3" "$s" 0 --err-out "$e2"
@@ -1220,6 +1240,761 @@ EOF
   mkdir -p "$s/.planning/phases"
   ( cd "$s/.planning" && ln -s "phases/../../../tmp" current-phase )
   _cpr_case "path-safety: '..'-traversal pointer value is rejected, falls through to fail-open" "$s" 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# check-plan-review.sh — enforcement + block path suite (phase 08, plan 02)
+#
+# Builds on the resolver suite above and reuses its pinned `_cpr_case` /
+# `_cpr_check_contains` helpers exactly (08-01's <action>: do not write a
+# second sandbox+exit-code helper). Every case builds a sandbox whose
+# resolved phase holds an unreviewed *-PLAN.md (the block candidate) unless
+# the case says otherwise.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# _cpr_enf_phase <sandbox-root> <phase-dir-name> [plan-basename ...]
+# Creates .planning/phases/<name>/ with one *-PLAN.md per basename argument
+# (default: a single 08-01-PLAN.md), points .planning/current-phase at it via
+# a .planning/-relative symlink (mirrors the resolver suite's own idiom), and
+# echoes the phase dir path.
+_cpr_enf_phase() {
+  local root="$1" name="$2" phasedir p
+  shift 2
+  phasedir="$root/.planning/phases/$name"
+  mkdir -p "$phasedir"
+  if [ "$#" -eq 0 ]; then
+    touch "$phasedir/08-01-PLAN.md"
+  else
+    for p in "$@"; do
+      touch "$phasedir/$p"
+    done
+  fi
+  ( cd "$root/.planning" && ln -sf "phases/$name" current-phase )
+  echo "$phasedir"
+}
+
+test_check_plan_review_enforcement() {
+  echo ""
+  echo "${YELLOW}=== check-plan-review.sh — enforcement + block path (phase 08-02) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  local escoutside="${tmp}-escmarker"
+  trap 'rm -rf "$tmp" "$escoutside"' RETURN
+  mkdir -p "$tmp/.planning/phases" "$tmp/err"
+  local errdir="$tmp/err"
+  local s e phasedir
+
+  # ── Block path (D-10) ───────────────────────────────────────────────────────
+
+  s="$tmp/block-basic"
+  phasedir="$(_cpr_enf_phase "$s" "08-block-basic")"
+  e="$errdir/block-basic.err"
+  _cpr_case "block: plans present, no *-REVIEWS.md -> exit 2" "$s" 2 --err-out "$e"
+  # The verifier cd's into the sandbox root, so it reports phase paths
+  # relative to that root (e.g. .planning/phases/08-block-basic), not the
+  # sandbox's own absolute $phasedir.
+  _cpr_check_contains "block: stderr names the resolved phase dir" "$e" ".planning/phases/08-block-basic"
+  _cpr_check_contains "block: stderr names codex-plan-review remedy" "$e" "codex-plan-review"
+  _cpr_check_contains "block: stderr names GSD_SKIP_REVIEWS hatch" "$e" "GSD_SKIP_REVIEWS"
+  _cpr_check_contains "block: stderr names multi-ai-review-skipped hatch" "$e" "multi-ai-review-skipped"
+
+  # ── REVIEWS strictness (D-13) — frontmatter present and well-formed ────────
+
+  s="$tmp/rev-flow2"; phasedir="$(_cpr_enf_phase "$s" "08-rev-flow2")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+
+Body text.
+MD
+  _cpr_case "strictness: reviewers: [gemini, opencode] (flow, 2 distinct) -> exit 0" "$s" 0
+
+  s="$tmp/rev-flow3"; phasedir="$(_cpr_enf_phase "$s" "08-rev-flow3")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [claude, gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  claude: LOW
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+
+Body text.
+MD
+  _cpr_case "strictness: reviewers: [claude, gemini, opencode] (flow, 3 distinct) -> exit 0" "$s" 0
+
+  s="$tmp/rev-block2"; phasedir="$(_cpr_enf_phase "$s" "08-rev-block2")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers:
+  - gemini
+  - opencode
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed:
+  - 08-01-PLAN.md
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+
+Body text.
+MD
+  _cpr_case "strictness: reviewers: as a 2-entry BLOCK sequence -> exit 0 (style independence)" "$s" 0
+
+  s="$tmp/rev-block1"; phasedir="$(_cpr_enf_phase "$s" "08-rev-block1")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers:
+  - gemini
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed:
+  - 08-01-PLAN.md
+overall_verdict:
+  gemini: LOW
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+
+Body text.
+MD
+  _cpr_case "strictness: reviewers: as a 1-entry BLOCK sequence -> exit 2" "$s" 2
+
+  s="$tmp/rev-one"; phasedir="$(_cpr_enf_phase "$s" "08-rev-one")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "strictness: reviewers: [gemini] (1 reviewer) -> exit 2" "$s" 2
+
+  s="$tmp/rev-zero"; phasedir="$(_cpr_enf_phase "$s" "08-rev-zero")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: []
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict: {}
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "strictness: reviewers: [] (0 reviewers) -> exit 2" "$s" 2
+
+  s="$tmp/rev-dup"; phasedir="$(_cpr_enf_phase "$s" "08-rev-dup")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, gemini]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "strictness: reviewers: [gemini, gemini] — DISTINCT count is 1, not 2 -> exit 2" "$s" 2
+
+  s="$tmp/rev-norm"; phasedir="$(_cpr_enf_phase "$s" "08-rev-norm")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, GEMINI, ' gemini ']
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "strictness: reviewers: [gemini, GEMINI, ' gemini '] normalizes to 1 distinct -> exit 2" "$s" 2
+
+  s="$tmp/rev-longbody-ok"; phasedir="$(_cpr_enf_phase "$s" "08-rev-longbody-ok")"
+  {
+    cat <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+
+MD
+    for _i in $(seq 1 200); do echo "Body line $_i of a long, otherwise irrelevant review."; done
+  } > "$phasedir/08-REVIEWS.md"
+  _cpr_case "strictness: reviewers: [gemini, opencode] + 200-line body -> exit 0 (frontmatter authoritative)" "$s" 0
+
+  s="$tmp/rev-longbody-block"; phasedir="$(_cpr_enf_phase "$s" "08-rev-longbody-block")"
+  {
+    cat <<'MD'
+---
+phase: 8
+reviewers: [gemini]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+
+MD
+    for _i in $(seq 1 200); do echo "Body line $_i of a long, otherwise irrelevant review."; done
+  } > "$phasedir/08-REVIEWS.md"
+  _cpr_case "strictness: reviewers: [gemini] + 200-line body MUST NOT be rescued -> exit 2 (D-14)" "$s" 2
+
+  s="$tmp/rev-body-only"; phasedir="$(_cpr_enf_phase "$s" "08-rev-body-only")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict: {}
+recommendation: rework
+---
+
+# Cross-AI Plan Review — Phase 8
+
+reviewers: [gemini, opencode]
+
+A `reviewers:` mention in the BODY, not the frontmatter, must not count.
+MD
+  _cpr_case "strictness: 'reviewers:' in BODY only (not frontmatter) -> exit 2 (parse bounded to frontmatter)" "$s" 2
+
+  # ── plans_reviewed coverage (D-12) ──────────────────────────────────────────
+
+  s="$tmp/cov-full"; phasedir="$(_cpr_enf_phase "$s" "08-cov-full" "08-01-PLAN.md" "08-02-PLAN.md")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md, 08-02-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "coverage: plans_reviewed covers both current plans -> exit 0" "$s" 0
+
+  s="$tmp/cov-gap"; phasedir="$(_cpr_enf_phase "$s" "08-cov-gap" "08-01-PLAN.md" "08-02-PLAN.md")"
+  e="$errdir/cov-gap.err"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "coverage: plans_reviewed omits 08-02-PLAN.md -> exit 2" "$s" 2 --err-out "$e"
+  _cpr_check_contains "coverage: stderr names the unreviewed plan 08-02-PLAN.md" "$e" "08-02-PLAN.md"
+
+  s="$tmp/cov-block-style"; phasedir="$(_cpr_enf_phase "$s" "08-cov-block-style" "08-01-PLAN.md" "08-02-PLAN.md")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed:
+  - 08-01-PLAN.md
+  - 08-02-PLAN.md
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "coverage: plans_reviewed as a BLOCK sequence covering both plans -> exit 0" "$s" 0
+
+  s="$tmp/cov-block-gap"; phasedir="$(_cpr_enf_phase "$s" "08-cov-block-gap" "08-01-PLAN.md" "08-02-PLAN.md")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed:
+  - 08-01-PLAN.md
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "coverage: plans_reviewed as a BLOCK sequence with a gap -> exit 2 (style independence)" "$s" 2
+
+  s="$tmp/cov-no-key"; phasedir="$(_cpr_enf_phase "$s" "08-cov-no-key")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "coverage: frontmatter with reviewers: but NO plans_reviewed: key -> exit 2 (D-12 schema)" "$s" 2
+
+  s="$tmp/cov-superset"; phasedir="$(_cpr_enf_phase "$s" "08-cov-superset" "08-01-PLAN.md")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md, 08-02-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  _cpr_case "coverage: plans_reviewed lists a plan that no longer exists (superset) -> exit 0" "$s" 0
+
+  # ── Malformed vs absent frontmatter (D-13) ──────────────────────────────────
+
+  s="$tmp/fm-malformed"; phasedir="$(_cpr_enf_phase "$s" "08-fm-malformed")"
+  e="$errdir/fm-malformed.err"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+
+# Cross-AI Plan Review — Phase 8
+
+An opening '---' with no closing '---' below it -- malformed, not absent.
+MD
+  _cpr_case "frontmatter: opening '---' with NO closing '---' -> exit 2 (malformed)" "$s" 2 --err-out "$e"
+  _cpr_check_contains "frontmatter: stderr distinguishes 'malformed' from missing-REVIEWS wording" "$e" "malformed"
+
+  s="$tmp/fm-absent-ok"; phasedir="$(_cpr_enf_phase "$s" "08-fm-absent-ok")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+Line 1 of a hand-written, frontmatter-less review note.
+Line 2.
+Line 3.
+Line 4.
+Line 5.
+Line 6.
+Line 7.
+Line 8.
+Line 9.
+Line 10.
+Line 11.
+Line 12.
+MD
+  _cpr_case "frontmatter: absent, 12-line body -> exit 0 (D-13 fallback)" "$s" 0
+
+  s="$tmp/fm-absent-short"; phasedir="$(_cpr_enf_phase "$s" "08-fm-absent-short")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+Line 1.
+Line 2.
+Line 3.
+MD
+  _cpr_case "frontmatter: absent, 3-line body -> exit 2 (D-13 diverges from the reference's warn+allow)" "$s" 2
+
+  s="$tmp/fm-absent-empty"; phasedir="$(_cpr_enf_phase "$s" "08-fm-absent-empty")"
+  : > "$phasedir/08-REVIEWS.md"
+  _cpr_case "frontmatter: absent, empty file -> exit 2" "$s" 2
+
+  # ── Escape hatches (D-11) ────────────────────────────────────────────────────
+
+  s="$tmp/hatch-env"; phasedir="$(_cpr_enf_phase "$s" "08-hatch-env")"
+  e="$errdir/hatch-env.err"
+  GSD_SKIP_REVIEWS=1 _cpr_case "hatch: GSD_SKIP_REVIEWS=1 -> exit 0" "$s" 0 --err-out "$e"
+  _cpr_check_contains "hatch: stderr names GSD_SKIP_REVIEWS as the fired hatch" "$e" "GSD_SKIP_REVIEWS"
+
+  s="$tmp/hatch-marker"; phasedir="$(_cpr_enf_phase "$s" "08-hatch-marker")"
+  touch "$phasedir/multi-ai-review-skipped"
+  e="$errdir/hatch-marker.err"
+  _cpr_case "hatch: multi-ai-review-skipped marker at resolved phase dir -> exit 0" "$s" 0 --err-out "$e"
+  _cpr_check_contains "hatch: stderr names the marker path" "$e" "multi-ai-review-skipped"
+
+  mkdir -p "$tmp/.planning/phases/08-real"
+  touch "$tmp/.planning/phases/08-real/08-01-PLAN.md" 2>/dev/null || true
+  s="$tmp/hatch-escaped-marker"
+  mkdir -p "$s/.planning/phases/08-real"
+  touch "$s/.planning/phases/08-real/08-01-PLAN.md"
+  mkdir -p "$escoutside"
+  touch "$escoutside/multi-ai-review-skipped"
+  ln -s "$escoutside" "$s/.planning/current-phase"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (escaped marker regression) - DOING
+EOF
+  _cpr_case "hatch: marker reachable ONLY via an escaped current-phase pointer is NOT honored -> exit 2 (T-08-29)" "$s" 2
+
+  s="$tmp/hatch-zero"; phasedir="$(_cpr_enf_phase "$s" "08-hatch-zero")"
+  GSD_SKIP_REVIEWS=0 _cpr_case "hatch: GSD_SKIP_REVIEWS=0 is NOT a hatch -> exit 2" "$s" 2
+
+  s="$tmp/hatch-blank"; phasedir="$(_cpr_enf_phase "$s" "08-hatch-blank")"
+  GSD_SKIP_REVIEWS="" _cpr_case "hatch: GSD_SKIP_REVIEWS='' is NOT a hatch -> exit 2" "$s" 2
+
+  # ── --file bypass list (T-08-08, T-08-37) ───────────────────────────────────
+
+  s="$tmp/bypass-plan"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-plan")"
+  _cpr_case "bypass: --file .planning/.../08-01-PLAN.md -> exit 0 (canonical GSD artifact)" "$s" 0 --file ".planning/phases/08-bypass-plan/08-01-PLAN.md"
+
+  s="$tmp/bypass-nonplanning"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-nonplanning")"
+  _cpr_case "bypass: --file docs/IMPLEMENTATION-PLAN.md -> exit 2 (basename matches but NOT .planning/-rooted)" "$s" 2 --file "docs/IMPLEMENTATION-PLAN.md"
+
+  s="$tmp/bypass-traversal1"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-traversal1")"
+  _cpr_case "bypass: --file .planning/../docs/IMPLEMENTATION-PLAN.md -> exit 2 (traversal regression guard)" "$s" 2 --file ".planning/../docs/IMPLEMENTATION-PLAN.md"
+
+  s="$tmp/bypass-traversal2"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-traversal2")"
+  _cpr_case "bypass: --file .planning/../../etc/passwd -> exit 2 (traversal, basename wouldn't have matched anyway)" "$s" 2 --file ".planning/../../etc/passwd"
+
+  s="$tmp/bypass-traversal3"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-traversal3")"
+  _cpr_case "bypass: --file .planning/phases/08-x/../08-x/08-01-PLAN.md -> exit 2 (traversal is a SHAPE check, not a resolution check)" "$s" 2 --file ".planning/phases/08-x/../08-x/08-01-PLAN.md"
+
+  s="$tmp/bypass-codefile"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-codefile")"
+  _cpr_case "bypass: --file src/app.ts -> exit 2 (ordinary code file, the gate's whole point)" "$s" 2 --file "src/app.ts"
+
+  s="$tmp/bypass-none"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-none")"
+  _cpr_case "bypass: no --file at all -> exit 2 (bypass never fires when the flag is absent)" "$s" 2
+
+  # ── Non-regular artifact, fail-closed (T-08-09) ─────────────────────────────
+
+  if command -v mkfifo >/dev/null 2>&1; then
+    _cpr_timeout_cmd=""
+    if command -v timeout >/dev/null 2>&1; then
+      _cpr_timeout_cmd="timeout"
+    elif command -v gtimeout >/dev/null 2>&1; then
+      _cpr_timeout_cmd="gtimeout"
+    fi
+    if [ -n "$_cpr_timeout_cmd" ]; then
+      s="$tmp/nonreg-fifo"; phasedir="$(_cpr_enf_phase "$s" "08-nonreg-fifo")"
+      rm -f "$phasedir/08-REVIEWS.md"
+      mkfifo "$phasedir/08-REVIEWS.md"
+      _cpr_fifo_rc=$( ( cd "$s" && "$_cpr_timeout_cmd" 5 bash "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ) >/dev/null 2>&1; echo $? )
+      if [ "$_cpr_fifo_rc" = "2" ]; then
+        echo "  ${GREEN}PASS${RESET} non-regular: FIFO *-REVIEWS.md -> exit 2 under timeout (not a hang, not exit 0)"
+        PASS=$((PASS+1))
+      else
+        echo "  ${RED}FAIL${RESET} non-regular: FIFO case (expected exit=2, got exit=$_cpr_fifo_rc)"
+        FAIL=$((FAIL+1))
+      fi
+    else
+      echo "  ${YELLOW}SKIP${RESET} no timeout/gtimeout available — FIFO fail-closed case not run"
+      SKIP=$((SKIP+1))
+    fi
+  else
+    echo "  ${YELLOW}SKIP${RESET} mkfifo not available — FIFO fail-closed case not run"
+    SKIP=$((SKIP+1))
+  fi
+
+  s="$tmp/nonreg-dir"; phasedir="$(_cpr_enf_phase "$s" "08-nonreg-dir")"
+  rm -f "$phasedir/08-REVIEWS.md" 2>/dev/null || true
+  mkdir -p "$phasedir/08-REVIEWS.md"
+  _cpr_case "non-regular: *-REVIEWS.md is a directory -> exit 2" "$s" 2
+
+  s="$tmp/nonreg-dangling"; phasedir="$(_cpr_enf_phase "$s" "08-nonreg-dangling")"
+  ln -s "$phasedir/does-not-exist" "$phasedir/08-REVIEWS.md"
+  _cpr_case "non-regular: *-REVIEWS.md is a dangling symlink -> exit 2" "$s" 2
+
+  # ── Symlinked artifact, fail-closed (T-08-36; bypass 1) ─────────────────────
+
+  s="$tmp/symlink-outside"; phasedir="$(_cpr_enf_phase "$s" "08-symlink-outside")"
+  printf 'a\nb\nc\nd\ne\nf\n' > "$s/decoy.txt"
+  ln -s "$s/decoy.txt" "$phasedir/08-REVIEWS.md"
+  e="$errdir/symlink-outside.err"
+  _cpr_case "symlink: LIVE symlink to a 12-line frontmatter-less file OUTSIDE the phase dir -> exit 2 (the bypass)" "$s" 2 --err-out "$e"
+  # Relative to the sandbox root the verifier cd's into (see the block-path
+  # case above for the same relative-vs-absolute-path rationale).
+  _cpr_check_contains "symlink: stderr names the symlink path" "$e" ".planning/phases/08-symlink-outside/08-REVIEWS.md"
+
+  s="$tmp/symlink-valid-elsewhere"; phasedir="$(_cpr_enf_phase "$s" "08-symlink-valid-elsewhere")"
+  cat > "$s/valid-reviews.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  ln -s "$s/valid-reviews.md" "$phasedir/08-REVIEWS.md"
+  _cpr_case "symlink: LIVE symlink to a VALID 2-reviewer REVIEWS.md elsewhere -> exit 2 (rejected on shape, not content)" "$s" 2
+
+  s="$tmp/symlink-insidedir"; phasedir="$(_cpr_enf_phase "$s" "08-symlink-insidedir")"
+  cat > "$phasedir/valid-reviews.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  ln -s "$phasedir/valid-reviews.md" "$phasedir/08-REVIEWS.md"
+  _cpr_case "symlink: LIVE symlink to a file INSIDE the same phase dir -> exit 2 (containment is not the test)" "$s" 2
+
+  # ── Ambiguous artifact ───────────────────────────────────────────────────────
+
+  s="$tmp/ambiguous-reviews"; phasedir="$(_cpr_enf_phase "$s" "08-ambiguous-reviews")"
+  cat > "$phasedir/08-REVIEWS.md" <<'MD'
+---
+phase: 8
+reviewers: [gemini, opencode]
+reviewed_at: 2026-07-15T00:00:00Z
+plans_reviewed: [08-01-PLAN.md]
+overall_verdict:
+  gemini: LOW
+  opencode: LOW
+recommendation: proceed
+---
+
+# Cross-AI Plan Review — Phase 8
+MD
+  cp "$phasedir/08-REVIEWS.md" "$phasedir/old-REVIEWS.md"
+  e="$errdir/ambiguous-reviews.err"
+  _cpr_case "ambiguous: two *-REVIEWS.md in the resolved phase -> exit 2" "$s" 2 --err-out "$e"
+  _cpr_check_contains "ambiguous: stderr names 08-REVIEWS.md" "$e" "08-REVIEWS.md"
+  _cpr_check_contains "ambiguous: stderr names old-REVIEWS.md" "$e" "old-REVIEWS.md"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# check-plan-review.sh — producer <-> verifier contract suite (phase 08, plan 02)
+#
+# Reads the REAL repo-root artifacts (this repo's own 08-REVIEWS.md and the
+# codex-plan-review skill's reviews-skeleton) rather than inline fixtures --
+# deliberately, per this plan's <action>: an inline copy of the schema only
+# proves the verifier parses the test author's idea of the schema. If either
+# real artifact is absent, these cases FAIL (never SKIP) -- their absence is
+# the regression.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_check_plan_review_contract() {
+  echo ""
+  echo "${YELLOW}=== check-plan-review.sh — producer<->verifier contract (phase 08-02) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  mkdir -p "$tmp/.planning/phases"
+
+  local real_reviews="$REPO_ROOT/.planning/phases/08-plan-review-gate/08-REVIEWS.md"
+  local skill_md="$REPO_ROOT/skills/codex-plan-review/SKILL.md"
+
+  # ── Real-artifact round trip ─────────────────────────────────────────────────
+
+  if [ -f "$real_reviews" ]; then
+    local s phasedir plans_line plan_name
+    s="$tmp/real-artifact"
+    phasedir="$s/.planning/phases/08-plan-review-gate"
+    mkdir -p "$phasedir"
+    cp "$real_reviews" "$phasedir/08-REVIEWS.md"
+    ( cd "$s/.planning" && ln -sf "phases/08-plan-review-gate" current-phase )
+
+    plans_line="$(awk -F': ' '/^plans_reviewed:/{print $2; exit}' "$real_reviews")"
+    plans_line="${plans_line#\[}"; plans_line="${plans_line%\]}"
+    local -a real_plans
+    IFS=',' read -ra real_plans <<< "$plans_line"
+    for plan_name in "${real_plans[@]}"; do
+      plan_name="$(printf '%s' "$plan_name" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,""); print}')"
+      [ -n "$plan_name" ] && touch "$phasedir/$plan_name"
+    done
+
+    if [ "${#real_plans[@]}" -ge 1 ]; then
+      echo "  ${GREEN}PASS${RESET} contract: real 08-REVIEWS.md's plans_reviewed parsed (${#real_plans[@]} entries)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} contract: real 08-REVIEWS.md's plans_reviewed did not parse -- 0 entries"
+      FAIL=$((FAIL+1))
+    fi
+
+    _cpr_case "contract: this repo's real 08-REVIEWS.md, with one *-PLAN.md per plans_reviewed entry -> exit 0" "$s" 0
+  else
+    echo "  ${RED}FAIL${RESET} contract: real artifact missing at .planning/phases/08-plan-review-gate/08-REVIEWS.md (always a FAIL, never skipped)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Producer-skeleton round trip + full D-12 schema assertion ───────────────
+
+  if [ -f "$skill_md" ]; then
+    local skel_raw skel
+    skel_raw="$(awk '
+      /<!-- BEGIN: reviews-skeleton/ { f=1; next }
+      /<!-- END: reviews-skeleton/   { f=0 }
+      f
+    ' "$skill_md")"
+    skel="$(printf '%s\n' "$skel_raw" | awk '$0 == "```" || $0 == "```markdown" { next } { print }')"
+
+    if [ -n "$(printf '%s' "$skel" | tr -d '[:space:]')" ]; then
+      echo "  ${GREEN}PASS${RESET} contract: reviews-skeleton extraction is non-empty"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} contract: reviews-skeleton extraction is EMPTY -- marker rename regression"
+      FAIL=$((FAIL+1))
+    fi
+
+    # Full D-12 schema assertion -- the six required frontmatter keys.
+    local key
+    for key in phase reviewers reviewed_at plans_reviewed overall_verdict recommendation; do
+      if printf '%s\n' "$skel" | grep -q "^${key}:"; then
+        echo "  ${GREEN}PASS${RESET} contract: skeleton frontmatter carries '${key}:' (D-12 schema)"
+        PASS=$((PASS+1))
+      else
+        echo "  ${RED}FAIL${RESET} contract: skeleton frontmatter MISSING '${key}:' (D-12 schema)"
+        FAIL=$((FAIL+1))
+      fi
+    done
+
+    # Body: H1 + one "## <Reviewer> Review" H2 per reviewers entry + consensus.
+    if printf '%s\n' "$skel" | grep -qE '^# Cross-AI Plan Review — Phase [0-9]+'; then
+      echo "  ${GREEN}PASS${RESET} contract: skeleton body carries the required H1 (D-12)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} contract: skeleton body MISSING the required H1 (D-12)"
+      FAIL=$((FAIL+1))
+    fi
+
+    if printf '%s\n' "$skel" | grep -qiE '^## +Consensus'; then
+      echo "  ${GREEN}PASS${RESET} contract: skeleton body carries a Consensus section (D-12)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} contract: skeleton body MISSING a Consensus section (D-12)"
+      FAIL=$((FAIL+1))
+    fi
+
+    local skel_reviewers_line skel_reviewers_line2 skel_reviewer_count skel_section_count
+    skel_reviewers_line="$(printf '%s\n' "$skel" | awk -F': ' '/^reviewers:/{print $2; exit}')"
+    skel_reviewers_line2="${skel_reviewers_line#\[}"; skel_reviewers_line2="${skel_reviewers_line2%\]}"
+    local -a skel_reviewers
+    IFS=',' read -ra skel_reviewers <<< "$skel_reviewers_line2"
+    skel_reviewer_count="${#skel_reviewers[@]}"
+    skel_section_count="$(printf '%s\n' "$skel" | grep -cE '^## .+ Review$')"
+    if [ "$skel_reviewer_count" -eq "$skel_section_count" ] && [ "$skel_reviewer_count" -ge 2 ]; then
+      echo "  ${GREEN}PASS${RESET} contract: per-reviewer section count ($skel_section_count) equals reviewers: entry count ($skel_reviewer_count)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} contract: per-reviewer section count ($skel_section_count) != reviewers: entry count ($skel_reviewer_count)"
+      FAIL=$((FAIL+1))
+    fi
+
+    # Round trip: derive *-PLAN.md names FROM the skeleton's own
+    # plans_reviewed rather than hardcoding a count.
+    local plans_line plan_name
+    plans_line="$(printf '%s\n' "$skel" | awk -F': ' '/^plans_reviewed:/{print $2; exit}')"
+    plans_line="${plans_line#\[}"; plans_line="${plans_line%\]}"
+    local -a skel_plans
+    IFS=',' read -ra skel_plans <<< "$plans_line"
+
+    local s phasedir
+    s="$tmp/skeleton-roundtrip"
+    phasedir="$s/.planning/phases/08-skeleton"
+    mkdir -p "$phasedir"
+    printf '%s\n' "$skel" > "$phasedir/08-REVIEWS.md"
+    for plan_name in "${skel_plans[@]}"; do
+      plan_name="$(printf '%s' "$plan_name" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,""); print}')"
+      [ -n "$plan_name" ] && touch "$phasedir/$plan_name"
+    done
+    ( cd "$s/.planning" && ln -sf "phases/08-skeleton" current-phase )
+    _cpr_case "contract: producer's reviews-skeleton, with one *-PLAN.md per plans_reviewed entry -> exit 0" "$s" 0
+
+    # ── Producer dropped a failed reviewer (D-14/T-08-13) ──────────────────────
+    local s2 phasedir2
+    s2="$tmp/skeleton-onereviewer"
+    phasedir2="$s2/.planning/phases/08-skeleton"
+    mkdir -p "$phasedir2"
+    printf '%s\n' "$skel" | sed -E 's/^reviewers:.*$/reviewers: [gemini]/' > "$phasedir2/08-REVIEWS.md"
+    for plan_name in "${skel_plans[@]}"; do
+      plan_name="$(printf '%s' "$plan_name" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,""); print}')"
+      [ -n "$plan_name" ] && touch "$phasedir2/$plan_name"
+    done
+    ( cd "$s2/.planning" && ln -sf "phases/08-skeleton" current-phase )
+    _cpr_case "contract: skeleton with reviewers: reduced to one entry -> exit 2 (verifier independently enforces the minimum)" "$s2" 2
+
+    # ── Vendor-diversity spoof ─────────────────────────────────────────────────
+    local s3 phasedir3
+    s3="$tmp/skeleton-spoof"
+    phasedir3="$s3/.planning/phases/08-skeleton"
+    mkdir -p "$phasedir3"
+    printf '%s\n' "$skel" | sed -E 's/^reviewers:.*$/reviewers: [gemini, gemini]/' > "$phasedir3/08-REVIEWS.md"
+    for plan_name in "${skel_plans[@]}"; do
+      plan_name="$(printf '%s' "$plan_name" | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/,""); print}')"
+      [ -n "$plan_name" ] && touch "$phasedir3/$plan_name"
+    done
+    ( cd "$s3/.planning" && ln -sf "phases/08-skeleton" current-phase )
+    _cpr_case "contract: skeleton with reviewers: [gemini, gemini] -> exit 2 (vendor-diversity spoof)" "$s3" 2
+  else
+    echo "  ${RED}FAIL${RESET} contract: skills/codex-plan-review/SKILL.md missing (always a FAIL, never skipped)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Producer refusal (D-14) ──────────────────────────────────────────────────
+  local s4 phasedir4
+  s4="$tmp/producer-refusal"
+  phasedir4="$(_cpr_enf_phase "$s4" "08-producer-refusal")"
+  _cpr_case "contract: producer refused (no REVIEWS.md written) -> exit 2 (refusing leaves the gate closed)" "$s4" 2
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1361,6 +2136,8 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
   test_check_plan_review_resolver
+  test_check_plan_review_enforcement
+  test_check_plan_review_contract
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

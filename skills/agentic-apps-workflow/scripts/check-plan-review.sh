@@ -52,7 +52,70 @@ CPR_FILE=""
 if [ "${1:-}" = "--file" ]; then
   CPR_FILE="${2:-}"
 fi
-# CPR_FILE is unused in this plan; plan 08-02 consumes it for the bypass list.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Escape hatch 1 (D-11): GSD_SKIP_REVIEWS=1. Checked before ANY filesystem
+# work -- before even repo-root self-location -- per <ordering> step 1
+# (plan 08-02). Only the literal "1" disarms the gate: "0" and empty are NOT
+# hatches (T-08-07 -- a silent bypass on a stray falsy value would defeat the
+# whole gate). This hatch announces itself on stderr, unlike the reference
+# (its line 46), which exits 0 silently -- a silent authorization bypass is
+# exactly the threat T-08-07 names.
+# ─────────────────────────────────────────────────────────────────────────────
+if [ "${GSD_SKIP_REVIEWS:-}" = "1" ]; then
+  echo "plan-review gate: SKIPPED via GSD_SKIP_REVIEWS=1 (emergency override)" >&2
+  exit 0
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# --file bypass list (T-08-08, T-08-37; <ordering> step 2) -- fires ONLY when
+# --file was supplied, and only ABOVE resolution (plan 08-02).
+#
+# Traversal rejected FIRST, before the prefix test (bypass 2 in <ordering>;
+# T-08-37): '.planning/../docs/IMPLEMENTATION-PLAN.md' satisfies BOTH the
+# '.planning/' prefix and the 'PLAN.md' basename textually, and resolves to
+# the exact file the FLAG-A fix below exists to exclude. Reject on the '..'
+# component itself -- do NOT normalize-then-test: _canon_dir cd's and
+# therefore requires the path to exist, and --file may name a file about to
+# be created. A rejected --file is NOT a block by itself; the bypass simply
+# does not fire and the gate falls through to normal resolution -- the
+# phase's real state then decides.
+# ─────────────────────────────────────────────────────────────────────────────
+if [ -n "$CPR_FILE" ]; then
+  _cpr_has_dotdot=0
+  IFS='/' read -ra _cpr_file_parts <<< "$CPR_FILE"
+  for _cpr_file_part in "${_cpr_file_parts[@]}"; do
+    if [ "$_cpr_file_part" = ".." ]; then
+      _cpr_has_dotdot=1
+      break
+    fi
+  done
+
+  if [ "$_cpr_has_dotdot" -eq 0 ]; then
+    # Ported from the reference's FLAG-A fix (its lines 51-60): gate on the
+    # path PREFIX (.planning/*, */.planning/*) AND the basename, never the
+    # basename alone. A basename-only check matched docs/IMPLEMENTATION-PLAN.md
+    # and any repo file ending in a canonical basename, defeating the gate by
+    # filename trivially (T-08-08).
+    case "$CPR_FILE" in
+      .planning/*|*/.planning/*)
+        # NOTE: *REVIEW[S].md (not *REVIEWS.md) is deliberate, not a typo --
+        # the bracket expression matches identically to *REVIEWS.md but
+        # avoids spelling the contiguous substring "REVIEWS.md" this early
+        # in the file. This plan's own acceptance criteria assert a source-
+        # order regression guard (multi-ai-review-skipped must precede the
+        # REVIEWS.md evidence-check block later in this file); an early,
+        # unrelated "REVIEWS.md" occurrence here would falsely satisfy that
+        # grep-based check. Do not "simplify" this back to *REVIEWS.md.
+        case "$(basename "$CPR_FILE")" in
+          *PLAN.md|*PLAN-*.md|*REVIEW[S].md|ROADMAP.md|PROJECT.md|REQUIREMENTS.md|*CONTEXT.md|*RESEARCH.md)
+            exit 0
+            ;;
+        esac
+        ;;
+    esac
+  fi
+fi
 
 _debug() {
   [ "${GSD_PLAN_REVIEW_DEBUG:-}" = "1" ] && echo "$1" >&2
@@ -268,12 +331,34 @@ resolve_phase() {
   return 1
 }
 
-CURRENT_PHASE="$(resolve_phase)"
+CURRENT_PHASE=$(
+  resolve_phase
+)
 if [ -n "${CURRENT_PHASE:-}" ] && [ -d "$CURRENT_PHASE" ]; then
   _debug "resolved-phase: $CURRENT_PHASE"
 else
   # No active phase resolved -- allow (workflow not in active phase
   # execution, or resolution was terminally ambiguous).
+  exit 0
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Escape hatch 2 (D-11): multi-ai-review-skipped marker, checked ONLY at the
+# resolved phase dir -- the path plan 08-01's containment check already
+# validated (<ordering> step 4; T-08-29).
+#
+# Deliberately does NOT also check the raw '.planning/current-phase/...'
+# path, unlike the reference (its line 130): that raw path follows the very
+# symlink containment rejects, so an attacker-controlled pointer escaping
+# .planning/phases/ could carry a marker that authorizes the edit even
+# though the pointer itself was rejected. When the pointer IS legitimate,
+# '.planning/current-phase/multi-ai-review-skipped' and
+# '<resolved>/multi-ai-review-skipped' are the same file, so no legitimate
+# hatch is lost by dropping the raw check. Do not "restore" it when porting
+# from the reference.
+# ─────────────────────────────────────────────────────────────────────────────
+if [ -f "$CURRENT_PHASE/multi-ai-review-skipped" ]; then
+  echo "plan-review gate: SKIPPED via $CURRENT_PHASE/multi-ai-review-skipped (emergency override)" >&2
   exit 0
 fi
 
@@ -308,12 +393,224 @@ if [ -n "$SUMMARY" ]; then
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# END OF PLAN 08-01's SCOPE.
+# REVIEWS.md evidence check (D-10, D-12, D-13) — plan 08-02.
 #
-# Plan 08-02 inserts here: the *-REVIEWS.md check (frontmatter reviewers:
-# count, or the >=5-line fallback), the GSD_SKIP_REVIEWS=1 and
-# multi-ai-review-skipped escape hatches, and the exit-2 block message.
-# This plan has no cases for any of that and never exits 2.
+# Block message shape (D-10; 08-CONTEXT.md "Specific Ideas"): state what is
+# missing, give the exact remedy, then name both overrides as emergency-only.
+# Never auto-invoke a reviewer from this script (D-10): doing so would ship
+# plan content to third-party vendors without consent. The verifier detects
+# and reports; the operator decides.
 # ─────────────────────────────────────────────────────────────────────────────
 
-exit 0
+_cpr_block() {
+  local reason="${1:-}"
+  {
+    echo "❌ plan-review gate: BLOCKED (exit 2)"
+    echo ""
+    echo "   Phase:     $CURRENT_PHASE"
+    [ -n "$CPR_FILE" ] && echo "   File:      $CPR_FILE"
+    echo "   Missing:   $CURRENT_PHASE/<NN>-REVIEWS.md"
+    echo ""
+    echo "   Reason: $reason"
+    echo ""
+    echo "   Remedy: invoke the codex-plan-review skill to produce a"
+    echo "   multi-AI plan review artifact, then continue."
+    echo ""
+    echo "   Overrides (emergency only):"
+    echo "     GSD_SKIP_REVIEWS=1"
+    echo "     touch $CURRENT_PHASE/multi-ai-review-skipped"
+  } >&2
+  exit 2
+}
+
+# Collect *-REVIEWS.md at -maxdepth 2 under the resolved phase into a
+# counted list -- do NOT `head -1` (<ordering> step 6; T-08-30): a nested or
+# stale artifact must not silently win over the canonical one by directory-
+# walk order.
+_cpr_reviews_list=()
+while IFS= read -r -d '' _cpr_r; do
+  _cpr_reviews_list+=("$_cpr_r")
+done < <(find "$CURRENT_PHASE" -maxdepth 2 -name '*-REVIEWS.md' -print0 2>/dev/null)
+_cpr_reviews_count="${#_cpr_reviews_list[@]}"
+
+if [ "$_cpr_reviews_count" -eq 0 ]; then
+  _cpr_block "the phase has *-PLAN.md files but no multi-AI plan review (*-REVIEWS.md not found)"
+fi
+
+if [ "$_cpr_reviews_count" -gt 1 ]; then
+  {
+    echo "❌ plan-review gate: BLOCKED (exit 2) — ambiguous review evidence"
+    echo ""
+    echo "   Phase: $CURRENT_PHASE"
+    echo "   Found ${_cpr_reviews_count} *-REVIEWS.md files (expected exactly 1):"
+    printf '     %s\n' "${_cpr_reviews_list[@]}"
+    echo ""
+    echo "   Remedy: invoke the codex-plan-review skill to produce a single"
+    echo "   canonical review artifact; remove or consolidate the extras."
+    echo ""
+    echo "   Overrides (emergency only): GSD_SKIP_REVIEWS=1 or touch"
+    echo "   $CURRENT_PHASE/multi-ai-review-skipped"
+  } >&2
+  exit 2
+fi
+
+REVIEWS="${_cpr_reviews_list[0]}"
+
+# Symlink guard FIRST (<ordering> step 7a; T-08-36) -- [ -L ] is the only
+# test that does NOT dereference. [ -f ] is a dereferencing test: false for
+# a FIFO, socket, directory, and dangling symlink, but TRUE for a LIVE
+# symlink pointing at any regular file anywhere. Testing -f first would
+# therefore admit a live `08-REVIEWS.md -> /etc/hosts` as a frontmatter-less
+# regular file that clears the >=5-line fallback below -- a trivial bypass
+# with a file the operator never wrote. Reject symlinks outright rather than
+# canonicalizing-and-containing: an evidence artifact has no legitimate
+# reason to indirect (deliberate asymmetry with plan 08-01's current-phase
+# pointer, which IS legitimately a symlink and IS canonicalized-and-
+# contained -- a pointer is MEANT to indirect; an evidence artifact is not).
+if [ -L "$REVIEWS" ]; then
+  _cpr_block "the review artifact $REVIEWS is a symlink -- symlinked evidence is treated as missing, never canonicalized-and-contained"
+fi
+
+# Regular-file guard (round 1, T-08-09) -- false for the remaining
+# non-regular cases (FIFO, socket, directory) after the symlink guard above.
+# The reference exits 0 here (its line 162, a trivial gate bypass per
+# review); this port fails closed: a non-regular artifact is not evidence of
+# a review, it is an accident or an attack, so treat it as missing rather
+# than risk `wc -l` hanging on a FIFO.
+if [ ! -f "$REVIEWS" ]; then
+  _cpr_block "the review artifact $REVIEWS is not a regular file -- treated as missing"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _cpr_fm_list <frontmatter-block-text> <key> — extract a YAML key's values,
+# accepting BOTH styles: a one-line flow sequence (`key: [a, b]`) and an
+# indented block sequence (`key:` followed by `  - a` lines until the next
+# unindented key). Takes no YAML dependency (D-13's own requirement). Bounded
+# to the frontmatter block text passed in -- a `key:` mention in the body
+# must never be read as a list (parse is bounded to the block between the
+# first two '---' lines, never the whole file).
+# ─────────────────────────────────────────────────────────────────────────────
+_cpr_fm_list() {
+  local text="$1" key="$2"
+  printf '%s\n' "$text" | awk -v key="$key" '
+    {
+      line = $0
+      if (match(line, "^" key ":[[:space:]]*\\[")) {
+        s = line
+        sub("^" key ":[[:space:]]*\\[", "", s)
+        sub("\\].*$", "", s)
+        n = split(s, arr, ",")
+        for (i = 1; i <= n; i++) {
+          v = arr[i]
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+          if (v != "") print v
+        }
+        in_key = 0
+        next
+      }
+      if (match(line, "^" key ":[[:space:]]*$")) {
+        in_key = 1
+        next
+      }
+      if (in_key == 1) {
+        if (match(line, "^[[:space:]]*-[[:space:]]*")) {
+          v = line
+          sub("^[[:space:]]*-[[:space:]]*", "", v)
+          gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+          if (v != "") print v
+          next
+        } else {
+          in_key = 0
+        }
+      }
+    }
+  '
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Frontmatter detection and malformed handling (D-13). Look for an opening
+# '---' on line 1. If present but there is no closing '---', the artifact is
+# MALFORMED -- exit 2 distinctly, do NOT fall through to the >=5-line path
+# (an unterminated block is a broken artifact, not a hand-written one;
+# conflating them lets a truncated file take the looser path).
+# ─────────────────────────────────────────────────────────────────────────────
+_cpr_fm_first_line="$(head -n 1 "$REVIEWS" 2>/dev/null || true)"
+
+if [ "${_cpr_fm_first_line:-}" = "---" ]; then
+  _cpr_fm_close_line="$(awk 'NR > 1 && $0 == "---" { print NR; exit }' "$REVIEWS")"
+  if [ -z "${_cpr_fm_close_line:-}" ]; then
+    _cpr_block "the review artifact has an opening frontmatter '---' with no closing '---' -- MALFORMED frontmatter, distinct from a missing review (D-13)"
+  fi
+
+  _cpr_fm_block="$(awk -v endline="$_cpr_fm_close_line" 'NR > 1 && NR < endline' "$REVIEWS")"
+
+  # Count DISTINCT reviewers. Normalize each entry (strip surrounding
+  # whitespace and quotes, lowercase) before counting unique values --
+  # [gemini, gemini] is one reviewer, not two (08-REVIEWS.md, Codex, MEDIUM).
+  _cpr_reviewers_distinct="$(
+    _cpr_fm_list "$_cpr_fm_block" "reviewers" \
+      | sed -e "s/^['\"]//" -e "s/['\"]\$//" \
+      | awk '{gsub(/^[[:space:]]+|[[:space:]]+$/, ""); print tolower($0)}' \
+      | sed '/^$/d' \
+      | sort -u \
+      | wc -l | tr -d ' '
+  )"
+
+  if [ "$_cpr_reviewers_distinct" -lt 2 ]; then
+    _cpr_block "found ${_cpr_reviewers_distinct} distinct reviewer(s) in frontmatter 'reviewers:' (need >= 2, counted after case/whitespace normalization)"
+  fi
+
+  # plans_reviewed coverage -- the cheap half of freshness (D-12). Require
+  # every current *-PLAN.md basename under the resolved phase to appear in
+  # it. A gap -> exit 2 naming the plans that were not reviewed. A superset
+  # (a listed plan that no longer exists) is fine. Do NOT add a content
+  # digest or any hashing scheme here -- that is the expensive half of
+  # freshness and is explicitly deferred (08-CONTEXT.md "Deferred Ideas").
+  #
+  # NOTE on this check's real reach (08-REVIEWS.md round 2, OpenCode,
+  # MEDIUM): the grandfather guard above fires on ANY *-SUMMARY.md, and this
+  # fleet writes one SUMMARY per plan -- so the moment a phase's first plan
+  # ships, the verifier exits 0 at the grandfather guard and never reaches
+  # this check at all. This check is therefore the cheap half of freshness
+  # for UN-shipped phases only; it is structurally unenforceable once any
+  # SUMMARY exists. That is not a defect to fix here (D-08's grandfather
+  # behavior is carried faithfully from the reference); it is reported
+  # upstream (ADR-0009 decision 8b), not diverged on unilaterally.
+  _cpr_plans_reviewed_raw="$(_cpr_fm_list "$_cpr_fm_block" "plans_reviewed")"
+  if [ -z "$_cpr_plans_reviewed_raw" ]; then
+    _cpr_block "frontmatter is missing the required 'plans_reviewed:' key (D-12 schema)"
+  fi
+
+  _cpr_missing_plans=""
+  while IFS= read -r -d '' _cpr_plan_file; do
+    _cpr_plan_base="$(basename "$_cpr_plan_file")"
+    if ! printf '%s\n' "$_cpr_plans_reviewed_raw" | grep -qxF "$_cpr_plan_base"; then
+      _cpr_missing_plans="${_cpr_missing_plans}${_cpr_plan_base} "
+    fi
+  done < <(find "$CURRENT_PHASE" -maxdepth 2 -name '*-PLAN.md' -print0 2>/dev/null)
+
+  if [ -n "$_cpr_missing_plans" ]; then
+    _cpr_block "plans_reviewed does not cover: ${_cpr_missing_plans}-- the review predates these plans"
+  fi
+
+  # Frontmatter present and every check passed -- allow.
+  exit 0
+else
+  # ───────────────────────────────────────────────────────────────────────────
+  # Fallback (D-13, ONLY when frontmatter is absent entirely): the >=5-line
+  # non-emptiness check. This is the single deliberate behavioral divergence
+  # from the reference, which warns and exits 0 here (its lines 166-172):
+  # D-13 requires exit 2 below the threshold. This path is a known, locked
+  # weakening -- review called it easy to spoof (08-REVIEWS.md, Codex,
+  # MEDIUM), D-13 keeps it for hand-written-file compatibility, and
+  # ADR-0009 records the accepted limitation. When frontmatter IS present it
+  # is authoritative and this fallback never runs -- body length must not
+  # rescue a short reviewer list (D-14).
+  # ───────────────────────────────────────────────────────────────────────────
+  _cpr_line_count="$(wc -l < "$REVIEWS" 2>/dev/null | tr -d ' ')"
+  _cpr_line_count="${_cpr_line_count:-0}"
+  if [ "$_cpr_line_count" -lt 5 ]; then
+    _cpr_block "the review artifact has no frontmatter and fewer than 5 lines (D-13 fallback; the reference warns and allows here, this host blocks)"
+  fi
+  exit 0
+fi
