@@ -861,6 +861,10 @@ test_check_plan_review_resolver() {
     s="$tmp/rootloc-git"
     mkdir -p "$s/.planning/phases/08-rootcase"
     touch "$s/.planning/phases/08-rootcase/08-01-PLAN.md"
+    # *-SUMMARY.md (08-01's own grandfather guard) keeps this resolution-only
+    # fixture allowed once 08-02's REVIEWS.md enforcement lands -- this case
+    # tests root-location, not the REVIEWS check.
+    touch "$s/.planning/phases/08-rootcase/08-01-SUMMARY.md"
     cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -892,6 +896,7 @@ EOF
   s="$tmp/rootloc-nogit"
   mkdir -p "$s/.planning/phases/08-rootcase2" "$s/src"
   touch "$s/.planning/phases/08-rootcase2/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-rootcase2/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -921,6 +926,7 @@ EOF
   s="$tmp/step1a"
   mkdir -p "$s/.planning/phases/08-pointer-abs"
   touch "$s/.planning/phases/08-pointer-abs/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-pointer-abs/08-01-SUMMARY.md"
   ln -s "$s/.planning/phases/08-pointer-abs" "$s/.planning/current-phase"
   e="$errdir/step1a.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 1a — absolute pointer wins" "$s" 0 --err-out "$e"
@@ -930,6 +936,7 @@ EOF
   s="$tmp/step1b"
   mkdir -p "$s/.planning/phases/08-pointer-rel"
   touch "$s/.planning/phases/08-pointer-rel/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-pointer-rel/08-01-SUMMARY.md"
   ( cd "$s/.planning" && ln -s "phases/08-pointer-rel" current-phase )
   e="$errdir/step1b.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 1b — .planning-relative pointer wins" "$s" 0 --err-out "$e"
@@ -939,6 +946,7 @@ EOF
   s="$tmp/step2a"
   mkdir -p "$s/.planning/phases/08-state-basic"
   touch "$s/.planning/phases/08-state-basic/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-state-basic/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -952,6 +960,7 @@ EOF
   s="$tmp/step2b"
   mkdir -p "$s/.planning/phases/08-heading-fallback"
   touch "$s/.planning/phases/08-heading-fallback/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-heading-fallback/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Phase
 
@@ -965,6 +974,7 @@ EOF
   s="$tmp/step2c"
   mkdir -p "$s/.planning/phases/08-zeropad"
   touch "$s/.planning/phases/08-zeropad/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-zeropad/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -979,6 +989,7 @@ EOF
   s="$tmp/step2d"
   mkdir -p "$s/.planning/phases/08-prose-decoy"
   touch "$s/.planning/phases/08-prose-decoy/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-prose-decoy/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -994,6 +1005,7 @@ EOF
   mkdir -p "$s/.planning/phases/08-older" "$s/.planning/phases/09-newer"
   touch -t 202501010000 "$s/.planning/phases/08-older/08-01-PLAN.md"
   touch -t 202601010000 "$s/.planning/phases/09-newer/09-01-PLAN.md"
+  touch "$s/.planning/phases/09-newer/09-01-SUMMARY.md"
   e="$errdir/step3.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 3 — newest *-PLAN.md by mtime wins" "$s" 0 --err-out "$e"
   _cpr_check_resolved "resolution: step 3 resolves the newer dir (09-newer)" "$e" "09-newer"
@@ -1013,6 +1025,7 @@ EOF
   s="$tmp/precedence"
   mkdir -p "$s/.planning/phases/08-pointer-wins" "$s/.planning/phases/08-state-loser" "$s/.planning/phases/09-newest-loser"
   touch "$s/.planning/phases/08-pointer-wins/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-pointer-wins/08-01-SUMMARY.md"
   touch "$s/.planning/phases/08-state-loser/08-01-PLAN.md"
   touch -t 202601010000 "$s/.planning/phases/09-newest-loser/09-01-PLAN.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
@@ -1030,6 +1043,7 @@ EOF
   s="$tmp/dec1"
   mkdir -p "$s/.planning/phases/08.1-inserted"
   touch "$s/.planning/phases/08.1-inserted/08.1-01-PLAN.md"
+  touch "$s/.planning/phases/08.1-inserted/08.1-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1042,6 +1056,7 @@ EOF
   s="$tmp/dec2"
   mkdir -p "$s/.planning/phases/08.1-inserted"
   touch "$s/.planning/phases/08.1-inserted/08.1-01-PLAN.md"
+  touch "$s/.planning/phases/08.1-inserted/08.1-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1054,6 +1069,7 @@ EOF
   s="$tmp/dec3"
   mkdir -p "$s/.planning/phases/12.3-x"
   touch "$s/.planning/phases/12.3-x/12.3-01-PLAN.md"
+  touch "$s/.planning/phases/12.3-x/12.3-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1077,6 +1093,7 @@ EOF
   s="$tmp/sec1"
   mkdir -p "$s/.planning/phases/08-bound-good"
   touch "$s/.planning/phases/08-bound-good/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-bound-good/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1094,6 +1111,7 @@ EOF
   mkdir -p "$s/.planning/phases/03-decoy" "$s/.planning/phases/08-step3-winner"
   touch -t 202501010000 "$s/.planning/phases/03-decoy/03-PLAN.md"
   touch -t 202601010000 "$s/.planning/phases/08-step3-winner/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-step3-winner/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1146,6 +1164,7 @@ EOF
   s="$tmp/absent-vs-amb"
   mkdir -p "$s/.planning/phases/08-x"
   touch "$s/.planning/phases/08-x/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-x/08-01-SUMMARY.md"
   cat > "$s/.planning/STATE.md" <<'EOF'
 ## Current Position
 
@@ -1160,6 +1179,7 @@ EOF
   s="$tmp/mtime-eq"
   mkdir -p "$s/.planning/phases/08-eq-a" "$s/.planning/phases/08-eq-b"
   touch -t 202601010000 "$s/.planning/phases/08-eq-a/08-01-PLAN.md" "$s/.planning/phases/08-eq-b/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-eq-a/08-01-SUMMARY.md" "$s/.planning/phases/08-eq-b/08-01-SUMMARY.md"
   e1="$errdir/mtime-eq-1.err"; e2="$errdir/mtime-eq-2.err"; e3="$errdir/mtime-eq-3.err"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: mtime tie-break — invocation 1 of 3" "$s" 0 --err-out "$e1"
   GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: mtime tie-break — invocation 2 of 3" "$s" 0 --err-out "$e2"
@@ -1270,7 +1290,10 @@ test_check_plan_review_enforcement() {
   phasedir="$(_cpr_enf_phase "$s" "08-block-basic")"
   e="$errdir/block-basic.err"
   _cpr_case "block: plans present, no *-REVIEWS.md -> exit 2" "$s" 2 --err-out "$e"
-  _cpr_check_contains "block: stderr names the resolved phase dir" "$e" "$phasedir"
+  # The verifier cd's into the sandbox root, so it reports phase paths
+  # relative to that root (e.g. .planning/phases/08-block-basic), not the
+  # sandbox's own absolute $phasedir.
+  _cpr_check_contains "block: stderr names the resolved phase dir" "$e" ".planning/phases/08-block-basic"
   _cpr_check_contains "block: stderr names codex-plan-review remedy" "$e" "codex-plan-review"
   _cpr_check_contains "block: stderr names GSD_SKIP_REVIEWS hatch" "$e" "GSD_SKIP_REVIEWS"
   _cpr_check_contains "block: stderr names multi-ai-review-skipped hatch" "$e" "multi-ai-review-skipped"
@@ -1735,7 +1758,9 @@ EOF
   ln -s "$s/decoy.txt" "$phasedir/08-REVIEWS.md"
   e="$errdir/symlink-outside.err"
   _cpr_case "symlink: LIVE symlink to a 12-line frontmatter-less file OUTSIDE the phase dir -> exit 2 (the bypass)" "$s" 2 --err-out "$e"
-  _cpr_check_contains "symlink: stderr names the symlink path" "$e" "$phasedir/08-REVIEWS.md"
+  # Relative to the sandbox root the verifier cd's into (see the block-path
+  # case above for the same relative-vs-absolute-path rationale).
+  _cpr_check_contains "symlink: stderr names the symlink path" "$e" ".planning/phases/08-symlink-outside/08-REVIEWS.md"
 
   s="$tmp/symlink-valid-elsewhere"; phasedir="$(_cpr_enf_phase "$s" "08-symlink-valid-elsewhere")"
   cat > "$s/valid-reviews.md" <<'MD'
