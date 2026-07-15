@@ -68,12 +68,29 @@ from upstream and were ported faithfully.
    fixture against the current 0009 before the awk is touched. Phase 9's own
    discipline; the repro is already written (16 lines → 4 lines, provenance
    present + drifted H2).
-2. **Fix locally, file upstream.** CR-01/CR-02 are byte-identical to
-   `claude-workflow @ 8520f90:0029:192-210`. The local fix deliberately diverges
-   from the D-48 pin — record the divergence in ADR-0010 and file the defect
-   upstream so the six repos carrying 0029 are not left exposed.
-3. **No assertion weakening.** As in 09-04: the fixtures must be satisfied by the
-   code, never the reverse.
+2. **Re-pin to `f9354cc`, then port what upstream already fixed.** (Corrected by
+   09.1-RESEARCH.md — supersedes Phase 9's D-48.) **`8520f90` was a PR-branch
+   commit that never landed on main.** PR #89 squash-merged as `f9354cc`, which is
+   upstream HEAD. Upstream **already fixed CR-02** there: `PROV_RE` is anchored in
+   all three sites and a `11-prose-mention-provenance` fixture ships with it —
+   that is criterion 3, already written. **Port it; do not re-invent it.**
+   **CR-01 is still live upstream** at `f9354cc:0029:222-241`, and upstream's new
+   "Known limitations" section lists CRLF and fenced markers but *not* the runaway
+   — they are unaware, not accepting. So the upstream bug report is **CR-01 only**.
+   Re-check `origin/main` before locking the new pin: upstream revised 0029 four
+   times in one afternoon.
+3. **V-01 is OURS — do not file it upstream.** (Corrected by 09.1-RESEARCH.md.)
+   Upstream greps `.claude/skills/agentic-apps-workflow/SKILL.md`, a path its own
+   setup skill creates. **Our port dropped the `.claude/` prefix.** On the Codex
+   host, skills install globally at `${CODEX_HOME}/skills/…` and the project
+   version lives in `.codex/workflow-version.txt`; `skills/agentic-apps-workflow/`
+   is *this scaffolder repo's own source tree*, which is why it looked right to its
+   author. A porting error, not an inherited defect.
+4. **No assertion weakening.** As in 09-04: the fixtures must be satisfied by the
+   code, never the reverse. **Inverse trap (Q3):** the fix may legitimately break a
+   currently-green `anchor-parity` count assertion by adding a third copy of the
+   alternation. A *good* change failing an assertion is not license to weaken the
+   assertion — update the count deliberately and say so.
 
 **Requirements**: ANCHOR-05, MIGR-01, MIGR-04, MIGR-06, MIGR-07, MIGR-08, MIGR-09, TEST-02, TEST-03, DOC-01
 
@@ -91,26 +108,51 @@ from upstream and were ported faithfully.
      observed FAILING against the current 0009 first.
   1. A fixture reproduces the runaway (provenance present, exact H2 drifted) and
      is observed FAILING against the current 0009 before any awk change.
-  2. The strip's entry and exit conditions are coupled: a provenance match that
-     never finds its exact heading cannot latch `in_block` to EOF. Verified by
-     the fixture from criterion 1 turning GREEN.
-  3. The provenance regex is anchored, with a fixture-07 twin proving a prose
-     mention of the provenance line cannot trigger the strip.
+  2. **Provenance present + exact H2 absent ⇒ REFUSE (abort exit 3), leaving
+     AGENTS.md byte-identical.** (User ruling on RESEARCH Q1, 2026-07-15.) One rule
+     covers *both* reproduced runaway shapes — drifted H2, and orphaned provenance
+     with no following `## ` — because both are exactly "provenance present, exact
+     H2 absent". This closes CR-01 **by construction**: a strip that refuses to run
+     cannot run away. Consistent with 0009's existing never-overwrite-a-hand-paste
+     conflict branch. The abort message must name the orphaned provenance line and
+     tell the operator to restore the heading or remove the line.
+     Rejected alternative: heal-and-duplicate (un-latch at the boundary and insert
+     anyway) — no data loss, but silently leaves two similar §11 headings that a
+     future migration's own conflict grep would trip on.
+     **Defense-in-depth (do NOT rely on it alone — RESEARCH reproduced its
+     insufficiency):** also add `END { if (in_block && !swallowed_own_h2) exit 1 }`.
+     Un-latching at a structural boundary *alone* still runs away to EOF on the
+     orphaned-provenance shape (8 lines → 4).
+  3. The provenance regex is anchored, **ported from upstream `f9354cc`** along
+     with its `11-prose-mention-provenance` fixture — proving a prose mention
+     cannot trigger the strip. The anchor must NOT lose `@[^[:space:]]+`'s
+     deliberate any-version match (idempotent re-runs across versions depend on it).
+     **Fixture numbering (Q4):** upstream's ported fixture owns `11-`; criterion 6's
+     idempotent re-run fixture must therefore take the next free number, not `11-`.
   4. The `grep -q` post-strip guard is no longer satisfiable by the insert pass
      re-adding the heading it checks for — i.e. it can actually fail.
   5. `test -s`'s assertion is live: deleting the guard fails the suite. The
      document check skips comment lines, and case 10(a) isolates layer 1 from the
      tail sentinel (mirroring the version-gate control 12 lines earlier).
-  6. `11-idempotent-rerun` exists: narrowing the strip terminator fails the suite.
+  6. An idempotent re-run fixture exists (next free number — NOT `11-`, which
+     upstream's ported prose-mention fixture takes): narrowing the strip terminator
+     fails the suite.
   7. MIGR-07's guard is live (V-02): `state-a` uses a genuinely **off**-anchor
      fixture so the `:3553` "D-31/MIGR-07" assertion can fail for the reason it
      claims.
   8. `.codex/workflow-version.txt` and `SKILL.md` agree (V-03), and the drift test
      reads the version file so a future split is caught.
-  9. ADR-0010 records the runaway, the D-26 correction ("bounded by construction"
-     was false), the V-01 pre-flight regression against 0008's T-08-38 precedent,
-     and the deliberate divergence from the 8520f90 pin.
-  10. Upstream defect filed against `claude-workflow` for CR-01/CR-02.
+  9. ADR-0010 records: the runaway; the D-26 correction ("bounded by construction"
+     was false); the V-01 pre-flight regression against 0008's T-08-38 precedent,
+     **recorded as a porting error (dropped `.claude/` prefix), not an inherited
+     defect**; the Q1 refuse-vs-heal ruling with its rejected alternative; and
+     **D-48's re-pin from `8520f90` (a PR-branch commit that never landed) to
+     `f9354cc` (PR #89's squash merge)** — with CR-02's fix ported from it rather
+     than re-invented.
+  10. Upstream defect filed against `claude-workflow` for **CR-01 only** — CR-02 is
+      already fixed at `f9354cc`, and V-01 is ours. The report should note that
+      upstream's "Known limitations" omits the runaway, so this is new information
+      to them.
 
 ### Phase 9: Region-Aware §11 Placement
 
@@ -265,11 +307,21 @@ sequence matters):
   skipped on Option B). Contradicts ADR-0010:265, which cites `0000-baseline.md:102`
   correctly.
 
-**Upstream note required:** CR-01 and CR-02 are *faithful ports* — diffed against
-`claude-workflow @ 8520f90:0029:192-210`, byte-identical modulo filename. They are
-inherited upstream defects, not porting errors, and affect every repo carrying 0029.
-File upstream in addition to fixing locally. Fixing locally diverges from the D-48
-pin deliberately; record that divergence in ADR-0010.
+**Upstream note — CORRECTED by 09.1-RESEARCH.md (2026-07-15).** The pre-research
+characterization below was wrong in two ways; both corrections are load-bearing:
+
+- **`8520f90` never landed on main.** It was a PR-branch commit. PR #89 squash-merged
+  as `f9354cc` = upstream HEAD. D-48's pin must move.
+- **CR-02 is ALREADY FIXED upstream at `f9354cc`** — `PROV_RE` anchored in all three
+  sites, shipped with a `11-prose-mention-provenance` fixture. **Port it, don't
+  re-invent it.** Criterion 3 is largely handed to us.
+- **CR-01 is still live upstream** (`f9354cc:0029:222-241`) — entry is now anchored,
+  but the exit is still gated behind `swallowed_own_h2`. Upstream's "Known
+  limitations" lists CRLF and fenced markers but **not** the runaway: they are
+  unaware, not accepting. **File CR-01 upstream — and only CR-01.**
+- **V-01 is NOT upstream's.** Upstream greps `.claude/skills/agentic-apps-workflow/
+  SKILL.md`, a path its own setup skill creates; **our port dropped the `.claude/`
+  prefix**. A codex-side porting error. Do not file it.
 
 ### Carried out of v0.6.0
 
