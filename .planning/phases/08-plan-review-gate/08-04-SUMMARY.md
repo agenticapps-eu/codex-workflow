@@ -132,3 +132,16 @@ None - no external service configuration required. (Operator setup for `codex-pl
 ---
 *Phase: 08-plan-review-gate*
 *Completed: 2026-07-15*
+
+## Self-Check: PASSED
+
+- FOUND: .planning/config.codex.json
+- FOUND: skills/setup-codex-agenticapps-workflow/templates/config-hooks.json
+- FOUND: skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md
+- FOUND: AGENTS.md
+- FOUND: skills/agentic-apps-workflow/SKILL.md
+- FOUND: .planning/phases/08-plan-review-gate/08-04-SUMMARY.md
+- FOUND commit: 2a164c7 (Task 1)
+- FOUND commit: 2ae3b67 (Task 2)
+- FOUND commit: 41da819 (Task 3)
+- FOUND commit: bf57a41 (SUMMARY.md)
