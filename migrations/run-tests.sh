@@ -56,6 +56,124 @@ done
 # fixture-runner.sh) — no local duplication.
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Fence-scoped extraction helpers (TEST-01, D-35/D-36)
+#
+# WHY THESE EXIST: TEST-01 requires a fixture to execute the migration's shell
+# EXTRACTED FROM THE MIGRATION DOCUMENT ITSELF, never a transcribed copy. A
+# transcribed copy is a second source of truth that drifts silently from the
+# document it claims to test — `run-tests.sh:119` was exactly that (an inlined
+# copy of 0001's injection awk), and retiring it is TEST-04.
+#
+# WHY NOT `extract_to()`: the shared lib's `extract_to()` (agenticapps-shared
+# migrations/lib/fixture-runner.sh) is a GIT-SHOW extractor — it pulls a whole
+# FILE at a git ref. It deliberately does NOT solve this problem, which is
+# pulling a named FENCED BLOCK out of a markdown document. Do not mistake one
+# for the other.
+#
+# PORTED FROM (pinned, D-48): claude-workflow @ 8520f90d235e0c50b0484b170d595ab6f2cd1173
+#   migrations/test-fixtures/0029/common-verify.sh
+# Diff against that path at that SHA to see what was adapted and why. Upstream
+# HEAD has already moved past this pin; any later upstream change is a
+# deliberate follow-up diff, not an invisible mid-execution scope change.
+#
+# TWO DELIBERATE ADAPTATIONS from upstream:
+#   1. Scope/label matching is by LITERAL PREFIX (`index($0, p) == 1`), not by
+#      an interpolated regex. Upstream hardcodes `/^### Step 1/` and
+#      `/^\*\*Apply:\*\*/` because its step and label are fixed; these helpers
+#      take both as parameters, so interpolating them raw into an awk regex
+#      would let a metacharacter in a label change the match. A literal prefix
+#      compare has nothing to escape and cannot be injected. It matches the
+#      same lines upstream's anchored regexes do:
+#        - `^### Step N` prefix matches BOTH this repo's `### Step 1: <title>`
+#          (colon) and upstream's `### Step 1 — <title>` (dash).
+#        - `**Apply:**` prefix matches BOTH `0001:83` (marker alone on its line)
+#          and `0004:64` (`**Apply:** <prose>` on the same line).
+#   2. On failure these report through the harness PASS/FAIL counters rather
+#      than `exit 1` — upstream is a per-fixture subshell that may die; this is
+#      a 278-assertion in-process suite that must not.
+#
+# LOAD-BEARING: `want=0` on fence open is preserved verbatim from upstream. It
+# is why a ```bash → ```sh change cannot make the scan skip past the Apply
+# fence and latch onto the Rollback fence below it. Do not "simplify" it away.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# extract_step_block <doc_path> <step_number> <label>
+# Prints the FIRST fenced block following a `**<label>:**` line within
+# `### Step <step_number>`, scoped to end at `### Step <step_number+1>`.
+# <label> is e.g. `Apply` or `Idempotency check`.
+extract_step_block() {
+  local doc="$1" step="$2" label="$3"
+  local next_step=$((step + 1))
+  awk -v stepp="### Step ${step}" \
+      -v nextp="### Step ${next_step}" \
+      -v lblp="**${label}:**" '
+    index($0, stepp) == 1 { in_step=1; next }
+    index($0, nextp) == 1 { in_step=0 }
+    in_step && index($0, lblp) == 1 { want=1; next }
+    want && /^```/ { inb=1; want=0; next }
+    inb && /^```$/ { exit }
+    inb { print }
+  ' "$doc"
+}
+
+# extract_preflight_block <doc_path>
+# Prints the first fenced block under this repo's `## Pre-flight` heading
+# (`0001:44`, `0004:38`), scoped to end at the next `## ` heading. Unlike a
+# step block there is no `**Label:**` marker — the heading is followed directly
+# by the fence.
+extract_preflight_block() {
+  local doc="$1"
+  awk '
+    index($0, "## Pre-flight") == 1 { want=1; next }
+    want && /^## / { exit }
+    want && /^```/ { inb=1; want=0; next }
+    inb && /^```$/ { exit }
+    inb { print }
+  ' "$doc"
+}
+
+# assert_extracted_shape <label> <text> <required_substring>
+# D-36's antidote, ported from upstream's `case` shape guards: NON-EMPTY IS NOT
+# THE SAME AS CORRECT. An extractor that drifted onto the wrong fence returns
+# plenty of text. Asserts both that <text> is non-empty AND that it contains
+# <required_substring>, reporting each through the harness counters (always two
+# assertions per call). Prints the extracted text indented on failure.
+# Returns 0 if both hold, 1 otherwise — callers MUST gate execution on this.
+assert_extracted_shape() {
+  local label="$1" text="$2" want="$3"
+
+  if [ -n "$text" ]; then
+    echo "  ${GREEN}PASS${RESET} $label: extraction from the real document is non-empty"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $label: extraction is EMPTY — heading/fence shape drift"
+    FAIL=$((FAIL+1))
+    # An empty extraction cannot contain the required substring either. Report
+    # both so the assertion count stays stable whichever way the guard trips.
+    echo "  ${RED}FAIL${RESET} $label: extraction does not contain '$want' (extraction was empty)"
+    FAIL=$((FAIL+1))
+    return 1
+  fi
+
+  case "$text" in
+    *"$want"*)
+      echo "  ${GREEN}PASS${RESET} $label: extraction contains '$want'"
+      PASS=$((PASS+1))
+      ;;
+    *)
+      echo "  ${RED}FAIL${RESET} $label: extraction does NOT contain '$want' — the"
+      echo "         document's shape moved and the extractor followed it somewhere"
+      echo "         wrong. Fix the extractor rather than trusting this block."
+      echo "         Extracted:"
+      printf '%s\n' "$text" | sed 's/^/       /'
+      FAIL=$((FAIL+1))
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Migration 0000 — Baseline
 # Interactive only — placeholder substitution requires user input.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,23 +231,62 @@ test_migration_0001() {
     FAIL=$((FAIL+1))
   fi
 
-  # Injection byte-identity: applying Step 1's awk to fixture A must produce a
-  # §11 block byte-identical to the mirror.
-  awk -v mirror="$mirror" '
-    /^## / && !done {
-      print "<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->"
-      while ((getline line < mirror) > 0) print line
-      close(mirror); print ""; done=1
-    }
-    { print }
-  ' "$tmp/a-AGENTS.md" > "$tmp/a-injected.md"
-  awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
-    "$tmp/a-injected.md" > "$tmp/a-block.md"
-  if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
-    echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
-    PASS=$((PASS+1))
+  # Injection byte-identity: executing 0001's OWN Step 1 Apply block against
+  # fixture A must produce a §11 block byte-identical to the mirror.
+  #
+  # This closes TEST-04 / Success Criterion 5. Until now this assertion ran an
+  # INLINED COPY of 0001's injection awk transcribed into this harness — a
+  # second source of truth that could drift from the document it claimed to
+  # test. It is now extracted from 0001's document itself (TEST-01).
+  #
+  # 0001 IS IMMUTABLE (fix-forward). Its anchor is the naive `/^## / && !done`,
+  # which is exactly the defect migration 0009 exists to heal. Asserting it here
+  # FAITHFULLY is deliberate: this test documents what 0001 actually does, not
+  # what we wish it did. That is a fidelity improvement, not a behavior change,
+  # and it does not conflict with 0009's fixtures going RED.
+  #
+  # KNOWN, DEFERRED (D-37): 0008's Step-3 insert-awk copy near :985 is a real
+  # instance of this same drift class. It is scoped OUT of this phase — reaching
+  # into another migration's tests widens a placement fix into harness
+  # refactoring across a 278-assertion suite. It was not missed; it is tracked.
+  local step1_apply
+  step1_apply="$(extract_step_block \
+    "$REPO_ROOT/migrations/0001-inject-spec-11-coding-discipline.md" 1 Apply)"
+
+  # Extraction from the REAL document must be non-empty AND identifiably the
+  # mirror-streaming injection block BEFORE the injection is asserted — a
+  # heading-regex drift must report as "extraction empty/wrong" rather than as a
+  # confusing downstream injection failure (T-08-23 precedent at :967-977, here
+  # generalized from template content to the migration's own shell).
+  if assert_extracted_shape "0001 Step 1 Apply" "$step1_apply" 'getline line < mirror'; then
+    # Scratch project root + fake Codex home. 0001's Apply block is
+    # self-contained: it re-declares MIRROR from ${CODEX_HOME:-$HOME/.codex} and
+    # operates on AGENTS.md in the current directory — which is what makes it
+    # eval-able here without modification.
+    local proj="$tmp/proj0001"
+    local fakehome="$tmp/codexhome"
+    local fakemirrors="$fakehome/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors"
+    mkdir -p "$proj" "$fakemirrors"
+    cp "$mirror" "$fakemirrors/11-coding-discipline-0.4.0.md"
+    printf '# Title\n\n## Some Section\n\nbody\n' > "$proj/AGENTS.md"
+
+    # SUBSHELL IS MANDATORY: an extracted block that takes an `exit` path would
+    # otherwise terminate the whole suite mid-run, hiding every later assertion.
+    ( cd "$proj" && export CODEX_HOME="$fakehome" && eval "$step1_apply" ) \
+      >/dev/null 2>&1
+
+    awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
+      "$proj/AGENTS.md" > "$tmp/a-block.md"
+    if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} injected §11 block differs from the mirror"
+      FAIL=$((FAIL+1))
+    fi
   else
-    echo "  ${RED}FAIL${RESET} injected §11 block differs from the mirror"
+    echo "  ${RED}FAIL${RESET} injected §11 block byte-identity NOT asserted — 0001's"
+    echo "         Step 1 Apply block could not be extracted from its document."
     FAIL=$((FAIL+1))
   fi
 
