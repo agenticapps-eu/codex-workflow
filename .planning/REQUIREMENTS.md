@@ -19,7 +19,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 ### Migration 0009
 
-- [ ] **MIGR-01**: Migration 0009 declares `from_version: 0.6.0` / `to_version: 0.7.0` with a pre-flight gate accepting both installed versions
+- [x] **MIGR-01**: Migration 0009 declares `from_version: 0.6.0` / `to_version: 0.7.0` with a pre-flight gate accepting both installed versions
 - [ ] **MIGR-02**: State A — a correctly anchored §11 block carrying current provenance is left byte-identical
 - [ ] **MIGR-03**: State B — a §11 block inside a gitnexus region is moved above the region
 - [ ] **MIGR-04**: State C — an absent §11 block is injected at the anchor
@@ -32,7 +32,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 ### Fixtures
 
 - [ ] **TEST-01**: Fixtures execute the migration's shell extracted from the migration document itself, never a transcribed copy
-- [ ] **TEST-02**: The fixture suite fails against the naive anchor before migration 0009 exists (RED before GREEN)
+- [x] **TEST-02**: The fixture suite fails against the naive anchor before migration 0009 exists (RED before GREEN)
 - [ ] **TEST-03**: Ten cases are covered: gitnexus-led inject, inside-region move, healthy no-op (proves zero churn), absent instruction file, hand-pasted refusal, no-heading-EOF, **prose-mention-not-a-region** (forces the anchored `/^<!-- gitnexus:start -->$/` regex), **rollback-region-led** (Rollback must not orphan the region), **two-provenance-heal** (guards the `swallowed_own_h2` stale-state bug — two blocks must heal to one), and **corrupt-mirror-refused** (binds both D-28.1 guard layers: zero-byte via `test -s`, truncated via tail sentinel, healthy passes). Widened from six on 2026-07-15 (D-46): the last four are `claude-workflow`'s post-review additions, each encoding a defect it actually hit — it describes the first two as "the two gaps that let a green suite ship file-destroying bugs"
 - [ ] **TEST-04**: The inlined anchor copy at `migrations/run-tests.sh:119` is replaced by document-sourced extraction
 
@@ -96,7 +96,7 @@ ROADMAP.md Phase 9's "Ordering constraints" note.
 | ANCHOR-03 | Phase 9 | Pending |
 | ANCHOR-04 | Phase 9 | Pending |
 | ANCHOR-05 | Phase 9 | Pending |
-| MIGR-01 | Phase 9 | Pending |
+| MIGR-01 | Phase 9 | Complete |
 | MIGR-02 | Phase 9 | Pending |
 | MIGR-03 | Phase 9 | Pending |
 | MIGR-04 | Phase 9 | Pending |
@@ -106,7 +106,7 @@ ROADMAP.md Phase 9's "Ordering constraints" note.
 | MIGR-08 | Phase 9 | Pending |
 | MIGR-09 | Phase 9 | Pending |
 | TEST-01 | Phase 9 | Pending |
-| TEST-02 | Phase 9 | Pending |
+| TEST-02 | Phase 9 | Complete |
 | TEST-03 | Phase 9 | Pending |
 | TEST-04 | Phase 9 | Pending |
 | SETUP-01 | Phase 9 | Pending |
