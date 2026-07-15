@@ -3874,6 +3874,61 @@ test_migration_0009() {
       && grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
     _m0009_ok $? "09-two-provenance-heal: both terminating '## ' headings survived (## Workflow, ## Deployment) — the strip did not over-run"
 
+    # ── 12-idempotent-rerun (ANCHOR-05 / MIGR-06 — the highest-value gap this
+    #    phase produced, per 09-REVIEW.md) ──
+    # BEFORE state is NOT hand-written: it is case 01-gitnexus-led-inject's
+    # BEFORE fixture (a region-LED file, no §11 anywhere), run through Apply
+    # ONCE to produce a genuinely healed region-led AGENTS.md, then Apply is
+    # run a SECOND time against that same output. Building the BEFORE this way
+    # means the fixture cannot drift from what 0009 actually emits — a
+    # hand-authored "healed" file would silently stop testing the re-run path
+    # the moment the insert's exact output shape changed.
+    #
+    # WHY THIS SHAPE SPECIFICALLY: 0009's own prose (Step 1 Apply, near the
+    # strip terminator) calls a `/^## /`-only terminator "the highest-severity
+    # mechanic in this migration" because it "skips straight past
+    # `<!-- gitnexus:start -->` on a file this migration has already healed."
+    # A re-run against an OFF-ANCHOR-BUT-HEALTHY file (state A) never reaches
+    # the strip's terminator at all — the idempotency check short-circuits
+    # Apply entirely — so state A cannot exercise this. Only a REGION-LED
+    # healed file (healed block immediately followed by
+    # `<!-- gitnexus:start -->`, not by a `## `) puts the terminator's
+    # alternation on the critical path of an ordinary second run. This is
+    # ANCHOR-05's ONLY live suite coverage: the anchor and the terminator are
+    # one decision, not two, and this fixture is what proves they still move
+    # together.
+    p="$(_m0009_mk_project "$tmp" 12)"; h="$(_m0009_mk_fake_home "$tmp" 12 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+    cp "$p/AGENTS.md" "$tmp/12-first-run.md"
+
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "12-idempotent-rerun: second Apply against an already-healed region-led file exits 0 — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/12-first-run.md"
+    _m0009_ok $? "12-idempotent-rerun: second run leaves AGENTS.md BYTE-IDENTICAL to the first run's output (true idempotency, MIGR-06)"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ]
+    _m0009_ok $? "12-idempotent-rerun: region markers still paired exactly once each (start=$nstart end=$nend) — ANCHOR-05's only live suite coverage"
+
+    grep -q 'MUST run impact analysis before editing any symbol' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "12-idempotent-rerun: the region's own body content survived the second run"
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "12-idempotent-rerun: exactly ONE provenance line remains after the second run (found $nprov)"
+
   else
     # The Apply extraction gate is DOWN. Report every case as FAILED rather than
     # skipping it. A case that silently vanishes when its input is missing is the
@@ -3886,6 +3941,7 @@ test_migration_0009() {
     _m0009_fail "05-unmanaged-conflict — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "09-two-provenance-heal — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "12-idempotent-rerun — NOT ASSERTED: Step 1 Apply extraction failed"
   fi
 
   # ── 07-prose-mention-not-a-region (D-46.1 — forces D-21's ANCHORED regex) ──
