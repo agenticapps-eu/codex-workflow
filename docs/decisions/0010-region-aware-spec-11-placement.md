@@ -258,7 +258,54 @@ obligation: it must carry the anchor's full alternation, or it eats the region.
 
 ## Setup parity (SETUP-01)
 
-*(Recorded by task 2 — see below.)*
+The natural worry about an anchor change is that the *setup* path carries its own
+copy of the placement logic, so healing the migration chain leaves fresh installs
+still broken. **On this host it does not.** Verified, each claim with its evidence:
+
+- **Setup has no independent §11 placement logic.** `migrations/0000-baseline.md:102`
+  is a plain `cat …/templates/agents-md-additions.md >> AGENTS.md` append — an
+  unconditional concatenation with no anchor, no heading search, and no awk. The
+  template it appends carries **no §11 at all**: it runs `## Development Workflow`
+  → … → `## Pre-execution Gate — Plan Review (spec §02)`, and contains zero
+  occurrences of `Coding Discipline` or `spec-source` (re-verified for this ADR
+  rather than inherited).
+- **Setup applies `0000-baseline` only, and lands the project at `0.1.0`.** Stage C
+  walks that one migration step by step; Stage D's post-check asserts
+  `.codex/workflow-version.txt` reads `0.1.0` (`skills/setup-codex-agenticapps-workflow/SKILL.md:109`).
+- **§11 therefore arrives via migration `0001`** in the subsequent update chain, and
+  migration `0009` heals its placement.
+
+So the anchor rule has exactly **one source — the migration chain**. A future
+change to the anchor has exactly one place to look, and that is the whole point of
+recording this: there is no second implementation to keep in sync, and none should
+be added.
+
+**Why no parity guard is needed (D-44).** `spec/08-migration-format.md:27-33` makes
+the **end state** normative rather than the mechanism, and names two conformant
+strategies: *"**replay** (setup applies every migration from `0000-baseline`
+forward) and **snapshot** (setup installs a prebuilt artifact assembled from those
+same sources, with a drift guard in CI proving artifact and sources agree)."* This
+host is **replay**; claude-workflow is **snapshot**, which is exactly why it ships
+`migrations/check-snapshot-parity.sh` and an anchor-parity guard, and why this host
+ships neither. §08 conformance is satisfied here **by construction** — there is no
+second anchor to guard, because there is no second artifact. SETUP-01 is a
+record-the-fact requirement, not a build-a-guard one; adding a guard here would be
+guarding the absence of a thing.
+
+**The limitation that bounds this claim (D-45), stated without hedging.** The
+update skill has a **multi-hop chain-selection defect**: it selects pending
+migrations *once* from the project's initial version and never recomputes the
+version after each hop. A freshly scaffolded project sits at `0.1.0`, so it selects
+only `0001`, applies it, lands at `0.2.0`, and then fails the final target-version
+check. **"Setup end-state ≡ full replay" therefore does NOT complete in one
+invocation today.** This ADR does not assert an end-state conformance this host
+cannot currently demonstrate — what is demonstrated is the single-source property
+above, not that a single `/update-codex-agenticapps-workflow` invocation walks a
+fresh project to `0.7.0`.
+
+The defect is deferred to its own phase (see Open follow-ups) and does **not** block
+migration 0009, whose supported floor is `0.6.0 → 0.7.0` — a single hop, and where
+every live project already sits after `0008`.
 
 ## Verification
 
