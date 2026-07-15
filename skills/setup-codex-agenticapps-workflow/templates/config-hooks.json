@@ -3,6 +3,16 @@
   "implements_spec": "0.4.0",
   "host": "codex",
   "hooks": {
+    "pre_execution": {
+      "plan_review": {
+        "skill": "codex-plan-review",
+        "verifier": "${CODEX_HOME}/skills/agentic-apps-workflow/scripts/check-plan-review.sh",
+        "fires_when": "phase has >=1 *-PLAN.md AND no *-SUMMARY.md exists",
+        "evidence_artifact": "<NN>-REVIEWS.md",
+        "min_reviewers": 2,
+        "escape_hatches": ["GSD_SKIP_REVIEWS=1", "<phase>/multi-ai-review-skipped"]
+      }
+    },
     "pre_phase": {
       "brainstorm_ui": {
         "skill": "superpowers:brainstorming",
