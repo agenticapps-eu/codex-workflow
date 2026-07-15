@@ -28,9 +28,29 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
 
 - **D-21:** Insert immediately before the first line that is **either** a `## `
   heading **or** a `<!-- gitnexus:start -->` marker — whichever comes first; EOF
-  if neither. A one-alternation delta to the existing awk, so the structural
-  invariant survives: the block is still always followed by a `## ` or EOF, which
-  is what bounds the managed section for replace/rollback.
+  if neither. The marker regex MUST be **anchored** (`/^<!-- gitnexus:start -->$/`),
+  never a substring match, so a file that merely *mentions* the marker in prose is
+  not mistaken for a region.
+
+  **Rationale corrected 2026-07-15 (was false, and load-bearing).** The original
+  wording claimed this was "a one-alternation delta, so the structural invariant
+  survives: the block is still always followed by a `## ` or EOF." **That is false
+  by construction.** Once the anchor can be a marker line, a healed region-led file
+  (State B, the exact case MIGR-03 exists to fix) has the block followed by
+  `<!-- gitnexus:start -->` — not a `## `, not EOF. The invariant is **not
+  preserved; it is widened**:
+
+  > The block is always followed by a `## ` line, an anchored
+  > `<!-- gitnexus:start -->` marker, or EOF.
+
+  **Every terminator must carry the same alternation as the anchor** — see D-24.
+  The anchor *rule* itself was always correct and matches `claude-workflow`'s
+  shipped `0029` exactly; only this rationale was wrong. Independently confirmed by
+  that repo's own post-review correction the same day (design doc §"The invariant
+  this breaks (corrected 2026-07-15 after Task 2 review)"): *"Running Step 1's
+  Rollback on a healed region-led file eats the start marker and the region's real
+  content, leaving an orphaned `<!-- gitnexus:end -->` — an unpaired region.
+  Verified empirically."*
 - **D-22:** Two alternatives are rejected and **both** must be recorded in the ADR
   (the source prompt named only the first):
   1. *"Anchor before `gitnexus:start` if a region exists, else the first `## `."*
@@ -49,11 +69,22 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
 
 - **D-24:** **Structural boundary.** The block spans: provenance comment → its own
   `## Coding Discipline (NON-NEGOTIABLE)` heading → everything up to the **next**
-  `/^## /` line, or EOF. Verified viable: the mirror is 79 lines with exactly one
-  `## ` (its own heading, L1); its four subsections are `### `, which does **not**
-  match awk's `/^## /`. This makes the strip rest on the *same* invariant as the
-  anchor (D-21) — one rule, two uses. It also naturally absorbs the single
-  trailing blank line 0001 injects.
+  line matching **`(/^## / || /^<!-- gitnexus:start -->$/)`**, or EOF. Verified
+  viable: the mirror is 79 lines with exactly one `## ` (its own heading, L1); its
+  four subsections are `### `, which does **not** match awk's `/^## /`. This makes
+  the strip rest on the *same* invariant as the anchor (D-21) — one rule, two uses.
+  It also naturally absorbs the single trailing blank line 0001 injects.
+
+  **Terminator alternation added 2026-07-15 — this is not cosmetic.** The original
+  wording terminated on `/^## /` alone. Against a file *already healed* into State B
+  (block sitting immediately above a leading region), a `/^## /`-only terminator
+  skips straight past `<!-- gitnexus:start -->` and **consumes the entire GitNexus
+  region** plus everything up to the next `## ` or EOF — on MIGR-06's idempotent
+  re-run, and on Rollback. That is precisely the **runaway-strip hazard D-25
+  rejected 0004's content-sentinel for**, resurfacing inside the structural boundary
+  chosen to avoid it. The structural boundary is only safe once its terminator set
+  equals the anchor's terminator set. `claude-workflow`'s shipped `0029` carries
+  this exact alternation at both sites (`0029:176`, `0029:193`).
 - **D-25:** **Rejected — 0004's content sentinel** (`/session-level discipline the
   model brings to every diff\.$/`). It couples the strip to §11's last prose line,
   and prose drift in that exact block is *why migration 0004 had to exist*. It
@@ -152,6 +183,30 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
   after-state. Catches both a too-permissive check (skips unapplied work) and a
   too-strict one (re-applies applied work).
 
+- **D-46:** **Eight fixture cases, not six** (widens TEST-03; decided 2026-07-15
+  after research). The locked six stand, plus the two `claude-workflow` added
+  *after* its own Task 2 review — which it describes as *"the two gaps that let a
+  green suite ship file-destroying bugs: no fixture covered Rollback at all, and
+  none covered a file mentioning the marker in prose."* Adopting them here is
+  cheaper than rediscovering them:
+  1. **`07-prose-mention-not-a-region`** — an AGENTS.md whose *prose* contains the
+     text `<!-- gitnexus:start -->` (e.g. documentation about the marker) must NOT
+     be treated as region-led. This is the fixture that forces D-21's **anchored**
+     regex; a substring match passes every other fixture and fails only this one.
+  2. **`08-rollback-region-led`** — Rollback on a healed region-led file must leave
+     the region intact and paired. Retained even under D-47's `git checkout` shape:
+     it is the only case that exercises Rollback at all, and it is the regression
+     guard that keeps a future author from "improving" Rollback into the awk that
+     eats the region.
+
+- **D-47:** **Rollback is `git checkout AGENTS.md`** — 0004's existing precedent in
+  this repo. Chosen over porting `0029`'s custom Rollback awk: the awk is exactly
+  the complexity that required upstream's post-review fixture 08 to catch a
+  file-destroying bug, whereas `git checkout` is **structurally immune** — there is
+  no terminator to get wrong. Migration Rollback blocks in this repo already run in
+  a `test -d .git`-guarded context. Note this makes D-46.2 a cheap guard rather than
+  a live bug hunt — keep it anyway.
+
 ### Mechanics
 
 - **D-39:** `from_version: 0.6.0`, `to_version: 0.7.0`; pre-flight version gate
@@ -211,15 +266,28 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
 
 ### The design being propagated
 - `../claude-workflow/docs/superpowers/specs/2026-07-15-spec-11-region-aware-placement-design.md` —
-  the approved reference design. **Read first.** Note: its status is *"Approved
-  (brainstorming → design approved 2026-07-15)"* and **claude-workflow's migration
-  0029 does not exist yet** — `migrations/` has no 0029. This is **concurrent
-  propagation of an approved design, not a port of shipped code.** There is no
-  working implementation to diff against. Its "validated across 6 repos" refers to
-  the *anchor rule*, not a shipped migration.
+  the reference design. **Read first**, and read §*"The invariant this breaks
+  (corrected 2026-07-15 after Task 2 review)"* (L97-115) **before touching any
+  terminator** — it is the source of the D-21/D-24/ANCHOR-05 correction. Its status
+  line still reads *"Approved (brainstorming → design approved)"* and was never
+  updated after 0029 shipped; the body is nonetheless the current, corrected
+  rationale trail.
+- **⚠ STALE CLAIM CORRECTED 2026-07-15:** this section previously asserted
+  *"claude-workflow's migration 0029 does not exist yet … there is no working
+  implementation to diff against."* **That is now false.**
+  `../claude-workflow/migrations/0029-region-aware-spec-11-placement.md` shipped at
+  13:52 — ~10 minutes after this CONTEXT.md was finalized — together with
+  `test-fixtures/0029/` (**8** fixture dirs, `common-setup.sh`, `common-verify.sh`)
+  and `test_migration_0029` wired into its `run-tests.sh`. The phase premise flips
+  from *"concurrent propagation of an approved design"* to **"port of working,
+  six-repo-validated, TDD'd code."** Diff against it; do not re-derive it. Its
+  anchor and strip awk (`0029:176`, `0029:193`) are the reference implementation of
+  D-21/D-24's alternation.
 - `../claude-workflow/migrations/test-fixtures/0029/common-verify.sh` — the
-  fence-extractor + shape assertion to adapt (D-35/D-36). Written RED: it points at
-  a migration document that does not exist yet.
+  fence-extractor + shape assertion to adapt (D-35/D-36). **Richer than D-35
+  describes:** ~123 lines extracting **three** blocks per fixture (Step 1
+  Idempotency, Apply, Rollback), each with its own shape assertion. Port all three
+  extractions, not just Apply's.
 - `PROMPT-0009-spec-11-region-aware-placement.md` — the source prompt (repo root,
   **untracked**). Accurate on the defect and the anchor rule; **wrong that 0029
   exists**; **missed** the third anchor site (`run-tests.sh:119`) and the second
@@ -336,8 +404,11 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
   above the region', and wrong."*
 - Prefer the reference's fixture names where they map cleanly
   (`01-gitnexus-led-inject`, `02-inside-region-move`, `03-healthy-noop`,
-  `04-no-agentsmd`, `05-unmanaged-conflict`, `06-no-heading-eof`) — as **case
-  labels inside `test_migration_0009`**, not as directories (D-34).
+  `04-no-agentsmd`, `05-unmanaged-conflict`, `06-no-heading-eof`,
+  `07-prose-mention-not-a-region`, `08-rollback-region-led`) — as **case labels
+  inside `test_migration_0009`**, not as directories (D-34). Cases 07/08 per D-46.
+  Note the reference's case 04 is `04-no-claudemd`; this host's equivalent is
+  `04-no-agentsmd`.
 - `03-healthy-noop` must assert AGENTS.md is **byte-identical** — that is what
   proves zero churn, and it is the fixture that would catch an over-eager anchor.
 

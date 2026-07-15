@@ -15,7 +15,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 - [ ] **ANCHOR-02**: When the file has neither a `## ` heading nor a gitnexus marker, the block is appended at EOF
 - [ ] **ANCHOR-03**: Replayed against healthy real-world AGENTS.md files with §11 stripped, the rule re-derives the block's current position exactly — zero churn — verified empirically *before* the migration is written
 - [ ] **ANCHOR-04**: Replayed against a gitnexus-led AGENTS.md, the rule anchors above the region — verified empirically *before* the migration is written
-- [ ] **ANCHOR-05**: The injected block remains followed by a `## ` heading or EOF, preserving the boundary that bounds the managed section for replace/rollback
+- [ ] **ANCHOR-05**: The injected block remains followed by a `## ` heading, an anchored `<!-- gitnexus:start -->` marker, or EOF — and **every terminator that bounds the managed section for replace/rollback carries this same alternation**. Corrected 2026-07-15: the original wording ("a `## ` heading or EOF") is false by construction — MIGR-03 anchors the block immediately before a leading `gitnexus:start` marker, so a healed region-led file is followed by that marker, not a `## `. A terminator matching only `/^## /` runs past the marker and consumes the entire GitNexus region. The invariant is not preserved by this phase; it is **widened**. See ADR (DOC-01) and `../claude-workflow/docs/superpowers/specs/2026-07-15-spec-11-region-aware-placement-design.md` §"The invariant this breaks (corrected 2026-07-15 after Task 2 review)"
 
 ### Migration 0009
 
@@ -33,7 +33,7 @@ Requirements for this milestone. Each maps to a roadmap phase.
 
 - [ ] **TEST-01**: Fixtures execute the migration's shell extracted from the migration document itself, never a transcribed copy
 - [ ] **TEST-02**: The fixture suite fails against the naive anchor before migration 0009 exists (RED before GREEN)
-- [ ] **TEST-03**: Six cases are covered: gitnexus-led inject, inside-region move, healthy no-op (proves zero churn), absent instruction file, hand-pasted refusal, no-heading-EOF
+- [ ] **TEST-03**: Eight cases are covered: gitnexus-led inject, inside-region move, healthy no-op (proves zero churn), absent instruction file, hand-pasted refusal, no-heading-EOF, **prose-mention-not-a-region** (a file mentioning `gitnexus:start` in prose must NOT be treated as a region — forces the anchored `/^<!-- gitnexus:start -->$/` regex), and **rollback-region-led** (Rollback on a healed region-led file must not orphan the region). Widened from six on 2026-07-15: the last two are the post-review additions `claude-workflow` describes as "the two gaps that let a green suite ship file-destroying bugs — no fixture covered Rollback at all, and none covered a file mentioning the marker in prose"
 - [ ] **TEST-04**: The inlined anchor copy at `migrations/run-tests.sh:119` is replaced by document-sourced extraction
 
 ### Setup Parity
