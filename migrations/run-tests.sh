@@ -3296,6 +3296,647 @@ test_repo_layout() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0009 — Region-aware §11 placement  (TEST-02 / TEST-03)
+#
+# ⚠⚠ THIS SUITE IS **EXPECTED TO BE RED** UNTIL PLAN 09-04 SHIPS
+#     migrations/0009-spec-11-region-aware-placement.md. THAT IS THE POINT.
+#
+# ROADMAP hard ordering 2 ("RED before GREEN"). Every assertion below is written
+# against a migration document that does not exist yet, so the three extraction
+# gates report empty-extraction failures and every case reports "not asserted".
+#
+#   DO NOT create or stub 0009 to make this pass — that is 09-04's job.
+#   DO NOT weaken these assertions.
+#   DO NOT add a "skip if the document is missing" guard. A conditional skip is
+#   PRECISELY how a suite that never fails ships as coverage — the Phase 8
+#   defect class this phase exists to close (D-36: "non-empty is not the same
+#   as correct"; 08-05 shipped two assertions that could never match and read
+#   as coverage). When 0009 lands, this function turns GREEN on its own.
+#
+# FIXTURE IDIOM IS LOCKED (D-34): ten case labels inside ONE function, each
+# synthesized at test time via `printf` into `$tmp`. This is this repo's native
+# idiom (`test_migration_0001`) and the documented fallback in
+# migrations/test-fixtures/README.md § "Limits" (fixtures cannot capture state
+# outside the repo, e.g. ~/.codex/skills/). Do NOT port claude-workflow's
+# per-fixture directory layout (test-fixtures/0029/01-.../{setup,verify}.sh) —
+# README.md § "Why no static fixture files" rejects exactly that, and porting it
+# would introduce a second, competing fixture idiom.
+#
+# UPSTREAM REFERENCE IS PINNED (D-48): claude-workflow @
+#   8520f90d235e0c50b0484b170d595ab6f2cd1173
+# Fixture INTENT and content-generation logic are adopted from
+# migrations/test-fixtures/0029/{common-setup.sh,common-verify.sh,NN-*/setup.sh}
+# at that SHA; the layout is rejected. Read with `git -C ../claude-workflow show
+# 8520f90:<path>`. Upstream HEAD has already moved past this pin (it moved twice
+# during phase 9's planning alone); any later upstream change is a deliberate
+# follow-up diff, not an invisible mid-execution scope change.
+#
+# SUBSHELL WRAPPING IS MANDATORY (T-09-07): two extracted paths deliberately
+# `exit 3` (State D conflict; corrupt mirror). An un-subshelled eval would
+# terminate the whole harness mid-suite and hide every later assertion.
+# CODEX_HOME + cwd are always redirected into $tmp (T-09-10 / T-09-11): the
+# fixtures perform real file surgery and deliberately build corrupt mirrors, so
+# pointing them at the real repo or the real ~/.codex would rewrite the
+# developer's own AGENTS.md / corrupt their installed scaffolder.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Helpers for test_migration_0009. File-scope with a `_m0009_` prefix, following
+# this harness's established convention for per-test helpers (`_cpr_case`,
+# `_cpr_check_resolved`, `_table_data_rows`, …) — shell has no function-local
+# functions, and the prefix keeps them out of the shared namespace.
+
+# _m0009_mk_fake_home <tmp> <name> <mirror_src>
+# Builds a fake ${CODEX_HOME} carrying the spec mirror at the installed path, so
+# an extracted block's `${CODEX_HOME:-$HOME/.codex}`-derived MIRROR/SPEC_BLOCK
+# resolves to a controlled file under $tmp instead of the developer's real
+# ~/.codex (T-09-10). Prints the fake home's path.
+_m0009_mk_fake_home() {
+  local h="$1/$2/codexhome"
+  local m="$h/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors"
+  mkdir -p "$m"
+  cp "$3" "$m/11-coding-discipline-0.4.0.md"
+  printf '%s\n' "$h"
+}
+
+# _m0009_mk_project <tmp> <name>
+# Builds a scratch project root satisfying 0009's pre-flight guards other than
+# the mirror: a `.git` directory (`test -d .git`) and a SKILL.md at
+# `version: 0.6.0` (the D-39 version gate, which accepts both 0.6.0 and 0.7.0 so
+# an idempotent re-run does not abort). Prints the project root's path.
+_m0009_mk_project() {
+  local p="$1/$2/proj"
+  mkdir -p "$p/.git" "$p/skills/agentic-apps-workflow"
+  printf -- '---\nname: agentic-apps-workflow\nversion: 0.6.0\nimplements_spec: 0.4.0\ndescription: synthetic fixture for migration 0009 (D-39 version gate)\n---\n\n## Stub\n' \
+    > "$p/skills/agentic-apps-workflow/SKILL.md"
+  printf '%s\n' "$p"
+}
+
+# _m0009_apply <proj> <fake_home> <apply_text>
+# Runs an extracted block against a scratch project. Prints its combined
+# output; returns its exit status.
+#
+# THE SUBSHELL IS MANDATORY, NOT STYLE (T-09-07): cases 05 and 10 exercise
+# blocks that deliberately `exit 3`. Un-subshelled, that would terminate the
+# whole harness mid-suite and silently hide every later assertion — the suite
+# would report a truncated PASS count and exit 0.
+# CODEX_HOME and cwd are BOTH redirected under $tmp (T-09-10 / T-09-11): these
+# blocks perform real file surgery and resolve their mirror from
+# ${CODEX_HOME:-$HOME/.codex}. Run at the real repo root against the real Codex
+# home, they would rewrite the developer's own AGENTS.md.
+_m0009_apply() {
+  ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
+}
+
+# _m0009_ok <rc> <label> — PASS iff rc is 0.
+_m0009_ok() {
+  if [ "$1" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} $2"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $2"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# _m0009_fail <label> — unconditional FAIL. Used when an extraction gate is down
+# so a case reports FAILED rather than silently vanishing. A case that quietly
+# disappears when its input is missing is the dead-assertion defect itself.
+_m0009_fail() {
+  echo "  ${RED}FAIL${RESET} $1"
+  FAIL=$((FAIL+1))
+}
+
+test_migration_0009() {
+  echo ""
+  echo "${YELLOW}=== Migration 0009 — Region-aware §11 placement ===${RESET}"
+
+  local mirror="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  if [ ! -f "$mirror" ]; then
+    echo "  ${RED}FAIL${RESET} mirror missing: skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local MIGRATION_0009="$REPO_ROOT/migrations/0009-spec-11-region-aware-placement.md"
+  local PROV_LIT='<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->'
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Extract 0009's own shell from 0009's own document (TEST-01), and gate every
+  # consumer on a shape assertion first (D-36). Ported from the pin's
+  # common-verify.sh, which sequences all three extractions + guards BEFORE any
+  # fixture runs, so a document-shape drift reports as "extraction wrong" rather
+  # than as a confusing downstream surgery failure.
+  # ───────────────────────────────────────────────────────────────────────────
+  local pf_block idem_block apply_block
+  pf_block="$(extract_preflight_block "$MIGRATION_0009" 2>/dev/null)"
+  idem_block="$(extract_step_block "$MIGRATION_0009" 1 "Idempotency check" 2>/dev/null)"
+  apply_block="$(extract_step_block "$MIGRATION_0009" 1 Apply 2>/dev/null)"
+
+  local pf_ok=1 idem_ok=1 apply_ok=1
+
+  # Pre-flight shape guard.
+  #
+  # ANCHORED ON THE MIRROR PATH, deliberately — NOT on `test -s`, and NOT on a
+  # variable name. Two reasons, both load-bearing:
+  #
+  #  1. The pin's common-verify.sh states the rule explicitly: anchor the shape
+  #     check on what identifies the block STRUCTURALLY, "NOT on the specific
+  #     guard operators (`test -s`, the tail-sentinel grep) that fixture 10
+  #     exists to mutation-test. Coupling this shape check to the guard text
+  #     itself would make reverting a guard trip the loader for EVERY fixture
+  #     that sources this file, not just fixture 10 — masking the real signal
+  #     behind a loader error instead." Case 10 below mutation-tests exactly
+  #     those two operators, so gating the loader on one of them would hide the
+  #     signal case 10 exists to produce.
+  #  2. Upstream names this variable SPEC_BLOCK; this repo's 0004 precedent
+  #     names it MIRROR, and 09-04 may legitimately pick either. The mirror
+  #     PATH is invariant under that choice; a variable name is not.
+  #
+  # `test -s` and the tail-sentinel are still asserted — as explicit D-28.1
+  # document-contract assertions immediately below, where a missing guard names
+  # itself instead of masquerading as an extractor failure.
+  assert_extracted_shape "0009 Pre-flight" "$pf_block" \
+    'spec-mirrors/11-coding-discipline-0.4.0.md' || pf_ok=0
+
+  # D-28.1 contract, layer 1 (zero-byte): `test -f` alone passes a zero-byte
+  # mirror, and D-27 makes the mirror the SOLE re-injection source — so a
+  # zero-byte mirror would strip §11 and inject nothing, silently committing a
+  # maimed AGENTS.md on every heal. Asserted behaviorally by case 10(a).
+  case "$pf_block" in
+    *'test -s'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+    *)           _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+  esac
+
+  # D-28.1 contract, layer 2 (truncation): the mirror's heading is on L1, so a
+  # tail-truncated mirror satisfies `test -s` AND Apply's pre-`mv` heading grep.
+  # Only a tail sentinel closes that gap. Verified present at
+  # 11-coding-discipline-0.4.0.md:57 (last of four `### ` sections, 79 lines).
+  # This is NOT D-25's rejected content sentinel: that coupled a STRIP
+  # TERMINATOR to §11's last prose line (runaway-strip hazard). This is a
+  # read-only integrity check on a different file, anchored to a structural
+  # heading; it bounds nothing and cannot run away. Asserted by case 10(b).
+  case "$pf_block" in
+    *'Goal-Driven Execution'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
+    *)                         _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
+  esac
+
+  # Idempotency-check shape guard: it must be identifiably the provenance-aware
+  # region check.
+  assert_extracted_shape "0009 Step 1 Idempotency check" "$idem_block" \
+    'spec-source: agenticapps-workflow-core' || idem_ok=0
+
+  # Apply shape guard: `gitnexus:start` is D-36's exact antidote here. A block
+  # that carries no marker alternation is NOT Step 1's region-aware apply,
+  # whatever else it is — 0001's and 0004's naive `/^## / && !done` apply blocks
+  # both extract cleanly and both fail this guard, which is the point.
+  assert_extracted_shape "0009 Step 1 Apply" "$apply_block" \
+    'gitnexus:start' || apply_ok=0
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # The four-state DOUBLE-SIDED idempotency table (D-38 / 09-VALIDATION.md).
+  #
+  # A check asserted in only one direction catches nothing: a too-permissive
+  # check skips unapplied work, a too-strict one re-applies applied work. Each
+  # state gets its own directory because the extracted check hardcodes
+  # `AGENTS.md`, and assert_check cd's into the fixture dir.
+  # ───────────────────────────────────────────────────────────────────────────
+
+  # State A — correctly anchored block, current provenance, region present but
+  # LATER in the file. This repo's own real AGENTS.md shape (§11 at L18, region
+  # at L271-313) ⇒ this host is SAFE and the defect is LATENT.
+  local sa="$tmp/state-a"; mkdir -p "$sa"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Project Overview\nStuff.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus\n\n## Always Do\n- x\n<!-- gitnexus:end -->\n'
+  } > "$sa/AGENTS.md"
+
+  # State B — provenance present BUT the block sits INSIDE the region.
+  local sb="$tmp/state-b"; mkdir -p "$sb"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Always Do\n- MUST run impact analysis.\n<!-- gitnexus:end -->\n\n'
+    printf '## Workflow\nProject stuff.\n'
+  } > "$sb/AGENTS.md"
+
+  # State C — no provenance at all.
+  local sc="$tmp/state-c"; mkdir -p "$sc"
+  printf '# Title\n\n## Some Section\n\nbody\n' > "$sc/AGENTS.md"
+
+  # D-32 variant — UNTERMINATED `<!-- gitnexus:start -->` (no matching end) with
+  # provenance after it. No separate branch and no extra predicate: it rides on
+  # State B's region predicate, which is exactly why D-32 chose the fail-closed
+  # shape. Rejected alternatives: fail-open (leaves the block inside something
+  # gitnexus may still regenerate — the very defect this closes) and exit 3
+  # (adds a fifth state and blocks the version bump on a possibly benign shape).
+  local sbu="$tmp/state-b-unterminated"; mkdir -p "$sbu"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Always Do\n- MUST run impact analysis.\n'
+  } > "$sbu/AGENTS.md"
+
+  if [ "$idem_ok" = "1" ]; then
+    # State A ⇒ applied (exit 0 → skip). This is ALSO MIGR-07's guard: a
+    # healthy-but-off-anchor block must be left alone, and per D-31 that falls
+    # out of THIS predicate rather than a special case — do not add code to
+    # detect "off-anchor but healthy", and do not move it.
+    assert_check "state A: anchored + current provenance + region later → skip (D-31/MIGR-07)" \
+      "$idem_block" "$sa" "applied"
+
+    # State B ⇒ not-applied (exit NON-ZERO **despite provenance being present**).
+    #
+    # ⚠ THIS ROW IS THE WHOLE POINT (D-38). The design calls this conjunction
+    # exactly that: provenance alone must NOT short-circuit the heal. The check
+    # must be `provenance present AND NOT in-region`, not `provenance present`.
+    # A check that returns `applied` here IS THE DEFECT — it would skip a block
+    # sitting inside a region that `gitnexus analyze` will later regenerate and
+    # destroy. Expected argument is `not-applied`; if a future edit "fixes" this
+    # to `applied` to make something pass, it has reintroduced the bug.
+    assert_check "state B: provenance present BUT block in region → heal, not skip (D-38 — the whole point)" \
+      "$idem_block" "$sb" "not-applied"
+
+    # State C ⇒ not-applied. Plain absent case.
+    assert_check "state C: no provenance at all → inject" \
+      "$idem_block" "$sc" "not-applied"
+
+    # D-32 fail-closed ⇒ not-applied, via State B's predicate.
+    assert_check "state B (D-32 variant): unterminated gitnexus:start → fails closed, treated as in-region" \
+      "$idem_block" "$sbu" "not-applied"
+  else
+    _m0009_fail "state A: anchored + current provenance + region later → skip (D-31/MIGR-07) — NOT ASSERTED: 0009's Step 1 Idempotency check could not be extracted"
+    _m0009_fail "state B: provenance present BUT block in region → heal, not skip (D-38 — the whole point) — NOT ASSERTED: extraction failed"
+    _m0009_fail "state C: no provenance at all → inject — NOT ASSERTED: extraction failed"
+    _m0009_fail "state B (D-32 variant): unterminated gitnexus:start → fails closed — NOT ASSERTED: extraction failed"
+  fi
+
+  # State D — a `## Coding Discipline (NON-NEGOTIABLE)` heading with NO
+  # provenance — is deliberately NOT asserted here. Per D-30 branch 1 and
+  # 09-VALIDATION.md's table it is gated by the APPLY's conflict branch
+  # (`exit 3`, file untouched), not by the idempotency check. It is asserted by
+  # case `05-unmanaged-conflict` below. The four-state table is therefore
+  # complete across this function: A/B/C (+ D-32) here, D at case 05.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # TEST-03's ten cases. Each synthesizes its BEFORE state with `printf` into
+  # $tmp (D-34), runs the extracted Step 1 Apply against that scratch root, and
+  # asserts the AFTER state. Case labels are carried in the assertion text so a
+  # failure names itself.
+  # ───────────────────────────────────────────────────────────────────────────
+  local p h out rc prov_line start_line nstart nend nprov
+
+  if [ "$apply_ok" = "1" ]; then
+
+    # ── 01-gitnexus-led-inject (MIGR-04 — inject at the region-led anchor) ──
+    # BEFORE: a gitnexus-LED file with no §11 anywhere (State C).
+    # The first `## ` in this file is `## Always Do`, which is INSIDE the region
+    # — that is what makes this case discriminating. The naive `/^## / && !done`
+    # anchor (0001:91, 0004:77) lands on it and injects §11 inside a region that
+    # `gitnexus analyze` later regenerates, destroying the block. D-21's rule
+    # anchors on whichever comes FIRST — here the marker — so it lands above.
+    # `## Some Section` sits AFTER the region deliberately: that ordering is what
+    # discriminates D-21 from D-22.1's rejected "the region is always the anchor"
+    # (which would drop §11 hundreds of lines down when the region comes late).
+    p="$(_m0009_mk_project "$tmp" 01)"; h="$(_m0009_mk_fake_home "$tmp" 01 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "01-gitnexus-led-inject: provenance (line ${prov_line:-ABSENT}) is ABOVE gitnexus:start (line ${start_line:-ABSENT})"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ]
+    _m0009_ok $? "01-gitnexus-led-inject: region markers still paired exactly once (start=$nstart end=$nend)"
+
+    grep -q 'MUST run impact analysis before editing any symbol' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "01-gitnexus-led-inject: the region's own body content survived"
+
+    # ── 02-inside-region-move (MIGR-03 — State B strip+reinject) ──
+    # BEFORE: provenance + full mirror already sit INSIDE the region. This is
+    # what the naive anchor produces on a gitnexus-led file. Not yet eaten; 0009
+    # must move it out before the next `gitnexus analyze` does.
+    #
+    # THIS IS THE CASE THAT PROVES THE STRIP TERMINATOR'S ALTERNATION (D-24).
+    # 09-01's counter-case B observed the narrow `/^## /`-only terminator EATING
+    # the region here: it runs past `<!-- gitnexus:start -->` hunting a `## `,
+    # consuming the marker and the region's real content, halting only at the
+    # region's own `## Always Do` — leaving start=0/end=1, an orphaned unpaired
+    # region. The marker-count assertion below is what catches that.
+    p="$(_m0009_mk_project "$tmp" 02)"; h="$(_m0009_mk_fake_home "$tmp" 02 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Always Do\n- MUST run impact analysis.\n<!-- gitnexus:end -->\n\n'
+      printf '## Workflow\nProject stuff.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "02-inside-region-move: exactly ONE provenance line remains (found $nprov) — moved, not duplicated"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "02-inside-region-move: provenance (line ${prov_line:-ABSENT}) moved ABOVE gitnexus:start (line ${start_line:-ABSENT})"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ] && grep -q 'MUST run impact analysis' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "02-inside-region-move: region survived intact and paired (start=$nstart end=$nend) — the D-24 terminator assertion"
+
+    # ── 03-healthy-noop (MIGR-02, MIGR-07 — zero churn) ──
+    # BEFORE: this repo's own real AGENTS.md shape — §11 correctly anchored at
+    # the first `## `, region LATER in the file (State A).
+    #
+    # WHY APPLY IS RUN HERE EVEN THOUGH THE RUNTIME WOULD SKIP IT: in real
+    # operation State A's idempotency check returns `applied`, so the runtime
+    # skips Step 1 entirely — that skip is already asserted by the State A row
+    # above. If this case ALSO merely skipped Apply, `cmp -s` would compare a
+    # file nothing had touched and pass unconditionally: a dead assertion, and
+    # exactly the defect class this phase exists to close. The plan's stated
+    # purpose for this case is to "catch an over-eager anchor", and an over-eager
+    # anchor can only manifest if Apply RUNS. So Apply is run deliberately, and
+    # byte-identity is asserted against a pristine copy — the fixture-level twin
+    # of 09-01's CASE 1 (ANCHOR-03), which observed strip+insert re-deriving
+    # §11's position byte-identically on the real AGENTS.md.
+    #
+    # NOT VACUOUS: the strip genuinely removes 81 lines (provenance + 79 mirror
+    # lines + the trailing blank) and the insert genuinely re-adds them; a strip
+    # that silently did nothing would make the insert add a SECOND block and fail
+    # this cmp. `grep`-based "block still present" would pass for an over-eager
+    # anchor that MOVED the block — byte-identity is the assertion that does not.
+    p="$(_m0009_mk_project "$tmp" 03)"; h="$(_m0009_mk_fake_home "$tmp" 03 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus\n\n## Always Do\n- x\n<!-- gitnexus:end -->\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/03-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    cmp -s "$p/AGENTS.md" "$tmp/03-pristine.md"
+    _m0009_ok $? "03-healthy-noop: AGENTS.md is BYTE-IDENTICAL after Apply (zero churn — catches an over-eager anchor)"
+
+    # ── 04-no-agentsmd (D-33 — informational skip, NOT an abort) ──
+    # BEFORE: a project with no AGENTS.md at all.
+    #
+    # WHY A SKIP AND NOT 0004's PRE-FLIGHT ABORT (0004:44): the update engine
+    # marks a migration pending iff `installed >= from && installed < to`. An
+    # abort here leaves the project at 0.6.0 forever — Step 2 never records
+    # 0.7.0, so 0009 stays pending AND 0010+ never become pending either. The
+    # project is stranded below to_version PERMANENTLY. A skip costs nothing;
+    # an abort is unrecoverable without manual intervention.
+    p="$(_m0009_mk_project "$tmp" 04)"; h="$(_m0009_mk_fake_home "$tmp" 04 "$mirror")"
+    rm -f "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "04-no-agentsmd: Apply exits ZERO (informational skip, so Step 2's version bump still runs) — got exit=$rc"
+
+    case "$out" in
+      *update-codex-agenticapps-workflow*) _m0009_ok 0 "04-no-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), not claude-workflow's slug" ;;
+      *)                                   _m0009_ok 1 "04-no-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), not claude-workflow's slug" ;;
+    esac
+
+    [ ! -f "$p/AGENTS.md" ]
+    _m0009_ok $? "04-no-agentsmd: Apply created no AGENTS.md out of thin air"
+
+    # ── 05-unmanaged-conflict (MIGR-05, State D — D-30 branch 1) ──
+    # BEFORE: a §11 heading with hand-written prose and NO provenance. The
+    # operator pasted it outside this migration's management. 0009 must refuse
+    # rather than clobber it (inherits 0001's conflict rule).
+    #
+    # BOTH HALVES ARE REQUIRED: an `exit 3` that already mangled the file is
+    # still a destroyed hand-authored §11. Asserting only the exit code would
+    # pass for a block that rewrote AGENTS.md and then errored.
+    p="$(_m0009_mk_project "$tmp" 05)"; h="$(_m0009_mk_fake_home "$tmp" 05 "$mirror")"
+    {
+      printf '# AGENTS.md\n\n## Coding Discipline (NON-NEGOTIABLE)\n\n'
+      printf 'Hand-pasted content the operator wrote themselves. Must not be clobbered.\n\n'
+      printf '## Workflow\nStuff.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/05-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "05-unmanaged-conflict: Apply exits exactly 3 on an unmanaged §11 heading (State D) — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/05-pristine.md"
+    _m0009_ok $? "05-unmanaged-conflict: hand-written §11 is BYTE-IDENTICAL after the refusal (refused AND untouched)"
+
+    # ── 06-no-heading-eof (ANCHOR-02 — the END fallback) ──
+    # BEFORE: no `## ` heading and no marker anywhere. The anchor scan finds
+    # nothing, so awk's END branch must APPEND rather than silently drop the
+    # block. Without the END branch the insert is a no-op and §11 vanishes.
+    p="$(_m0009_mk_project "$tmp" 06)"; h="$(_m0009_mk_fake_home "$tmp" 06 "$mirror")"
+    printf '# AGENTS.md\n\nJust prose. No level-2 headings anywhere in this file.\n' > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    grep -q -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "06-no-heading-eof: provenance is present after Apply (END fallback fired, block not dropped)"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ "$prov_line" -gt 3 ]
+    _m0009_ok $? "06-no-heading-eof: block was APPENDED at EOF (provenance at line ${prov_line:-ABSENT}, below the 3 lines of pre-existing prose)"
+
+    # ── 09-two-provenance-heal (D-46.3 — the `swallowed_own_h2` stale-state guard) ──
+    # BEFORE: TWO provenance+block pairs, each properly terminated by a real
+    # project `## ` heading (not back-to-back). Must heal down to exactly one.
+    #
+    # THE MECHANISM THIS GUARDS, PRECISELY: the strip pass must swallow each
+    # block's OWN `## Coding Discipline (NON-NEGOTIABLE)` heading before it starts
+    # hunting for that block's terminator — otherwise the block's own heading
+    # terminates its own strip immediately. That is what `swallowed_own_h2` is for.
+    # But it MUST RESET at the terminator. If it is stale-true when the SECOND
+    # provenance line arrives, the second block's own `## Coding Discipline`
+    # heading is mistaken for ITS terminator, so the strip stops there and the
+    # second block's body is left orphaned in the output — two blocks in, two
+    # blocks out, healed nothing. Upstream hit this and fixed it; without this
+    # fixture we would not catch the regression.
+    #
+    # The surviving-headings assertion is the other half: a terminator that
+    # over-runs would eat `## Workflow` / `## Deployment` along with the block.
+    p="$(_m0009_mk_project "$tmp" 09)"; h="$(_m0009_mk_fake_home "$tmp" 09 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n'
+      printf '## Workflow\nFirst project section.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n'
+      printf '## Deployment\nSecond project section.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "09-two-provenance-heal: healed down to exactly ONE provenance line (found $nprov) — swallowed_own_h2 reset at the terminator"
+
+    grep -q -x -- '## Workflow' "$p/AGENTS.md" 2>/dev/null \
+      && grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "09-two-provenance-heal: both terminating '## ' headings survived (## Workflow, ## Deployment) — the strip did not over-run"
+
+  else
+    # The Apply extraction gate is DOWN. Report every case as FAILED rather than
+    # skipping it. A case that silently vanishes when its input is missing is the
+    # dead-assertion defect wearing a different hat: the suite would exit 0 and
+    # read as coverage.
+    _m0009_fail "01-gitnexus-led-inject — NOT ASSERTED: 0009's Step 1 Apply could not be extracted (the 0009 document does not exist yet)"
+    _m0009_fail "02-inside-region-move — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "03-healthy-noop — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "04-no-agentsmd — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "05-unmanaged-conflict — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "09-two-provenance-heal — NOT ASSERTED: Step 1 Apply extraction failed"
+  fi
+
+  # ── 07-prose-mention-not-a-region (D-46.1 — forces D-21's ANCHORED regex) ──
+  # BEFORE: an HTML comment near the top MENTIONS the marker inside backticks, so
+  # the line is NOT exactly `<!-- gitnexus:start -->`; the §11 block is correctly
+  # anchored right after that comment; there is NO real region anywhere.
+  #
+  # THIS CASE IS A DEAD-ASSERTION DETECTOR BY DESIGN (09-VALIDATION.md Dimension 8
+  # item 4). A SUBSTRING marker match passes every OTHER fixture in this suite and
+  # fails ONLY here: it would see the prose mention, judge the file in-region, and
+  # return `not-applied` — proposing to "heal" a perfectly healthy file by moving
+  # §11 above a region that does not exist. The anchored `/^...$/` regex returns
+  # `applied` (skip). If this case ever passes with a substring match, the fixture
+  # is wrong and must be rewritten, not the assertion relaxed.
+  if [ "$idem_ok" = "1" ]; then
+    local s07="$tmp/state-07"; mkdir -p "$s07"
+    {
+      printf '<!--\n'
+      printf '  This block MUST stay ABOVE the `<!-- gitnexus:start -->` region below.\n'
+      printf '  This is prose ONLY — this fixture file has no real region.\n'
+      printf -- '-->\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff. No GitNexus region anywhere in this file.\n'
+    } > "$s07/AGENTS.md"
+    assert_check "07-prose-mention-not-a-region: a prose mention of the marker is NOT a region → skip (D-21 anchored regex)" \
+      "$idem_block" "$s07" "applied"
+  else
+    _m0009_fail "07-prose-mention-not-a-region — NOT ASSERTED: Step 1 Idempotency check extraction failed"
+  fi
+
+  # ── 08-rollback-region-led (D-46.2, kept even under D-47) ──
+  # 0009's Rollback is `git checkout AGENTS.md` (D-47), so the region-eating-
+  # rollback bug class is STRUCTURALLY UNREACHABLE here — there is no terminator
+  # to get wrong. This case is therefore a REGRESSION GUARD ON THAT CHOICE, and it
+  # is asserted against the migration DOCUMENT rather than by executing awk.
+  #
+  # Its purpose is to fail loudly if a future author "improves" Rollback into the
+  # custom awk that upstream's fixture 08 exists to catch a file-destroying bug in
+  # (running that awk on a healed region-led file eats the start marker and the
+  # region's real content, leaving an orphaned, unpaired `<!-- gitnexus:end -->` —
+  # verified empirically upstream, and replayed as 09-01's counter-case B).
+  #
+  # Scoped from Step 1's `**Rollback:**` line to `### Step 2` deliberately, rather
+  # than via extract_step_block: with no fence inside Step 1's Rollback, that
+  # helper's `want` flag would stay armed past `### Step 2` and latch onto Step 2's
+  # Apply fence, so a "no awk here" assertion would pass by inspecting the WRONG
+  # block. (Harmless for 0009's real consumers — Apply and Idempotency check both
+  # have fences inside their own step — and assert_extracted_shape would catch it
+  # regardless. Noted, not fixed: 09-02's helper is out of this plan's scope.)
+  local rb_scope
+  rb_scope="$(awk '
+    index($0, "### Step 1") == 1 { in1=1; next }
+    index($0, "### Step 2") == 1 { exit }
+    in1 && index($0, "**Rollback:**") == 1 { r=1 }
+    r { print }
+  ' "$MIGRATION_0009" 2>/dev/null)"
+
+  case "$rb_scope" in
+    *'git checkout AGENTS.md'*) _m0009_ok 0 "08-rollback-region-led: Step 1 Rollback is 'git checkout AGENTS.md' (D-47 — structurally immune, no terminator to get wrong)" ;;
+    *)                          _m0009_ok 1 "08-rollback-region-led: Step 1 Rollback is 'git checkout AGENTS.md' (D-47 — structurally immune, no terminator to get wrong)" ;;
+  esac
+
+  # Both halves required: the literal alone would still pass if someone ADDED an
+  # awk block alongside it.
+  if [ -n "$rb_scope" ] && ! printf '%s' "$rb_scope" | grep -q 'awk'; then
+    _m0009_ok 0 "08-rollback-region-led: Step 1 Rollback carries NO fenced awk block — the region-eating bug class stays unreachable"
+  else
+    _m0009_ok 1 "08-rollback-region-led: Step 1 Rollback carries NO fenced awk block — the region-eating bug class stays unreachable"
+  fi
+
+  # ── 10-corrupt-mirror-refused (D-46.4 — binds BOTH D-28.1 guard layers) ──
+  # Exercises the PRE-FLIGHT, not Step 1, because the mirror guards live there.
+  # D-27 makes the mirror the SOLE re-injection source, so a mirror that exists
+  # but is corrupt makes 0009 strip §11 and inject garbage — destroying §11 on
+  # every heal. Each mode gets its OWN fake home so the modes are independent and
+  # cannot depend on execution order. mk_project supplies `.git` + SKILL.md at
+  # 0.6.0, so the pre-flight's other guards pass and THE MIRROR IS THE ONLY
+  # VARIABLE — otherwise a refusal could come from the version gate instead and
+  # the assertion would pass for the wrong reason.
+  if [ "$pf_ok" = "1" ]; then
+    local h10a h10b h10c p10
+    p10="$(_m0009_mk_project "$tmp" 10)"
+
+    # (a) ZERO-BYTE mirror → the `test -s` layer. `test -f` alone PASSES here —
+    #     that is the exact gap upstream closed (an interrupted `git pull` in the
+    #     scaffolder clone leaves precisely this).
+    h10a="$(_m0009_mk_fake_home "$tmp" 10a "$mirror")"
+    : > "$h10a/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    out="$(_m0009_apply "$p10" "$h10a" "$pf_block")"; rc=$?
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (a) zero-byte mirror: pre-flight refuses with exit 3 (D-28.1 layer 1, test -s) — got exit=$rc"
+
+    # (b) TRUNCATED mirror (head -20: keeps the L1 `## ` heading, drops
+    #     `### 4. Goal-Driven Execution` at L57) → the tail-sentinel layer.
+    #     WHY TRUNCATION DEFEATS BOTH `test -s` AND Apply's pre-`mv` shape
+    #     assertion: the mirror's heading is on LINE 1, and both of those guards
+    #     only look at the HEAD of a file that is truncated at the TAIL. A
+    #     head-preserving truncation is non-empty and still produces the §11
+    #     heading in the insert, so both pass it. Only a tail sentinel closes the
+    #     gap between "has a heading" and "is the whole block".
+    h10b="$(_m0009_mk_fake_home "$tmp" 10b "$mirror")"
+    head -20 "$mirror" > "$h10b/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    out="$(_m0009_apply "$p10" "$h10b" "$pf_block")"; rc=$?
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (b) truncated mirror: pre-flight refuses with exit 3 (D-28.1 layer 2, tail sentinel) — got exit=$rc"
+
+    # (c) HEALTHY mirror → MUST pass. WITHOUT THIS DIRECTION A PRE-FLIGHT THAT
+    #     REFUSED EVERYTHING WOULD PASS (a) AND (b) AND READ AS A WORKING GUARD.
+    #     This is D-38's double-sided contract applied to the mirror guards: a
+    #     guard never observed ACCEPTING is not a guard, it is a brick wall.
+    h10c="$(_m0009_mk_fake_home "$tmp" 10c "$mirror")"
+    out="$(_m0009_apply "$p10" "$h10c" "$pf_block")"; rc=$?
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (c) healthy mirror: pre-flight PASSES with exit 0 (the direction that proves it is not refusing everything) — got exit=$rc"
+  else
+    _m0009_fail "10-corrupt-mirror-refused (a) zero-byte mirror — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "10-corrupt-mirror-refused (b) truncated mirror — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "10-corrupt-mirror-refused (c) healthy mirror — NOT ASSERTED: Pre-flight extraction failed"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -3333,6 +3974,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
   test_migration_0008
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
+  test_migration_0009
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
