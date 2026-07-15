@@ -9,6 +9,52 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Added
+- **Bind the plan-review pre-execution gate — spec §02** (migration `0008`;
+  [ADR-0009](docs/decisions/0009-plan-review-gate.md)). Multi-AI plan review
+  must now run before execution begins on this host: a hybrid enforcement
+  (ADR-0009) binds `pre_execution.plan_review` declaratively in
+  `.planning/config.codex.json` and pairs it with a programmatic verifier,
+  `skills/agentic-apps-workflow/scripts/check-plan-review.sh`, invoked by
+  ritual text in `AGENTS.md` and the trigger
+  `skills/agentic-apps-workflow/SKILL.md` before the first code-touching edit
+  of a phase. The remedy on a block is the new `codex-plan-review` producer
+  skill, which writes `<NN>-REVIEWS.md` with at least two independent
+  external reviewers. Core spec v0.5.0 added this gate and `spec/02:105-109`
+  names this repo as an outstanding follow-up; it closes the failure core
+  ADR-0018 records, where cparx phases 04.9 through 05 silently dropped
+  multi-AI plan review for 8 consecutive phases with nothing catching the
+  omission. It went unnoticed here because the bindings table covered
+  exactly the 15 pre-0.5.0 gates and jumped straight from `design-critique`
+  to `tdd`, and the gap was never recorded as a Spec Delta.
+- **Migration `0008` teaches an existing install the same shape a fresh
+  install now gets by construction** — the config block, the ritual section,
+  and the bindings-table corrections (D-19, D-20), every row sourced from a
+  single template so migrated and fresh installs cannot drift apart.
+  `check-plan-review.sh` ports claude-workflow's reference resolver with
+  care, not verbatim — the port corrects three defects in the reference
+  resolver (see ADR-0009).
+- **16 distinct gates, not 15 (D-20).** The bindings table's duplicate `tdd`
+  row is collapsed to match `spec/02`; every gate table in this repo, and in
+  a migrated install after `0008`, now reads 16 rows / 16 distinct gates,
+  identical to a fresh install.
+- **Enforcement is agent-mediated, not a runtime hook.** The verifier's
+  `exit 2` is a hard stop once it runs, but invocation is via ritual text an
+  agent reads and follows, not a Codex-native `PreToolUse` hook — see
+  ADR-0009 for the deferred native-hook upgrade path.
+- **Verified** by `run-tests.sh`'s `test_check_plan_review_resolver`,
+  `test_check_plan_review_enforcement`, `test_check_plan_review_contract`,
+  and `test_migration_0008` (a no-op on a second run), against all seven of
+  ROADMAP.md's Phase 8 success criteria.
+
+### Changed
+- Scaffolder `version` `0.5.0 → 0.6.0` (trigger SKILL.md +
+  `.codex/workflow-version.txt`) via migration `0008`; migration chain now
+  `0000`–`0008`. `implements_spec` stays at `0.4.0`: it tracks the last
+  full-conformance audit, not one gate (mirrors the `0.5.0` entry's own note
+  below) — this phase delivers the §02 *content* a future `0.5.0` claim would
+  require, without making that claim itself.
+
 ### Fixed
 - **Wire update-path migration discovery.** `$update-codex-agenticapps-workflow`
   reads migrations from

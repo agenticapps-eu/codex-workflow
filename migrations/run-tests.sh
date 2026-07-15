@@ -751,13 +751,28 @@ MD
 # ─────────────────────────────────────────────────────────────────────────────
 # Migration 0008 — Plan-review gate (spec §02, v0.5.0 -> 0.6.0)
 #
-# Three steps only (no target-project SKILL.md step — 08-05-PLAN.md
+# Four steps (no target-project SKILL.md step — 08-05-PLAN.md
 # <target_project_surface>): (1) leaf-level config merge into
 # .planning/config.codex.json, (2) AGENTS.md ritual-section insert extracted
-# from the real template, (3) .codex/workflow-version.txt version record.
-# This repo's own scaffolder bump is a direct edit in Task 2's commit, never a
-# migration step — no 0008 sandbox here manufactures a synthetic SKILL.md.
+# from the real template, (3) AGENTS.md bindings-table corrections (D-20 —
+# brainstorm split + tdd collapse + plan-review add, plan 08-06), (4)
+# .codex/workflow-version.txt version record. This repo's own scaffolder bump
+# is a direct edit in plan 08-05's commit, never a migration step — no 0008
+# sandbox here manufactures a synthetic SKILL.md.
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Extract a Markdown bindings-table's DATA rows only (no header, no
+# separator) — shared by test_migration_0008's Step 3 (bindings-table
+# corrections, D-20) assertions. Stops at the first non-"|" line after the
+# table starts, so it never bleeds into unrelated content below the table.
+_table_data_rows() {
+  awk '
+    /^\| Gate \|/ { in_table=1; next }
+    in_table && /^\|---/ { next }
+    in_table && /^\|/ { print; next }
+    in_table { exit }
+  ' "$1"
+}
 
 test_migration_0008() {
   echo ""
@@ -1031,7 +1046,290 @@ MD
     FAIL=$((FAIL+1))
   fi
 
-  # ── Step 3 — .codex/workflow-version.txt records 0.6.0 ────────────────────
+  # ── Step 3 — AGENTS.md bindings-table corrections (D-20, <table_migration>) ──
+  # Round 2's top consensus concern (08-REVIEWS.md, Codex + OpenCode, HIGH):
+  # an earlier revision applied only the tdd collapse + plan-review add,
+  # leaving the template's combined brainstorm row untouched — a migrated
+  # install would land at 15 rows / 16 distinct gates while a fresh install
+  # is 16/16. Step 3 now applies ALL THREE corrections (split brainstorm,
+  # collapse tdd, add plan-review), every row sourced from the same template.
+
+  # Template-shipped invariants that make all three corrections possible:
+  # exactly one plan-review row, exactly one tdd row, exactly two brainstorm
+  # rows (post-08-04, the template itself is already 16/16 — the source of
+  # truth every correction below reads from).
+  if [ "$(grep -c '^| plan-review' "$agents_tpl")" = "1" ] \
+     && [ "$(grep -c '^| tdd |' "$agents_tpl")" = "1" ] \
+     && [ "$(grep -ci '^| brainstorm-' "$agents_tpl")" = "2" ]; then
+    echo "  ${GREEN}PASS${RESET} template ships exactly 1 plan-review row, 1 tdd row, 2 brainstorm rows"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} template's table rows are not in the expected 1/1/2 shape"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The template's table header line must be extractable and non-empty BEFORE
+  # asserting anything downstream — a header the migration cannot find makes
+  # Step 3 decline on every real target, same discipline as Step 2's
+  # extraction-non-empty guard (T-08-23).
+  local tpl_header
+  tpl_header="$(grep -m1 '^| Gate |' "$agents_tpl")"
+  if [ -n "$tpl_header" ]; then
+    echo "  ${GREEN}PASS${RESET} template's bindings-table header is extractable and non-empty"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} template's bindings-table header extraction is EMPTY — header regex drift"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Rows Step 3 needs, extracted from the REAL template — never a heredoc'd
+  # literal (D-19). All four corrected rows (2 brainstorm, tdd, plan-review)
+  # are sourced from here, never authored inline.
+  local row_plan_review row_brainstorm_ui row_brainstorm_arch row_tdd
+  row_plan_review="$(grep -m1 '^| plan-review |' "$agents_tpl")"
+  row_brainstorm_ui="$(grep -m1 '^| brainstorm-ui |' "$agents_tpl")"
+  row_brainstorm_arch="$(grep -m1 '^| brainstorm-architecture |' "$agents_tpl")"
+  row_tdd="$(grep -m1 '^| tdd |' "$agents_tpl")"
+
+  # The idempotency-pre fixture is PINNED to the realistic pre-0008 shape a
+  # real v0.5.0 install actually has (08-REVIEWS.md round 2, OpenCode,
+  # MEDIUM): the Scope-shaped header, 15 data rows, brainstorm COMBINED into
+  # one row, TWO tdd rows, no plan-review row. This is a HISTORICAL shape —
+  # a heredoc literal is correct here (D-19 governs what the MIGRATION
+  # sources, not what a test pins as a past state).
+  cat > "$tmp/AGENTS.md.scope-shaped" <<'MD'
+| Gate | Bound skill | Scope |
+|---|---|---|
+| brainstorm-ui / brainstorm-architecture | `superpowers:brainstorming` | pre-phase |
+| design-shotgun | `codex-design-shotgun` | pre-phase |
+| design-critique | `codex-design-critique` | pre-phase |
+| tdd | `superpowers:test-driven-development` | per-task |
+| tdd (new TS module) | `codex-ts-declare-first` | per-task |
+| ui-preview | `codex-qa` (preview mode) | per-task |
+| verification | `superpowers:verification-before-completion` | per-task |
+| spec-review | `codex-spec-review` | post-phase |
+| code-review | `superpowers:requesting-code-review` | post-phase |
+| security | `codex-cso` | post-phase |
+| database-security | `codex-database-sentinel-audit` | post-phase |
+| qa | `codex-qa` | post-phase |
+| impeccable-audit | `codex-impeccable-audit` | post-phase |
+| db-pre-launch-audit | `codex-database-sentinel-audit` | finishing |
+| branch-close | `superpowers:finishing-a-development-branch` | finishing |
+MD
+
+  # Assert the fixture's OWN shape before using it (round 2's consensus
+  # concern 3) — 15 data rows, brainstorm combined into exactly one row — so
+  # a future edit that quietly "modernises" the fixture into an
+  # already-split shape fails HERE, loudly, rather than making the
+  # post-condition pass for the wrong reason. A fixture that already matches
+  # the new template proves nothing; this guard is what stops one being built.
+  local fixture_row_count fixture_brainstorm_count
+  fixture_row_count="$(_table_data_rows "$tmp/AGENTS.md.scope-shaped" | grep -c '^|')"
+  fixture_brainstorm_count="$(grep -c '^| brainstorm' "$tmp/AGENTS.md.scope-shaped")"
+  if [ "$fixture_row_count" = "15" ] && [ "$fixture_brainstorm_count" = "1" ]; then
+    echo "  ${GREEN}PASS${RESET} idempotency-pre fixture pinned to the realistic pre-0008 shape (15 rows, brainstorm combined)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} idempotency-pre fixture has rotted away from the realistic pre-0008 shape (rows=$fixture_row_count, brainstorm=$fixture_brainstorm_count)"
+    FAIL=$((FAIL+1))
+  fi
+
+  assert_check "idempotency: Scope-shaped fixture lacks plan-review row -> needs table corrections" \
+    "grep -q '^| plan-review' AGENTS.md.scope-shaped" \
+    "$tmp" "not-applied"
+
+  # Apply — all THREE corrections in one pass, every row template-sourced
+  # (never a heredoc'd literal for the rows themselves).
+  ( cd "$tmp" && awk \
+      -v pr="$row_plan_review" \
+      -v bui="$row_brainstorm_ui" \
+      -v barch="$row_brainstorm_arch" \
+      -v tdd="$row_tdd" '
+    /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+    /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
+    /^\| tdd \(new TS module\)/ { next }
+    /^\| tdd \|/ { print tdd; next }
+    { print }
+  ' AGENTS.md.scope-shaped > AGENTS.md.scope-shaped.tmp && mv AGENTS.md.scope-shaped.tmp AGENTS.md.scope-shaped )
+
+  # Post-condition: BOTH row count AND distinct-gate count == 16 (OpenCode
+  # suggestion 6 — asserting both makes the test self-documenting rather than
+  # silently depending on the brainstorm question). Distinct-gate count
+  # splits each data row's gate-slug column on "/" — this is what catches a
+  # surviving combined row (1 row naming 2 gates: rows < distinct).
+  local post_row_count post_gate_count
+  post_row_count="$(_table_data_rows "$tmp/AGENTS.md.scope-shaped" | grep -c '^|')"
+  post_gate_count="$(_table_data_rows "$tmp/AGENTS.md.scope-shaped" \
+    | awk -F'|' '{print $2}' | tr '/' '\n' \
+    | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | sort -u | grep -c .)"
+
+  if [ "$post_row_count" -eq 16 ]; then
+    echo "  ${GREEN}PASS${RESET} after Step 3: row count == 16, matching the template's row count"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} after Step 3: row count is $post_row_count, expected 16"
+    FAIL=$((FAIL+1))
+  fi
+
+  if [ "$post_gate_count" -eq 16 ]; then
+    echo "  ${GREEN}PASS${RESET} after Step 3: distinct-gate count == 16 — row count == distinct-gate count"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} after Step 3: distinct-gate count is $post_gate_count, expected 16"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Exactly one plan-review row, one tdd row, two brainstorm rows survive.
+  if [ "$(grep -c '^| plan-review' "$tmp/AGENTS.md.scope-shaped")" = "1" ] \
+     && [ "$(grep -c '^| tdd |' "$tmp/AGENTS.md.scope-shaped")" = "1" ] \
+     && [ "$(grep -ci '^| brainstorm-' "$tmp/AGENTS.md.scope-shaped")" = "2" ]; then
+    echo "  ${GREEN}PASS${RESET} exactly one plan-review row, one tdd row, two brainstorm rows after Step 3"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} row counts after Step 3 are wrong (expected 1 plan-review, 1 tdd, 2 brainstorm)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # No combined row survives — zero rows match brainstorm.*/.*brainstorm.
+  if [ "$(grep -cE 'brainstorm.*/.*brainstorm' "$tmp/AGENTS.md.scope-shaped")" = "0" ]; then
+    echo "  ${GREEN}PASS${RESET} no combined brainstorm row survives"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} a combined brainstorm row survived the correction"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The split brainstorm rows, the inserted plan-review row, and the
+  # collapsed tdd row are byte-identical to the template's (D-19) — exact
+  # substring match, not a fuzzy check.
+  if grep -qF "$row_plan_review" "$tmp/AGENTS.md.scope-shaped" \
+     && grep -qF "$row_brainstorm_ui" "$tmp/AGENTS.md.scope-shaped" \
+     && grep -qF "$row_brainstorm_arch" "$tmp/AGENTS.md.scope-shaped" \
+     && grep -qF "$row_tdd" "$tmp/AGENTS.md.scope-shaped"; then
+    echo "  ${GREEN}PASS${RESET} all four corrected rows are byte-identical to the template's"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} a corrected row diverges from the template's byte-for-byte text"
+    FAIL=$((FAIL+1))
+  fi
+
+  # A migrated fixture and the template's table are row-for-row identical —
+  # the assertion that makes must_haves' "same bound state as a fresh
+  # install" a test rather than a claim.
+  _table_data_rows "$tmp/AGENTS.md.scope-shaped" > "$tmp/scope-shaped-rows.txt"
+  _table_data_rows "$agents_tpl" > "$tmp/template-rows.txt"
+  if diff -q "$tmp/scope-shaped-rows.txt" "$tmp/template-rows.txt" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} migrated fixture's data rows diff clean against the template's (fresh == migrated)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} migrated fixture's data rows diverge from the template's"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Unrelated rows survive untouched (the migration does not touch a gate it
+  # was not told to).
+  if grep -q '^| spec-review ' "$tmp/AGENTS.md.scope-shaped"; then
+    echo "  ${GREEN}PASS${RESET} unrelated row (spec-review) survives the table corrections untouched"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} unrelated row (spec-review) was lost or altered"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Second run is a no-op (cksum) — including the brainstorm split: a second
+  # run must not re-split an already-split row, and must not re-add
+  # plan-review. A row-count check alone would not distinguish 16-correct
+  # from 16-mangled; cksum does.
+  local cksum_table_first cksum_table_second
+  cksum_table_first="$(cksum < "$tmp/AGENTS.md.scope-shaped")"
+  if ! grep -q '^| plan-review' "$tmp/AGENTS.md.scope-shaped"; then
+    ( cd "$tmp" && awk \
+        -v pr="$row_plan_review" \
+        -v bui="$row_brainstorm_ui" \
+        -v barch="$row_brainstorm_arch" \
+        -v tdd="$row_tdd" '
+      /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+      /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
+      /^\| tdd \(new TS module\)/ { next }
+      /^\| tdd \|/ { print tdd; next }
+      { print }
+    ' AGENTS.md.scope-shaped > AGENTS.md.scope-shaped.tmp && mv AGENTS.md.scope-shaped.tmp AGENTS.md.scope-shaped )
+  fi
+  cksum_table_second="$(cksum < "$tmp/AGENTS.md.scope-shaped")"
+  if [ "$cksum_table_first" = "$cksum_table_second" ]; then
+    echo "  ${GREEN}PASS${RESET} second run of Step 3 is a no-op (cksum unchanged) — no re-split, no re-add"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} second run of Step 3 changed the file — not idempotent"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── The wrong-shape decline case (T-08-40) — proves the migration DECLINES
+  # rather than guesses when it does not recognise the target's table shape.
+  # This repo's OWN hand-maintained header (`Applies to scaffolder?`) is
+  # exactly the wrong-shape target a downstream install should never have.
+  cat > "$tmp/AGENTS.md.wrong-shape" <<'MD'
+| Gate | Bound skill | Applies to scaffolder? |
+|---|---|---|
+| brainstorm-ui / brainstorm-architecture | `superpowers:brainstorming` | No (no UI) |
+| tdd | `superpowers:test-driven-development` | Yes (always) |
+MD
+
+  local cksum_wrong_before cksum_wrong_after target_header table_step_rc
+  cksum_wrong_before="$(cksum < "$tmp/AGENTS.md.wrong-shape")"
+  target_header="$(grep -m1 '^| Gate |' "$tmp/AGENTS.md.wrong-shape")"
+
+  table_step_rc=0
+  if [ "$target_header" != "$tpl_header" ]; then
+    echo "  ${YELLOW}⚠${RESET}  bindings-table header mismatch — declining rather than guessing (would-be precondition failure)"
+    table_step_rc=6
+  else
+    ( cd "$tmp" && awk \
+        -v pr="$row_plan_review" \
+        -v bui="$row_brainstorm_ui" \
+        -v barch="$row_brainstorm_arch" \
+        -v tdd="$row_tdd" '
+      /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+      /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
+      /^\| tdd \(new TS module\)/ { next }
+      /^\| tdd \|/ { print tdd; next }
+      { print }
+    ' AGENTS.md.wrong-shape > AGENTS.md.wrong-shape.tmp && mv AGENTS.md.wrong-shape.tmp AGENTS.md.wrong-shape )
+  fi
+  cksum_wrong_after="$(cksum < "$tmp/AGENTS.md.wrong-shape")"
+
+  if [ "$table_step_rc" != "0" ]; then
+    echo "  ${GREEN}PASS${RESET} wrong-shape target (Applies to scaffolder? header) declines with a distinct non-zero precondition code"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} wrong-shape target was NOT declined — the migration guessed instead"
+    FAIL=$((FAIL+1))
+  fi
+
+  if [ "$cksum_wrong_before" = "$cksum_wrong_after" ]; then
+    echo "  ${GREEN}PASS${RESET} wrong-shape target left byte-identical (cksum unchanged) — declines rather than mangles"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} wrong-shape target was modified despite the header mismatch"
+    FAIL=$((FAIL+1))
+  fi
+
+  # The migration DOCUMENT itself must teach Step 3 (bindings-table
+  # corrections) and renumber the version-record step to Step 4 — this is
+  # the ship-guard assertion that makes this task genuinely RED until Task 2
+  # writes it (the assertions above re-implement the same logic inline, per
+  # this file's existing Step 1/Step 2 convention, and would pass on their
+  # own regardless of the migration document's own content).
+  if grep -qE '^### Step 3: .*[Bb]indings.table' "$REPO_ROOT/migrations/0008-plan-review-gate.md" \
+     && grep -qE '^### Step 4: Record .0\.6\.0. in .\.codex/workflow-version\.txt.' "$REPO_ROOT/migrations/0008-plan-review-gate.md"; then
+    echo "  ${GREEN}PASS${RESET} migrations/0008-plan-review-gate.md documents Step 3 (bindings table) and renumbers the version step to Step 4"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} migrations/0008-plan-review-gate.md does not yet document Step 3 (bindings-table corrections) with Step 4 renumbered"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Step 4 — .codex/workflow-version.txt records 0.6.0 ────────────────────
   printf '0.5.0\n' > "$tmp/.codex/workflow-version.txt"
 
   assert_check "idempotency: workflow-version.txt reads 0.5.0 -> needs bump" \
@@ -1040,7 +1338,7 @@ MD
 
   ( cd "$tmp" && echo "0.6.0" > .codex/workflow-version.txt )
 
-  assert_check "after Step 3: workflow-version.txt reads 0.6.0" \
+  assert_check "after Step 4: workflow-version.txt reads 0.6.0" \
     "grep -q '^0.6.0$' .codex/workflow-version.txt" \
     "$tmp" "applied"
 
@@ -1051,10 +1349,10 @@ MD
   fi
   cksum_ver_second="$(cksum < "$tmp/.codex/workflow-version.txt")"
   if [ "$cksum_ver_first" = "$cksum_ver_second" ]; then
-    echo "  ${GREEN}PASS${RESET} second run of Step 3 is a no-op (cksum unchanged)"
+    echo "  ${GREEN}PASS${RESET} second run of Step 4 is a no-op (cksum unchanged)"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} second run of Step 3 changed the file"
+    echo "  ${RED}FAIL${RESET} second run of Step 4 changed the file"
     FAIL=$((FAIL+1))
   fi
 
@@ -1128,7 +1426,7 @@ MD
   if ( cd "$tmp2" && jq -e '.hooks.pre_execution.plan_review.min_reviewers == 2' .planning/config.codex.json >/dev/null 2>&1 ) \
      && grep -q '^## Pre-execution Gate — Plan Review (spec §02)' "$tmp2/AGENTS.md" \
      && grep -q '^0.6.0$' "$tmp2/.codex/workflow-version.txt"; then
-    echo "  ${GREEN}PASS${RESET} no-scaffolder-tree fixture migrates end-to-end (all 3 steps apply)"
+    echo "  ${GREEN}PASS${RESET} no-scaffolder-tree fixture migrates end-to-end (Steps 1, 2, 4 apply; Step 3's table is exercised separately above)"
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} no-scaffolder-tree fixture failed to complete migration"
@@ -1138,10 +1436,11 @@ MD
 
   # ── Partial-application fixture — step-local idempotency (finding 6) ──────
   # Step 1 already applied (plan_review present) but Step 2 is NOT (no ritual
-  # heading) -> Steps 2 and 3 must still run. This is the atomicity contract's
-  # documented recovery path (migrations/README.md:103-113); a whole-migration
-  # skip keyed on Step 1's artifact would strand the install half-migrated
-  # while reporting success. There is no migration-level skip predicate.
+  # heading) -> Steps 2 and 4 must still run (Step 3's table-step recovery is
+  # exercised separately above). This is the atomicity contract's documented
+  # recovery path (migrations/README.md:103-113); a migration-wide skip keyed
+  # on Step 1's artifact would strand the install half-migrated while
+  # reporting success. There is no migration-level skip predicate.
   local tmp3; tmp3="$(mktemp -d)"
   mkdir -p "$tmp3/.planning" "$tmp3/.codex"
   jq -n --argjson pe "$PE" '{hooks: {pre_execution: $pe}}' > "$tmp3/.planning/config.codex.json"
@@ -1174,7 +1473,7 @@ MD
   fi
 
   # Re-run the migration's step set — each step checks its OWN idempotency,
-  # none gates on another. Steps 2 and 3 must still complete.
+  # none gates on another. Steps 2 and 4 must still complete.
   if ! ( cd "$tmp3" && jq -e '.hooks.pre_execution.plan_review' .planning/config.codex.json >/dev/null 2>&1 ); then
     ( cd "$tmp3" && jq --argjson pe "$PE" \
         '.hooks.pre_execution = ((.hooks.pre_execution // {}) + $pe)' \
@@ -1196,7 +1495,7 @@ MD
 
   if grep -q '^## Pre-execution Gate — Plan Review (spec §02)' "$tmp3/AGENTS.md" \
      && grep -q '^0.6.0$' "$tmp3/.codex/workflow-version.txt"; then
-    echo "  ${GREEN}PASS${RESET} partial-application recovery: Steps 2 and 3 still ran to completion (already applied not gating them)"
+    echo "  ${GREEN}PASS${RESET} partial-application recovery: Steps 2 and 4 still ran to completion (already applied not gating them)"
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} partial-application recovery failed — a step was skipped by a whole-migration predicate"
