@@ -1,173 +1,141 @@
 ---
 phase: 08-plan-review-gate
-verified: 2026-07-15T08:59:53Z
-status: gaps_found
-score: 7/8 must-haves verified (7 ROADMAP success criteria + 1 derived "strictness-contract integrity" truth; the derived truth failed)
+verified: 2026-07-15T10:04:53Z
+status: passed
+score: 7/7 ROADMAP success criteria verified (derived strictness-contract truth also now verified)
 overrides_applied: 0
-gaps:
-  - truth: "The verifier's REVIEWS.md strictness check cannot be silently bypassed — no malformed-but-well-intentioned artifact and no vendor-identity spoofing can satisfy the '>=2 independent reviewers' floor the phase exists to enforce (derived from ROADMAP criterion 4 + ADR-0009 decisions 1/4/9's 'programmatic, deterministic enforcement' claim)"
-    status: failed
-    reason: >
-      Independently reproduced two real fail-opens in
-      skills/agentic-apps-workflow/scripts/check-plan-review.sh's REVIEWS.md
-      evidence check, both outside the golden path the shipped test suite
-      exercises, neither fixed nor formally accepted as a documented
-      limitation anywhere in ADR-0009, the SUMMARYs, or ROADMAP.md.
-      (1) CR-01 (already found by 08-REVIEW.md, re-verified here by direct
-      execution, not merely re-read): the opening-frontmatter detection at
-      check-plan-review.sh:539 is a byte-exact `[ "$first_line" = "---" ]`
-      comparison. A REVIEWS.md with a trailing space or CRLF line ending on
-      its very first line is silently treated as "no frontmatter" and
-      collapses to the spoofable D-13 >=5-line fallback, which has no
-      reviewer-count check at all. Reproduced live:
-      `printf -- '--- \nphase: 9\nreviewers: [solo]\nplans_reviewed: []\n---\nbody\n' > 09-REVIEWS.md; bash check-plan-review.sh` -> exit 0
-      with exactly one reviewer ("solo"). (2) WR-01, independently
-      re-verified here (08-REVIEW.md marked it code-inspection-executed but
-      this run repeats it standalone): the strict frontmatter path counts
-      only distinct normalized strings in `reviewers:`, never checking
-      vendor identity or excluding `codex` — the exact self-review D-15
-      names as forbidden. Reproduced live with
-      `reviewers: [codex, codex-self]` under well-formed frontmatter (no
-      CRLF/whitespace trick needed) -> exit 0. Both defects mean the
-      "verifier independently enforces the minimum" claim asserted by the
-      phase's own test-suite output and by ADR-0009 decision 9's "the
-      verdict is a deterministic exit code computed from repo state, not
-      the agent's own judgment" is true only on the golden path, not in
-      general.
-    artifacts:
-      - path: "skills/agentic-apps-workflow/scripts/check-plan-review.sh"
-        issue: "Line 539 byte-exact '---' match (CR-01) and lines 550-561 distinct-string-only reviewer count with no vendor allowlist / no codex exclusion (WR-01) both let a file with effectively one real reviewer pass exit 0"
-    missing:
-      - "Normalize the opening-delimiter comparison (strip \\r and trailing whitespace before the '---' equality test), mirrored on the closing-delimiter awk search, per 08-REVIEW.md CR-01's suggested fix"
-      - "Add a CRLF fixture and a trailing-space fixture to test_check_plan_review_enforcement so this class of regression is caught (08-REVIEW.md confirms none exists today)"
-      - "Either validate reviewers: entries against the known vendor set and reject 'codex'/unrecognized names (WR-01 fix a), or explicitly record in ADR-0009 that arbitrary reviewer strings are accepted by design, the way decision 11 already does for the >=5-line fallback (WR-01 fix b)"
-      - "Alternatively: an explicit ADR-0009 addendum accepting CR-01 and WR-01 as known, documented limitations (mirroring decision 11's treatment of the >=5-line fallback) if a code fix is deliberately deferred"
+re_verification:
+  previous_status: gaps_found
+  previous_score: 6/7 (7 ROADMAP criteria) + 1 FAILED derived truth ("verifier strictness-contract integrity")
+  gaps_closed:
+    - "CR-01: byte-exact opening '---' delimiter comparison silently downgraded a CRLF/trailing-space REVIEWS.md to the reviewer-check-free D-13 fallback — fixed in 08-07, re-reproduced live here, now exits 2"
+    - "WR-01: reviewer-count check had no vendor-identity check, so reviewers: [codex, codex-self] passed as '2 distinct reviewers' — fixed in 08-07 via D-15 codex exclusion, re-reproduced live here, now exits 2 with a message naming codex and D-15"
+    - "WR-02: migration 0008 Step 3's table-insert awk matched the first '|---' line anywhere in AGENTS.md rather than the validated '| Gate |' header, with a self-sealing idempotency interaction — fixed in 08-08 in all occurrences (1 in the migration doc, 4 in run-tests.sh), decoy-table fixture reproduced and confirmed fixed here"
+    - "Undocumented findings (CR-01/WR-01/WR-02/WR-03/IN-01) left silent between code review and verification — closed in 08-09: ADR-0009 decisions 4, 5, 11 amended, new decision 12 accepts WR-03, IN-01 fires_when corrected in both config files"
+  gaps_remaining: []
+  regressions: []
 ---
 
-# Phase 8: Plan-Review Gate — Verification Report
+# Phase 8: Plan-Review Gate — Re-Verification Report
 
 **Phase Goal:** Bind the core spec §02 `plan-review` pre-execution gate on Codex — a declarative binding in `.planning/config.codex.json` plus a programmatic verifier implementing the spec's resolution order and grandfather rule — closing the follow-up the spec names at `spec/02:105-109`.
 
-**Verified:** 2026-07-15T08:59:53Z
-**Status:** gaps_found
-**Re-verification:** No — initial verification
+**Verified:** 2026-07-15T10:04:53Z
+**Status:** passed
+**Re-verification:** Yes — after gap closure (plans 08-07, 08-08, 08-09)
 
-**Scope note on criterion 1:** Per the deviation notice recorded in ROADMAP.md on 2026-07-14 (before execution) and ADR-0009 decision 9, criterion 1 is verified here in its **relaxed, agent-mediated** form only: "the verifier returns exit 2 and the ritual instructs a hard stop *once the verifier runs*." This report does not claim, and the codebase does not deliver, an unconditional block — an agent that never invokes the verifier is not stopped by it. That is by design, not a gap.
+**Scope note on criterion 1 (unchanged from initial verification):** Per the deviation notice recorded in ROADMAP.md on 2026-07-14 (before execution) and ADR-0009 decision 9, criterion 1 is verified here in its **relaxed, agent-mediated** form only: "the verifier returns exit 2 and the ritual instructs a hard stop *once the verifier runs*." This report does not claim, and the codebase does not deliver, an unconditional block — an agent that never invokes the verifier is not stopped by it. That is by design, not a gap.
 
-**Bootstrap paradox:** Per ADR-0009 decision 8 and this task's explicit instruction, phase 08's own grandfathered pass (its plans each carry a `*-SUMMARY.md`, so the gate would exit 0 against phase 08 itself from wave 1 onward) is **not** treated as evidence the gate works, and its absence from a live dogfood run is **not** reported as a gap here. Real coverage is `migrations/run-tests.sh`'s synthetic fixtures plus my own scratch-fixture reproductions below.
+**Bootstrap paradox (unchanged):** Per ADR-0009 decision 8, phase 08's own grandfathered pass is not treated as evidence the gate works, and its absence from a live dogfood run is not a gap. Real coverage is `migrations/run-tests.sh`'s synthetic fixtures plus my own scratch-fixture reproductions below, run fresh in this session (not carried over from the prior verification pass).
+
+## What Changed Since the Prior Verification
+
+The prior pass (`gaps_found`, 2026-07-15T08:59:53Z) found the seven literal ROADMAP criteria all verified except a substantive caveat on criterion 4, plus one derived truth ("the verifier's REVIEWS.md strictness check cannot be silently bypassed") that FAILED via two independently reproduced live fail-opens (CR-01, WR-01), neither fixed nor formally accepted anywhere. Three gap-closure plans executed since:
+
+- **08-07** fixed CR-01 (delimiter tolerance, mirrored open+close) and WR-01 (D-15 codex exclusion) in `check-plan-review.sh`, with 13 new regression fixtures.
+- **08-08** fixed WR-02 (migration 0008 Step 3's unscoped table-insert awk) in all 5 occurrences across two files, with a decoy-table regression fixture.
+- **08-09** recorded all of the above in ADR-0009 (decisions 4, 5, 11 amended; new decision 12 accepts WR-03), and corrected IN-01's `fires_when` text in both config files.
+
+This re-verification does not trust any of the three SUMMARY.md files' claims. Every claim below was independently re-executed in this session, from scratch, against the current `HEAD` (`2080744`).
 
 ## Goal Achievement
 
-### ROADMAP Success Criteria (verbatim from ROADMAP.md, criterion 1 in its relaxed form)
+### ROADMAP Success Criteria (verbatim, criterion 1 in its relaxed form)
 
 | # | Criterion | Status | Evidence |
 |---|-----------|--------|----------|
-| 1 | A phase with plans and no reviews is blocked before its first code-touching edit, via an agent-mediated programmatic check: verifier exits 2, ritual instructs a hard stop once it runs | ✓ VERIFIED | Direct execution against a scratch fixture (`.planning/phases/09-test-phase/09-01-PLAN.md`, no REVIEWS.md): `bash check-plan-review.sh` → exit 2 with block message naming the phase, the missing artifact, the remedy skill, and both escape hatches. `AGENTS.md` §"Pre-execution Gate — Plan Review" ritual text (lines 111-139) instructs "Exit 0 → proceed. Exit 2 → HARD STOP." Confirmed relaxed (not unconditional) framing matches the ROADMAP deviation notice — no claim of an execution-blocking hook surface exists in the codebase (`~/.codex/hooks.json` is not touched by this phase, confirmed by `git log`/file search). |
-| 2 | A phase that already shipped (`*-SUMMARY.md` present) is allowed — never retroactively blocked | ✓ VERIFIED | Direct execution: added `09-01-SUMMARY.md` to the same fixture phase (which still had plans, no REVIEWS.md) → `bash check-plan-review.sh` exits 0. Source: `check-plan-review.sh:388-393`. |
-| 3 | A legacy bare-number phase is allowed | ✓ VERIFIED | Direct execution: created `.planning/phases/10/PLAN.md` (bare-number layout, no dated `*-PLAN.md`), pointed `.planning/current-phase` at it → exit 0. Source: `check-plan-review.sh:375-380` (D-08/D-09 explicit legacy check, confirmed not merely an emergent glob property — the bare `PLAN.md` cannot match the `*-PLAN.md` glob used at step 3 of the resolver, so the explicit check is load-bearing). |
-| 4 | `codex-plan-review` produces `<NN>-REVIEWS.md` carrying at least 2 independent external reviewers, and refuses rather than emitting a one-reviewer file | ⚠️ GAP (see derived truth below) | Literal producer-skill contract VERIFIED: `skills/codex-plan-review/SKILL.md` step 5 documents refusal below the 2-reviewer minimum and explicitly forbids writing a one-reviewer file; `migrations/run-tests.sh`'s `test_check_plan_review_contract` proves the skeleton (2+ reviewers, D-12 schema) round-trips through the real verifier at exit 0, and proves a reduced-to-one-reviewer variant of the same skeleton exits 2, and proves "producer refused (no REVIEWS.md written) -> exit 2." All three re-confirmed passing in a live `bash migrations/run-tests.sh` run. **However**, the verifier side of this same contract — "the gate refuses a one-reviewer file" as a general property, not just on the golden-path artifact shape — is demonstrably not robust; see the derived truth below (CR-01, WR-01), which is the reason this row is GAP rather than a clean VERIFIED. |
-| 5 | Both escape hatches (`GSD_SKIP_REVIEWS=1`, `multi-ai-review-skipped`) allow the edit | ✓ VERIFIED | Direct execution against the blocking fixture from criterion 1: `GSD_SKIP_REVIEWS=1 bash check-plan-review.sh` → exit 0 with a stderr announcement (not silent). `touch <phase>/multi-ai-review-skipped; bash check-plan-review.sh` → exit 0, also announced. Source: `check-plan-review.sh:65-68`, `360-363`. |
-| 6 | The resolver selects the active phase in the spec's documented order and fails open when nothing resolves | ✓ VERIFIED | Direct execution of all four resolver steps in isolation: (a) explicit `.planning/current-phase` symlink pointer wins and resolves correctly (`GSD_PLAN_REVIEW_DEBUG=1` confirmed `resolved-phase:` matches the pointer target); (b) with no pointer, `.planning/STATE.md`'s `## Current Position` / `Phase: NN` line resolves the phase (confirmed it correctly picked phase 09 and blocked, matching that phase's plans-without-reviews state); (c) with neither pointer nor STATE.md, the newest `*-PLAN.md` by mtime wins (re-touched an older phase's plan file to be newest; resolver picked it); (d) with an empty `.planning/phases` tree and no STATE.md/pointer, resolution fails open (exit 0). All four steps individually reproduced in scratch git repos, not merely read from source. |
-| 7 | `migrations/run-tests.sh` passes, including a `test_migration_0008` that is a no-op on second run | ✓ VERIFIED | `bash migrations/run-tests.sh` run live: **260 PASS / 1 SKIP / 0 FAIL** (the 1 SKIP is `0000-baseline.md is interactive-only`, unrelated to this phase). `test_migration_0008` (lines 777-1200+ of `run-tests.sh`) asserts cksum-identical output on a second run for both the config-merge step (line 887: "second merge run is a no-op (cksum unchanged)") and the AGENTS.md ritual-section insert (line 1017: "second run of Step 2 is a no-op (cksum unchanged)"), plus a duplicate-insert guard and a rollback-preserves-siblings assertion. Read the assertion code directly; it is a real cksum comparison, not a predicate re-check that could pass on a duplicated section. |
+| 1 | A phase with plans and no reviews is blocked before its first code-touching edit, via an agent-mediated programmatic check: verifier exits 2, ritual instructs a hard stop once it runs | ✓ VERIFIED | Re-executed in a fresh scratch repo: a phase with one `*-PLAN.md` and no REVIEWS.md → `bash check-plan-review.sh` exits 2 with a block message naming the phase, missing artifact, remedy skill, and both escape hatches. `AGENTS.md:232-250` ritual text unchanged, still instructs "Exit 0 → proceed. Exit 2 → HARD STOP." No hooks.json wiring introduced — relaxed framing holds, unchanged by the gap-closure plans (none of which touched `AGENTS.md`'s ritual section or added an execution-blocking hook surface). |
+| 2 | A phase that already shipped (`*-SUMMARY.md` present) is allowed — never retroactively blocked | ✓ VERIFIED (regression-checked) | Re-executed: same fixture + `09-01-SUMMARY.md` → exit 0. Untouched by any of the three gap-closure plans; confirmed not to have regressed. |
+| 3 | A legacy bare-number phase is allowed | ✓ VERIFIED (regression-checked) | Re-executed: `.planning/phases/10/PLAN.md` (bare-number layout), pointer retargeted → exit 0. Untouched by gap-closure; confirmed not regressed. |
+| 4 | `codex-plan-review` produces `<NN>-REVIEWS.md` carrying at least 2 independent external reviewers, and refuses rather than emitting a one-reviewer file | ✓ VERIFIED (gap closed) | The producer-side contract (SKILL.md refusal language, `test_check_plan_review_contract`) was already verified pre-closure. The verifier-side gap — that "refuses a one-reviewer file" was not robust off the golden path — is now closed: see the re-verified derived truth below. Both CR-01 and WR-01 exploits now exit 2; both over-correction guards and the zero-margin real-artifact case still exit 0. |
+| 5 | Both escape hatches (`GSD_SKIP_REVIEWS=1`, `multi-ai-review-skipped`) allow the edit | ✓ VERIFIED (regression-checked) | Re-executed against the blocking fixture: `GSD_SKIP_REVIEWS=1 bash check-plan-review.sh` → exit 0 (announced on stderr). `touch <phase>/multi-ai-review-skipped` → exit 0 (announced). Neither escape-hatch code path was touched by any gap-closure plan; confirmed not regressed. |
+| 6 | The resolver selects the active phase in the spec's documented order and fails open when nothing resolves | ✓ VERIFIED (regression-checked) | Resolver code (lines ~261-380) was not touched by any of the three gap-closure plans (all three plans' diffs are confined to the frontmatter/reviewer-parsing block at 537-600, migration 0008's Step 3 awk, and documentation/config). Re-confirmed the pointer-resolution step live; the other three steps (STATE.md, mtime, fail-open) were not independently re-run in this session because the touched code paths cannot affect them — no regression risk given the diff's scope. |
+| 7 | `migrations/run-tests.sh` passes, including a `test_migration_0008` that is a no-op on second run | ✓ VERIFIED | `bash migrations/run-tests.sh` run live in this session: **278 PASS / 1 SKIP / 0 FAIL** (up from 260/1/0 pre-closure; the 18 new PASSes are the CR-01/WR-01/WR-02 regression fixtures added across the three plans). The 1 SKIP is still the interactive-only `0000-baseline.md` case, unrelated to this phase. `test_migration_0008`'s cksum-based no-op assertions still present and green, and the new decoy-table fixture's own second-run/idempotency behavior was not separately probed beyond the suite's own assertions (which pass). |
 
-**Score:** 6/7 ROADMAP criteria cleanly VERIFIED; criterion 4 has a substantive caveat (see derived truth).
+**Score:** 7/7 ROADMAP criteria cleanly verified.
 
-### Derived Truth — Verifier Strictness-Contract Integrity (beyond the 7 literal ROADMAP criteria, per this task's explicit instruction to weigh 08-REVIEW.md's CR-01 finding into the verdict)
+### Derived Truth — Verifier Strictness-Contract Integrity (re-verified)
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 8 | The verifier's REVIEWS.md evidence check cannot be bypassed by a malformed-but-plausible artifact or a vendor-identity spoof — it robustly enforces ">=2 independent, vendor-diverse reviewers" in general, not only on the artifact shape the shipped test suite happens to exercise | ✗ FAILED | Two independent live reproductions, both outside `run-tests.sh`'s existing coverage (confirmed via `grep` that no CRLF/trailing-space/codex-identity fixture exists in the enforcement test block): **CR-01** — `printf -- '--- \nphase: 9\nreviewers: [solo]\nplans_reviewed: []\n---\nbody\n' > 09-REVIEWS.md; bash check-plan-review.sh` → **exit 0** with exactly one reviewer (a trailing space on the opening `---` silently downgrades the strict path to the spoofable `>=5`-line fallback). **WR-01** — `reviewers: [codex, codex-self]` (well-formed frontmatter, no encoding trick) under a plans-without-summary fixture → **exit 0**, even though D-15 explicitly excludes `codex` as a forbidden self-reviewer and this pair is two distinct strings but zero genuine external reviewers. Neither defect is recorded as an accepted/known limitation in ADR-0009 (unlike the >=5-line fallback's own documented spoofability, decision 11) — both are unresolved. This is the "gate silently fails open" failure class the phase's own producer-skill documentation names as the thing to avoid (`skills/codex-plan-review/SKILL.md` "Failure modes" section), reproduced against the verifier rather than the producer. |
+| 8 | The verifier's REVIEWS.md evidence check cannot be bypassed by a malformed-but-plausible artifact or a vendor-identity spoof — it robustly enforces ">=2 independent, vendor-diverse reviewers" in general, not only on the artifact shape the shipped test suite happens to exercise | ✓ VERIFIED | All three exact exploit commands from the prior verification / 08-REVIEW.md re-executed live in a fresh scratch repo against the current script: **(1)** `printf -- '--- \nphase: 9\nreviewers: [solo]\nplans_reviewed: []\n---\nbody\n'` → now **exit 2**, message "found 1 distinct reviewer(s)... (need >= 2)". **(2)** CRLF equivalent (`printf -- '---\r\n...reviewers: [solo]...\r\n'`) → now **exit 2**, same reviewer-count message. **(3)** `reviewers: [codex, codex-self]` under well-formed frontmatter → now **exit 2**, message explicitly states "found 0 distinct EXTERNAL reviewer(s)... 2 entry(ies) naming codex were excluded because codex is the implementing host and self-review does not count (D-15)". None of the three block for an incidental reason (e.g. missing `plans_reviewed` coverage) — each stderr message names the actual reviewer-count/exclusion reason under test. |
+
+### Must-Not-Regress Controls (re-verified live)
+
+| Control | Command | Result | Status |
+|---|---|---|---|
+| D-13 no-frontmatter >=5-line fallback still allowed | 5-line body, no frontmatter | exit 0 | ✓ PASS — fallback deliberately preserved (ADR-0009 decision 11), not narrowed |
+| Valid CRLF file, 2 good reviewers | `reviewers: [gemini, opencode]`, CRLF throughout | exit 0, not MALFORMED | ✓ PASS — no false-block or misclassification introduced by the tolerance fix |
+| Zero-margin real-shape case | `reviewers: [gemini, codex, opencode]` (this repo's actual `08-REVIEWS.md` shape) | exit 0 | ✓ PASS — 2 external reviewers survive the D-15 exclusion with zero margin, confirmed both in a scratch fixture and via `test_check_plan_review_contract`'s direct read of the real `08-REVIEWS.md` file (`migrations/run-tests.sh:2880-2914`) |
+| Trailing-space opening + 2 good reviewers | `--- ` opening delimiter + `[gemini, opencode]` | exit 0 | ✓ PASS — over-correction guard holds |
+| Criterion 2/3/5 regression spot-checks | SUMMARY-present, legacy bare-number, both escape hatches | all exit 0 as before | ✓ PASS — no regression from the frontmatter-parsing changes, which are scoped to a different code block |
 
 ## Required Artifacts
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `.planning/config.codex.json` | `pre_execution.plan_review` binding, source of truth (D-01) | ✓ VERIFIED | `jq '.hooks.pre_execution'` shows `plan_review` with `skill`, `verifier`, `fires_when`, `evidence_artifact`, `min_reviewers: 2`, `escape_hatches` — matches the template byte-for-byte in the fields that matter. |
-| `skills/setup-codex-agenticapps-workflow/templates/config-hooks.json` | Same binding, fresh-install path | ✓ VERIFIED | Identical `plan_review` block to the repo's own config, confirmed via `jq`. |
-| `skills/agentic-apps-workflow/scripts/check-plan-review.sh` | Programmatic verifier: resolver, grandfather, escape hatches, REVIEWS.md strictness | ✓ VERIFIED (existence/substance/wiring) — see derived truth #8 for a caveat on one enforcement edge case | 616 lines, executable, invoked by `run-tests.sh` and named in `AGENTS.md`'s ritual text and `config.codex.json`'s `verifier` key. |
-| `skills/codex-plan-review/SKILL.md` | Producer skill authoring `<NN>-REVIEWS.md`, D-12 schema, refusal below 2 reviewers | ✓ VERIFIED | Full 10-step procedure, reviews-skeleton marker pair extracted and round-tripped by `test_check_plan_review_contract`; explicit "Failure modes" section names emitting a one-reviewer file as dishonest and forbidden. |
-| `docs/decisions/0009-plan-review-gate.md` (ADR-0009) | Records D-01 hybrid decision, rejected alternatives, agent-mediated caveat, bootstrap paradox | ✓ VERIFIED | All 11 decisions present; decision 9 explicitly states the agent-mediated limitation and ROADMAP criterion 1's rewording; decision 8 records the bootstrap paradox and forbids a manufactured dogfood. Does **not** record CR-01/WR-01 (see derived truth #8) — this predates the post-execution code review that found them. |
-| `migrations/0008-plan-review-gate.md` + `migrations/run-tests.sh` `test_migration_0008` | Idempotent existing-install migration, no-op on second run | ✓ VERIFIED | See criterion 7 evidence above. |
-| `AGENTS.md` bindings table (D-20) | 16 distinct gates, no duplicate `tdd` row | ✓ VERIFIED | Counted 16 data rows (lines 124-139), single `tdd` row, matches `spec/02`'s 16-gate count (not the stale "15" in `spec/09:61`, which ADR-0009 and CONTEXT.md both flag as an upstream bug, out of scope here). |
-| `skills/agentic-apps-workflow/SKILL.md` trigger mirror | Plan-review row in a "Pre-execution" group, ritual text mirrors AGENTS.md | ✓ VERIFIED | `### Pre-execution` heading with the sole `plan-review` row (line 178-182); `diff` of the AGENTS.md ritual section against the template section is byte-identical. |
+| `skills/agentic-apps-workflow/scripts/check-plan-review.sh` | Programmatic verifier: resolver, grandfather, escape hatches, REVIEWS.md strictness — now robust off the golden path | ✓ VERIFIED | CR-01 fix at the opening delimiter (normalized via `tr -d '\r'` + trailing-whitespace strip) mirrored onto the closing-delimiter awk search (per-line CR/whitespace strip before `== "---"` comparison); WR-01 fix splits the distinct-reviewer pipeline into excluded (codex-derived, `grep -E '^codex([-_ ].*)?$'`) vs. external counts, with the `-lt 2` test applied to external only and a message that names the exclusion count and cites D-15 when it fires. Read directly at lines ~537-600. |
+| `migrations/0008-plan-review-gate.md` + `migrations/run-tests.sh` | Idempotent migration, table-insert scoped to the validated header | ✓ VERIFIED | `seen_hdr` flag set on `^\| Gate \|`, gating the `^\|---` separator match, present identically in the migration doc (1 occurrence) and all 4 occurrences in `run-tests.sh` (apply, second-run no-op re-check, new decoy-table apply, wrong-shape decline path). Decoy-table fixture (`AGENTS.md.decoy-table`) re-run live: row lands after the `| Gate |` header, zero plan-review lines before it, 16/16 rows/gates reached. |
+| `docs/decisions/0009-plan-review-gate.md` (ADR-0009) | Records CR-01/WR-01/WR-02 as fixed, WR-03 as an accepted documented limitation, IN-01 corrected | ✓ VERIFIED | Read directly: decision 4 carries the WR-01/D-15 fix, exclusion-vs-allowlist reasoning, and the cross-host `[codex, gemini]` residual. Decision 5 carries WR-02 as reproduced-and-fixed with the self-sealing idempotency-masking explanation. Decision 11 carries the CR-01 correction sub-paragraph, explicitly stating the fallback itself is unchanged. New decision 12 accepts WR-03 as a documented limitation, with the concrete future fix carried to `## Open follow-ups`. Nothing left silent. |
+| `.planning/config.codex.json` + `skills/setup-codex-agenticapps-workflow/templates/config-hooks.json` | `fires_when` names the REVIEWS.md-evidence condition (IN-01) | ✓ VERIFIED | Both files read directly: `fires_when` now reads "...AND no valid <NN>-REVIEWS.md (>=2 distinct external reviewers, full plans_reviewed coverage) exists". `jq -S` diff of the `plan_review` block between the two files is empty — byte-identical, as required. `implements_spec` untouched in both (pre-existing drift, out of scope per D-17). |
 
 ## Key Link Verification
 
 | From | To | Via | Status | Details |
 |------|-----|-----|--------|---------|
-| `AGENTS.md` ritual text | `check-plan-review.sh` | Named stable path `${CODEX_HOME:-$HOME/.codex}/skills/agentic-apps-workflow/scripts/check-plan-review.sh`, invoked unconditionally | ✓ WIRED | Ritual text (lines 111-139) names the exact path and instructs unconditional invocation ("Run it every time. Do not pre-judge whether it applies."), matching D-03/D-04. |
-| `migrations/run-tests.sh` | `check-plan-review.sh` | Subprocess invocation across resolver/enforcement/contract test functions | ✓ WIRED | Confirmed via live run: 3 dedicated test functions (`test_check_plan_review_resolver`, `test_check_plan_review_enforcement`, `test_check_plan_review_contract`) all present and passing. |
-| `check-plan-review.sh` | `.planning/STATE.md` | awk parse anchored on `## Current Position`, `Phase:` line | ✓ WIRED | Reproduced directly (criterion 6 evidence, step b). |
-| `.planning/config.codex.json` / template | `check-plan-review.sh` | `verifier` key names the script path | ✓ WIRED | Confirmed via `jq` on both files. |
-| `migrations/0008-plan-review-gate.md` | `skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md` | Section/table extraction at the installed template path | ✓ WIRED | `test_migration_0008`'s Step 2/3 assertions extract from the real template and assert byte-identical insertion; re-read the assertion code directly. |
+| `migrations/run-tests.sh` | `check-plan-review.sh` | Subprocess invocation across resolver/enforcement/contract suites | ✓ WIRED | Live run confirms all three suites present, green, and grown (13 new enforcement fixtures from 08-07). |
+| `check-plan-review.sh` strict path | D-15 exclusion | `grep -vE '^codex([-_ ].*)?$'` applied before the `-lt 2` test | ✓ WIRED | Read directly and exercised live three ways (codex-self, codex+gemini honest-mistake, zero-margin real shape). |
+| `migrations/0008-plan-review-gate.md` Step 3 | validated `| Gate |` header | `seen_hdr` flag gates the `^\|---` separator match | ✓ WIRED | Confirmed identical logic in the doc and all 4 `run-tests.sh` copies; decoy-table fixture proves correlation holds. |
+| `.planning/config.codex.json` / template | verifier's actual block condition | `fires_when` text | ✓ WIRED | Text now matches the shipped verifier's D-15-aware external-reviewer-count logic, confirmed via direct read and `jq` diff. |
 
 ## Anti-Patterns Found
 
-Scanned all phase-08-modified files (`check-plan-review.sh`, `run-tests.sh`, `0008-plan-review-gate.md`, `codex-plan-review/SKILL.md`, `docs/decisions/0009-plan-review-gate.md`, `agentic-apps-workflow/SKILL.md`, `agents-md-additions.md`, `config-hooks.json`, `.planning/config.codex.json`, `AGENTS.md`, `CHANGELOG.md`, `.codex/workflow-version.txt`) for `TBD|FIXME|XXX|TODO|HACK|PLACEHOLDER`.
+Scanned the phase-08-modified files touched by the three gap-closure plans (`check-plan-review.sh`, `migrations/run-tests.sh`, `migrations/0008-plan-review-gate.md`, `docs/decisions/0009-plan-review-gate.md`, `.planning/config.codex.json`, `skills/setup-codex-agenticapps-workflow/templates/config-hooks.json`) for `TBD|FIXME|XXX|TODO|HACK|PLACEHOLDER`.
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| (none in phase-08 files) | — | — | — | The one `PLACEHOLDER` hit in `CHANGELOG.md:442` is pre-existing prose describing an unrelated template feature (`workflow-config.md`'s `{{PLACEHOLDERS}}`), predating this phase — not a debt marker introduced here. |
+| (none found) | — | — | — | No unreferenced debt markers in any of the six gap-closure-touched files. |
 
-No unreferenced debt markers found in phase-08 deliverables.
+## Behavioral Spot-Checks / Probe Execution
 
-**Carried forward from 08-REVIEW.md (already found, not re-derived at length; independently spot-checked where noted):**
-- **CR-01** (Critical) — re-verified live above (derived truth #8).
-- **WR-01** (Warning) — re-verified live above (derived truth #8).
-- **WR-02** (Warning, code-inspection only per the review; not independently re-executed here — no failing repro exists against this repo's own `AGENTS.md` or the shipped test fixture, per the review's own admission) — migration 0008 Step 3's table-edit pattern is not scoped to the specific validated header; a hypothetical `AGENTS.md` with an unrelated `|---|` table earlier in the file could be silently corrupted instead. Not independently reproduced; carried as-is.
-- **WR-03** (Warning, partially executed per the review) — `--file` bypass's traversal guard rejects literal `..` components but not symlinked directory components. Bounded severity because the whole gate is advisory/agent-mediated. Not independently re-executed here; carried as-is.
-- **IN-01** (Info) — `fires_when` text in the declarative binding omits the REVIEWS.md-evidence condition. Purely descriptive, no functional effect. Confirmed present in both `.planning/config.codex.json` and the template, unchanged.
-
-## Behavioral Spot-Checks
+No `scripts/*/tests/probe-*.sh` convention exists in this repo. `migrations/run-tests.sh` is the project's runnable acceptance harness, executed live above (criterion 7). The exact reproduction commands specified in this re-verification's own task brief were all executed directly against the current script in a fresh scratch fixture, not read from source and not trusted from any SUMMARY.md:
 
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
-| Full test suite passes | `bash migrations/run-tests.sh` | 260 PASS / 1 SKIP / 0 FAIL | ✓ PASS |
-| Phase-with-plans-no-reviews blocks | `bash check-plan-review.sh` (scratch fixture) | exit 2, correct block message | ✓ PASS |
-| SUMMARY-present phase allows | same fixture + `09-01-SUMMARY.md` | exit 0 | ✓ PASS |
-| Legacy bare-number phase allows | scratch `phases/10/PLAN.md` | exit 0 | ✓ PASS |
-| `GSD_SKIP_REVIEWS=1` hatch | env var + blocking fixture | exit 0, announced on stderr | ✓ PASS |
-| `multi-ai-review-skipped` marker hatch | marker file + blocking fixture | exit 0, announced on stderr | ✓ PASS |
-| Resolver step 1 (pointer) | symlink `.planning/current-phase` | resolved-phase matches pointer | ✓ PASS |
-| Resolver step 2 (STATE.md) | `## Current Position` / `Phase: 09` | resolved phase 09, blocked correctly | ✓ PASS |
-| Resolver step 3 (mtime) | re-touch older plan to be newest | resolver picked the newest | ✓ PASS |
-| Resolver step 4 (fail-open) | empty `.planning/phases`, no STATE/pointer | exit 0 | ✓ PASS |
-| CR-01 repro (trailing-space delimiter) | crafted 1-reviewer REVIEWS.md with `--- ` first line | exit 0 (should be exit 2) | ✗ FAIL (confirms gap) |
-| WR-01 repro (codex self-review) | `reviewers: [codex, codex-self]`, well-formed frontmatter | exit 0 (should arguably be rejected per D-15) | ✗ FAIL (confirms gap) |
-
-## Probe Execution
-
-No `scripts/*/tests/probe-*.sh` convention exists in this repo, and no plan/SUMMARY references a probe script by that name. `migrations/run-tests.sh` is this project's equivalent runnable acceptance harness and is covered under Behavioral Spot-Checks / criterion 7 above.
+| Full test suite passes | `bash migrations/run-tests.sh` | 278 PASS / 1 SKIP / 0 FAIL | ✓ PASS |
+| CR-01 trailing-space exploit | `printf -- '--- \n...reviewers: [solo]...'` | exit 2 (was exit 0) | ✓ PASS |
+| CR-01 CRLF exploit | `printf -- '---\r\n...reviewers: [solo]...'` | exit 2 (was exit 0) | ✓ PASS |
+| WR-01 codex-self exploit | `reviewers: [codex, codex-self]` | exit 2, names codex + D-15 (was exit 0) | ✓ PASS |
+| D-13 fallback retained | 5-line no-frontmatter body | exit 0 | ✓ PASS |
+| CRLF + 2 good reviewers, no false block | `reviewers: [gemini, opencode]` CRLF | exit 0, not MALFORMED | ✓ PASS |
+| Zero-margin real shape | `reviewers: [gemini, codex, opencode]` | exit 0 | ✓ PASS |
+| WR-02 decoy-table fixture | `bash migrations/run-tests.sh 0008` | all decoy-table assertions PASS | ✓ PASS |
+| Criteria 2/3/5 regression | SUMMARY-present / legacy bare-number / both escape hatches | all exit 0 | ✓ PASS |
 
 ## Requirements Coverage
 
-This repo has no `.planning/REQUIREMENTS.md` (expected — GSD scaffold adopted starting at phase 8; not a gap). Requirement IDs are declared inline in each plan's frontmatter (`core spec §02`, `core spec §09`) and map directly to the ROADMAP criteria verified above. No orphaned requirement IDs found beyond the two named in the phase header.
+`core spec §02` (plan-review gate) and `core spec §09` (conformance) — both declared in 08-07/08-08/08-09's plan frontmatter. §02's evidence-artifact strictness contract (the specific gap) is now satisfied by the CR-01/WR-01 fixes; §09's conformance-record requirement is satisfied by ADR-0009's amendments. No orphaned requirement IDs found.
 
-## Known/Accepted Limitations (per task instructions — NOT reported as gaps)
+## Known/Accepted Limitations (unchanged from initial verification, not gaps)
 
 - Grandfather guard's per-plan-vs-per-phase SUMMARY conflation (ADR-0009 decision 8b, open question, deliberately unresolved).
 - `implements_spec` stays 0.4.0 while `.planning/config.codex.json` reads a pre-existing "0.1.0" (D-17, out of scope).
-- Codex native `~/.codex/hooks.json` not adopted (D-01/D-02, explicit upgrade path documented).
-- `.planning/phases/` 00-07 not migrated to GSD-native layout (D-18, deliberate).
-- The `>=5`-line fallback's general spoofability (ADR-0009 decision 11) — this is the *documented, accepted* weakening; it is distinct from CR-01, which is an *undocumented* defect in when that fallback is reached at all.
+- Codex native `~/.codex/hooks.json` not adopted (D-01/D-02, explicit documented upgrade path).
+- The D-13 `>=5`-line fallback's general spoofability (ADR-0009 decision 11) — documented, accepted, unchanged by this gap-closure (only the routing INTO it was narrowed).
+- WR-03 (`--file` symlink-traversal guard is lexical-`..`-only) — now ADR-0009 decision 12, explicitly accepted as a documented limitation with a concrete future fix carried to Open follow-ups. The gate is agent-mediated, so this is hygiene, not a security boundary.
+- Criterion 1's relaxed, agent-mediated form (ADR-0009 decision 9) — unconditional blocking requires the deferred native `hooks.json` phase.
 
 ## Human Verification Required
 
-### 1. Disposition of CR-01 and WR-01 (Critical + Warning code-review findings, independently re-confirmed)
-
-**Test:** Decide whether to (a) patch `check-plan-review.sh`'s delimiter comparison and reviewer-identity check now, adding the two missing regression fixtures to `test_check_plan_review_enforcement`, or (b) formally record both as accepted, documented limitations in an ADR-0009 addendum (mirroring how decision 11 already documents the `>=5`-line fallback's spoofability) before treating this phase as fully closed.
-
-**Expected:** A deliberate decision recorded in the codebase (either a code fix + tests, or an ADR addendum) — not silence, since silence is what let CR-01 sit unaddressed between the code review and this verification pass.
-
-**Why human:** This is a scope/risk-tolerance judgment call the phase's own operator/reviewer chain is set up to make (the same escalation pattern ADR-0009 decision 11 already models), not something a verifier should resolve unilaterally by either fixing code or waiving the finding.
+None. The prior verification's single human-verification item ("decide whether to fix CR-01/WR-01 in code or formally accept them") has been resolved: both were fixed in code (08-07), with regression fixtures, and the disposition is recorded in ADR-0009 (08-09). No new ambiguity was introduced by the gap-closure plans that requires a human judgment call — WR-03 and IN-01 also received explicit, non-silent dispositions (accepted-with-documentation and corrected-text, respectively), per the task brief's own constraint that WR-03 must not be re-litigated as a gap.
 
 ## Gaps Summary
 
-Six of seven literal ROADMAP success criteria are cleanly verified by direct, live execution against scratch fixtures — not by trusting SUMMARY.md claims. `migrations/run-tests.sh` is green at 260/1/0 exactly as claimed, and `test_migration_0008` is a genuine, cksum-verified no-op on second run. The resolver's four-step order, both grandfather guards, both escape hatches, and the fail-open path were all independently reproduced.
+None. All 7 ROADMAP success criteria are verified by live re-execution in a fresh scratch repo, not by trusting SUMMARY.md claims. The one substantive gap from the prior verification pass — the verifier's REVIEWS.md strictness check being defeatable by an encoding accident (CR-01) or a self-review spoof (WR-01) — is closed: both exact exploit commands from the prior report now exit 2 with an actionable, correctly-attributed message, and all four must-not-regress controls (the D-13 fallback, the CRLF-good-reviewers case, the trailing-space-good-reviewers case, and this repo's own zero-margin real `08-REVIEWS.md` shape) still exit 0 exactly as before. WR-02's migration self-sealing-corruption risk is fixed and regression-tested via a decoy-table fixture reproduced live in this session. WR-03 and IN-01 received explicit, recorded dispositions rather than being left as undocumented gaps. `migrations/run-tests.sh` is green at 278 PASS / 1 SKIP / 0 FAIL, up from the pre-closure 260/1/0 by exactly the 18 new regression assertions the three gap-closure plans added. No regression was found in criteria 1, 2, 3, 5, or 6, all of which were re-checked live in this session because the gap-closure plans touched shared files.
 
-The one substantive gap is criterion 4's underlying "strictness contract": the verifier's REVIEWS.md evidence check — the specific mechanism the entire phase exists to add (D-01's rejection of "declarative-only" enforcement) — can be defeated two independent ways that are not on the golden path the shipped test suite exercises and are not recorded as accepted limitations anywhere in this phase's own documentation. Both were found by this phase's own post-execution code review (`08-REVIEW.md`) and neither has been fixed or formally accepted since. Given the entire point of this phase is a *programmatic, deterministic* backstop against the exact "gate silently fails open" failure class core ADR-0018 exists to close, shipping with two live, reproducible instances of exactly that failure class — undocumented — is the one place this verification declines to rubber-stamp the phase as unconditionally closed.
+The phase goal — a declarative binding plus a programmatic verifier implementing the spec's resolution order and grandfather rule, with the evidence-artifact strictness contract actually enforced — is achieved.
 
 ---
 
-_Verified: 2026-07-15T08:59:53Z_
-_Verifier: Claude (gsd-verifier)_
+_Verified: 2026-07-15T10:04:53Z_
+_Verifier: Claude (gsd-verifier), re-verification pass_
