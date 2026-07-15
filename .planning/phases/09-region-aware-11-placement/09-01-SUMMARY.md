@@ -192,3 +192,19 @@ None. No new network, auth, file-access, or schema surface. The script is read-o
 the working tree (writes confined to `mktemp -d`), adds no dependency (`awk`/`git`/`bash`
 were already required by the existing harness), and T-09-SC's package-install scope
 condition is not met.
+
+## Self-Check: PASSED
+
+All created files verified present on disk; all four commit hashes verified in
+`git log --oneline --all`; working tree clean.
+
+| Claim | Verified |
+|---|---|
+| `migrations/validate-0009-anchor.sh` exists | FOUND |
+| `09-VALIDATION-EVIDENCE.md` exists | FOUND |
+| `09-01-SUMMARY.md` exists | FOUND |
+| Commit `a44885e` (Task 1) | FOUND |
+| Commit `47c67fd` (Task 2) | FOUND |
+| Commit `3ff4803` (Task 3) | FOUND |
+| Commit `60fcf32` (SUMMARY) | FOUND |
+| Working tree clean | PASS |
