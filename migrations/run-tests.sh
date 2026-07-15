@@ -3504,13 +3504,26 @@ test_migration_0009() {
   assert_extracted_shape "0009 Pre-flight" "$pf_block" \
     'spec-mirrors/11-coding-discipline-0.4.0.md' || pf_ok=0
 
+  # CR-03 fix: derive a COMMENT-STRIPPED view of the pre-flight before matching
+  # either D-28.1 `case` below. A bare substring `case "$pf_block" in *'test -s'*`
+  # matches the pre-flight's OWN COMMENTS at 0009:108/:120 ("`test -s` catches
+  # that...") just as readily as the executable guard at :111 — so the guard can
+  # be deleted entirely and this check stays green, satisfied by prose describing
+  # a guard that no longer exists. A header that documents a guard is not the
+  # guard. Match against $pf_code, never $pf_block, below.
+  local pf_code
+  pf_code="$(printf '%s\n' "$pf_block" | grep -v '^[[:space:]]*#')"
+
   # D-28.1 contract, layer 1 (zero-byte): `test -f` alone passes a zero-byte
   # mirror, and D-27 makes the mirror the SOLE re-injection source — so a
   # zero-byte mirror would strip §11 and inject nothing, silently committing a
   # maimed AGENTS.md on every heal. Asserted behaviorally by case 10(a).
-  case "$pf_block" in
-    *'test -s'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
-    *)           _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+  # Pattern tightened from the bare `*'test -s'*` to the executable shape
+  # `*'test -s "$MIRROR"'*` — a check that only works by accident of comment
+  # wording is one prose edit from being dead.
+  case "$pf_code" in
+    *'test -s "$MIRROR"'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+    *)                     _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
   esac
 
   # D-28.1 contract, layer 2 (truncation): the mirror's heading is on L1, so a
@@ -3521,7 +3534,10 @@ test_migration_0009() {
   # TERMINATOR to §11's last prose line (runaway-strip hazard). This is a
   # read-only integrity check on a different file, anchored to a structural
   # heading; it bounds nothing and cannot run away. Asserted by case 10(b).
-  case "$pf_block" in
+  # Also matched against $pf_code (CR-03): it does not collide with a comment
+  # today, but a check that only works by accident of comment wording is one
+  # prose edit from being dead, same as layer 1 above.
+  case "$pf_code" in
     *'Goal-Driven Execution'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
     *)                         _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
   esac
@@ -4026,6 +4042,21 @@ test_migration_0009() {
     out="$(_m0009_apply "$p10" "$h10a" "$pf_block")"; rc=$?
     [ "$rc" -eq 3 ]
     _m0009_ok $? "10-corrupt-mirror-refused (a) zero-byte mirror: pre-flight refuses with exit 3 (D-28.1 layer 1, test -s) — got exit=$rc"
+
+    # WR-04: `rc -eq 3` above CANNOT discriminate layer 1 (test -s) from layer 2
+    # (the tail sentinel) — guard 4 also fails a zero-byte mirror with the same
+    # exit 3 BY CONSTRUCTION (a zero-byte file has no `### 4. Goal-Driven
+    # Execution` line either), so guard 4 subsumes guard 3 on this exact
+    # fixture. The diagnostic TEXT is the only thing that differs: guard 3's is
+    # "missing or empty" (0009:115), guard 4's is "missing its final section...
+    # truncated or corrupt" (0009:140) and does NOT contain "missing or empty"
+    # (re-confirmed by A4 in this plan's acceptance criteria). This mirrors how
+    # the harness already isolates the version gate from the mirror guards 12
+    # lines earlier by construction (mk_project supplies a passing version).
+    case "$out" in
+      *'missing or empty'*) _m0009_ok 0 "10-corrupt-mirror-refused (a) zero-byte mirror refused BY THE test -s layer" ;;
+      *)                    _m0009_ok 1 "10-corrupt-mirror-refused (a) zero-byte mirror refused, but not by test -s (wrong layer)" ;;
+    esac
 
     # (b) TRUNCATED mirror (head -20: keeps the L1 `## ` heading, drops
     #     `### 4. Goal-Driven Execution` at L57) → the tail-sentinel layer.
