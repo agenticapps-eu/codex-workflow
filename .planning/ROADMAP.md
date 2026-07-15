@@ -75,10 +75,21 @@ from upstream and were ported faithfully.
 3. **No assertion weakening.** As in 09-04: the fixtures must be satisfied by the
    code, never the reverse.
 
-**Requirements**: ANCHOR-05, MIGR-04, MIGR-09, TEST-02, TEST-03, DOC-01
+**Requirements**: ANCHOR-05, MIGR-01, MIGR-04, MIGR-06, MIGR-07, MIGR-08, MIGR-09,
+TEST-02, TEST-03, DOC-01
 
 **Success Criteria** (what must be TRUE):
 
+  0. **(BLOCKER, do first) 0009 actually runs on a real target project.** Its
+     pre-flight reads the version floor from `.codex/workflow-version.txt` — the
+     0008 precedent — not from a project-relative `skills/` path. No `skills/`
+     path remains in pre-flight, Step 3, or `applies_to`. MIGR-08 (migration
+     records the version) is separated from MIGR-09 (this repo's own bump), as
+     0008 kept them. Proven by porting 0008's `no-scaffolder-tree` regression
+     fixture (`0008 run-tests.sh:1633-1706`) and REMOVING `_m0009_mk_project`'s
+     synthetic SKILL.md manufacture (`run-tests.sh:3366-3372`) — the suite must
+     stop manufacturing a condition no real project has. That fixture must be
+     observed FAILING against the current 0009 first.
   1. A fixture reproduces the runaway (provenance present, exact H2 drifted) and
      is observed FAILING against the current 0009 before any awk change.
   2. The strip's entry and exit conditions are coupled: a provenance match that
@@ -92,9 +103,15 @@ from upstream and were ported faithfully.
      document check skips comment lines, and case 10(a) isolates layer 1 from the
      tail sentinel (mirroring the version-gate control 12 lines earlier).
   6. `11-idempotent-rerun` exists: narrowing the strip terminator fails the suite.
-  7. ADR-0010 records the runaway, the D-26 correction ("bounded by construction"
-     was false), and the deliberate divergence from the 8520f90 pin.
-  8. Upstream defect filed against `claude-workflow`.
+  7. MIGR-07's guard is live (V-02): `state-a` uses a genuinely **off**-anchor
+     fixture so the `:3553` "D-31/MIGR-07" assertion can fail for the reason it
+     claims.
+  8. `.codex/workflow-version.txt` and `SKILL.md` agree (V-03), and the drift test
+     reads the version file so a future split is caught.
+  9. ADR-0010 records the runaway, the D-26 correction ("bounded by construction"
+     was false), the V-01 pre-flight regression against 0008's T-08-38 precedent,
+     and the deliberate divergence from the 8520f90 pin.
+  10. Upstream defect filed against `claude-workflow` for CR-01/CR-02.
 
 ### Phase 9: Region-Aware §11 Placement
 
@@ -175,6 +192,44 @@ MIGR-09, TEST-01, TEST-02, TEST-03, TEST-04, SETUP-01, DOC-01, DOC-02
 | 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 0/0             | Not planned | —          |
 
 ## Known Follow-ups
+
+### Scheduled into Phase 9.1 (BLOCKER — from 09-VERIFICATION.md)
+
+- **V-01 — 0009 aborts on every project it exists to fix.** Reproduced: on a
+  realistic target project (`AGENTS.md` + `.codex/`, no `skills/` tree), 0009's
+  pre-flight gate at `:95-101` greps the **project-relative** path
+  `skills/agentic-apps-workflow/SKILL.md` for its version floor, fails, and exits 3.
+  **Step 1 — the entire §11 heal — never runs.** Same path is sed'd at `:369` and
+  named in `applies_to` at `:9`.
+  **This is a regression against an established, documented precedent.** Migration
+  0008 names this exact defect (T-08-38, `0008:470-487`): "0007's pre-flight greps
+  `skills/agentic-apps-workflow/SKILL.md` … **No target project has a local
+  `skills/` tree** … aborts with exit 3 on every real install — **a defect this
+  migration does not replicate**." 0008 reads `.codex/workflow-version.txt`
+  instead. 0009 reintroduced 0007's bug in all three of its locations.
+  **The suite cannot see it** because `run-tests.sh:3366-3372` `_m0009_mk_project`
+  manufactures a synthetic `skills/agentic-apps-workflow/SKILL.md` in every 0009
+  sandbox — the exact practice `run-tests.sh:918-919` refused for 0008 ("no 0008
+  sandbox here manufactures a synthetic SKILL.md"). 0008's `no-scaffolder-tree`
+  regression fixture (`:1633-1706`) was never ported. **314 PASS / 0 FAIL is fully
+  consistent with a migration that never runs.**
+  Root cause: MIGR-08 (the migration records the version) and MIGR-09 (**this
+  repo's own** bump) were conflated into one step. 0008 kept them apart on purpose.
+  **Relation to CR-01:** compounding, not duplicate. V-01 = it does not run on real
+  projects. CR-01 = when it *does* run, it can destroy data.
+  Fix: read the floor from `.codex/workflow-version.txt` per the 0008 precedent,
+  drop the `skills/` path from pre-flight/Step 3/`applies_to`, separate MIGR-08 from
+  MIGR-09, and port 0008's `no-scaffolder-tree` fixture so the suite stops
+  manufacturing the condition reality lacks.
+- **V-02 — MIGR-07's guard is vacuous.** Behavior is correct (verified live: exit 0
+  on a genuinely off-anchor file), but the `state-a` fixture
+  (`run-tests.sh:3509-3516`) is **on**-anchor, so the assertion at `:3553` labelled
+  "D-31/MIGR-07" cannot fail for the reason it claims. Same dead-assertion class as
+  CR-03.
+- **V-03 — version split.** `.codex/workflow-version.txt` reads `0.6.0` while
+  `SKILL.md:3` reads `0.7.0`. Diverges from the 0008 precedent (`98c06f5` bumped
+  both); the drift test never reads the version file, so nothing catches the split.
+  Same root confusion as V-01.
 
 ### Scheduled into Phase 9.1 (from 09-REVIEW.md — data loss, urgent)
 
