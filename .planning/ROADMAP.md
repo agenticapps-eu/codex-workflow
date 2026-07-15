@@ -57,8 +57,16 @@ Phase 9 shipped a migration whose *stated* purpose is closing a latent
 block-destruction defect, and its code review reproduced a **different** latent
 block-destruction defect in the mechanic immediately adjacent to the one that was
 hardened. The anchor rule and terminator alternation Phase 9 built hold up under
-mutation — the review tried to break them and could not. The defects are inherited
-from upstream and were ported faithfully.
+mutation — the review tried to break them and could not.
+
+**Provenance of the defects (corrected by 09.1-RESEARCH.md — the pre-research
+claim that all were "inherited from upstream and ported faithfully" was wrong):**
+CR-01 is genuinely upstream's and still live at `f9354cc` (file it). CR-02 was
+upstream's but is **already fixed** at `f9354cc` (port the fix). **V-01 is ours** —
+the port dropped upstream's `.claude/` prefix (do not file it). CR-03/V-02/V-03 are
+ours. Phase 9's suite reported 314 PASS / 0 FAIL while the migration never ran on
+any real project — that combination, not the individual bugs, is what this phase
+is really correcting.
 
 **Depends on**: Phase 9 (5/5 plans executed; 0009 exists and its suite is GREEN)
 
@@ -87,10 +95,17 @@ from upstream and were ported faithfully.
    is *this scaffolder repo's own source tree*, which is why it looked right to its
    author. A porting error, not an inherited defect.
 4. **No assertion weakening.** As in 09-04: the fixtures must be satisfied by the
-   code, never the reverse. **Inverse trap (Q3):** the fix may legitimately break a
-   currently-green `anchor-parity` count assertion by adding a third copy of the
-   alternation. A *good* change failing an assertion is not license to weaken the
-   assertion — update the count deliberately and say so.
+   code, never the reverse.
+   *Q3 resolved at planning time — the trap does not fire.* There is no
+   `anchor-parity` count assertion in `run-tests.sh`; the only alternation check is
+   a substring-presence gate. The MEDIUM-confidence research guess that a count
+   assertion would break is falsified. Declining the un-latch rule keeps the
+   alternation at 2 copies regardless. Plans still re-check the count deliberately
+   and record it.
+5. **A guard that cannot fail must not ship.** The inverse of constraint 4, and the
+   lesson of CR-03/V-02: if a proposed guard is unreachable because an earlier gate
+   always fires first, do NOT ship it as decoration — prove reachability by mutation,
+   and remove it if nothing reaches it. Record the removal and its reasoning.
 
 **Requirements**: ANCHOR-05, MIGR-01, MIGR-04, MIGR-06, MIGR-07, MIGR-08, MIGR-09, TEST-02, TEST-03, DOC-01
 
@@ -119,24 +134,43 @@ from upstream and were ported faithfully.
      Rejected alternative: heal-and-duplicate (un-latch at the boundary and insert
      anyway) — no data loss, but silently leaves two similar §11 headings that a
      future migration's own conflict grep would trip on.
-     **Defense-in-depth (do NOT rely on it alone — RESEARCH reproduced its
-     insufficiency):** also add `END { if (in_block && !swallowed_own_h2) exit 1 }`.
-     Un-latching at a structural boundary *alone* still runs away to EOF on the
-     orphaned-provenance shape (8 lines → 4).
+     **`END { if (in_block && !swallowed_own_h2) exit 1 }` is REQUIRED and is a
+     MECHANISM, not defense-in-depth** — corrected at planning time, superseding
+     this criterion's earlier framing and the RESEARCH/REVIEW recommendation.
+     **The un-latch rule is NOT adopted.** With the refuse gate in place,
+     un-latching at a structural boundary implements exactly the heal-and-duplicate
+     semantics Q1 rejected: on the *mixed-provenance* shape it silently deletes the
+     drifted block's body. Without un-latching, that shape latches and the END guard
+     refuses — which is the correct outcome. Un-latching would also add a third copy
+     of the alternation; declining it keeps the count at 2.
+     **Falsifiability:** the refuse gate is a file-global grep, so it cannot see a
+     file whose first block is healthy and whose second block has drifted (the exact
+     H2 *is* present). Fixture `15-mixed-provenance-unresolved` is that shape and is
+     the ONLY thing that makes the END guard falsifiable. Without it the END guard is
+     a guard never observed catching anything — this phase's own defect class.
   3. The provenance regex is anchored, **ported from upstream `f9354cc`** along
      with its `11-prose-mention-provenance` fixture — proving a prose mention
      cannot trigger the strip. The anchor must NOT lose `@[^[:space:]]+`'s
      deliberate any-version match (idempotent re-runs across versions depend on it).
      **Fixture numbering (Q4):** upstream's ported fixture owns `11-`; criterion 6's
      idempotent re-run fixture must therefore take the next free number, not `11-`.
-  4. The `grep -q` post-strip guard is no longer satisfiable by the insert pass
-     re-adding the heading it checks for — i.e. it can actually fail.
+  4. **The post-strip integrity check can actually fail — or is deliberately removed
+     as unreachable.** (Reframed at planning time from "implement an h2-count guard"
+     to a *determination*, per constraint 5.) The original defect stands: 0009's
+     `grep -q` validates the tmp AFTER the insert pass has re-added the heading it
+     checks for, so it cannot fail. But with the refuse gate + END guard, every shape
+     that would lose a foreign `## ` now aborts at `strip_rc == 4` first — which would
+     make a replacement h2-count guard **dead by construction**. Shipping it anyway
+     would reproduce CR-03 inside CR-03's own fix.
+     Required: a mutation-based reachability test. If nothing reaches the guard,
+     REMOVE it and record the rejection in ADR-0010. Criterion 4 is then satisfied by
+     the `exit 4` diagnostic branch, whose falsifiability fixture 15 observes.
   5. `test -s`'s assertion is live: deleting the guard fails the suite. The
      document check skips comment lines, and case 10(a) isolates layer 1 from the
      tail sentinel (mirroring the version-gate control 12 lines earlier).
-  6. An idempotent re-run fixture exists (next free number — NOT `11-`, which
-     upstream's ported prose-mention fixture takes): narrowing the strip terminator
-     fails the suite.
+  6. `12-idempotent-rerun` exists (Q4 resolved: upstream's ported prose-mention
+     fixture owns `11-`; fixture `07` is the *marker* twin, so `11-` is genuinely
+     free for the port): narrowing the strip terminator fails the suite.
   7. MIGR-07's guard is live (V-02): `state-a` uses a genuinely **off**-anchor
      fixture so the `:3553` "D-31/MIGR-07" assertion can fail for the reason it
      claims.
