@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: Region-Aware §11 Placement
 status: executing
-last_updated: "2026-07-15T17:51:30.433Z"
-last_activity: 2026-07-15 -- Phase 9.1 planning complete
+last_updated: "2026-07-15T18:14:43.655Z"
+last_activity: 2026-07-15 -- Phase 09.1 execution started
 progress:
   total_phases: 2
   completed_phases: 1
@@ -26,15 +26,15 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** Phase 09 — region-aware-11-placement
+**Current focus:** Phase 09.1 — 11-strip-runaway-inserted
 Ready for `/gsd-execute-phase 9`.
 
 ## Current Position
 
-Phase: 09 (region-aware-11-placement) — EXECUTING
-Plan: 1 of 5
-Status: Ready to execute
-Last activity: 2026-07-15 -- Phase 9.1 planning complete
+Phase: 09.1 (11-strip-runaway-inserted) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 09.1
+Last activity: 2026-07-15 -- Phase 09.1 execution started
 0 blockers). Plan-checker PASSED with 2 warnings, both closed before commit.
 
 ## Notes

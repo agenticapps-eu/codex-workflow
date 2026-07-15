@@ -195,7 +195,7 @@ touch only `0009-*.md`, so a RED plan physically cannot fix what it reproduces. 
 every plan touches `run-tests.sh` or `0009-*.md`, so same-file plans are wave-separated
 rather than falsely parallelized; wave 2 is the only genuine parallelism.
 
-- [ ] 09.1-01-PLAN.md — Criterion 0 RED: strip `_m0009_mk_project`'s synthetic SKILL.md, port 0008's `no-scaffolder-tree` fixture; suite OBSERVED RED (MIGR-01, TEST-02) — wave 1
+- [x] 09.1-01-PLAN.md — Criterion 0 RED: strip `_m0009_mk_project`'s synthetic SKILL.md, port 0008's `no-scaffolder-tree` fixture; suite OBSERVED RED (MIGR-01, TEST-02) — wave 1
 - [ ] 09.1-02-PLAN.md — Criterion 0 GREEN: pre-flight floor reads `.codex/workflow-version.txt`; Step 2 deleted, MIGR-08/MIGR-09 separated (MIGR-01, MIGR-08, MIGR-09) — wave 2
 - [ ] 09.1-03-PLAN.md — Criterion 8: `test_drift`'s consumer-side third leg (free RED), V-03 version split closed (MIGR-09, TEST-02) — wave 2
 - [ ] 09.1-04-PLAN.md — Criteria 1/2/3/7 RED: fixtures 13/14/15 runaway + 11-prose-mention ported from `f9354cc`; off-anchor `state-a` + mirror single-`##` guard (ANCHOR-05, TEST-02, TEST-03, MIGR-07) — wave 3
@@ -302,7 +302,7 @@ sequence matters):
 | ------------------------------- | --------- | --------------- | ----------- | ---------- |
 | 8. Plan-Review Gate             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
 | 9. Region-Aware §11 Placement   | v0.7.0    | 5/5             | In progress | —          |
-| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 0/7             | Planned     | —          |
+| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 1/7 | In Progress|  |
 
 ## Known Follow-ups
 
