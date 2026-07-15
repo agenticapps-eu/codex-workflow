@@ -43,7 +43,7 @@ Decision record: [ADR-0009](../docs/decisions/0009-plan-review-gate.md).
 </details>
 
 - [ ] **Phase 9: Region-Aware §11 Placement** - Migration 0009 heals the §11 anchor so a leading GitNexus region can no longer silently destroy the block, with the anchor rule validated empirically before it is written (5/5 plans executed; NOT complete — code review reproduced a data-loss defect, see 09-REVIEW.md CR-01; closes via Phase 9.1)
-- [ ] **Phase 9.1: §11 Strip Runaway** (INSERTED 2026-07-15) - Close the runaway-strip and unanchored-provenance data-loss paths that Phase 9's code review reproduced in the shipped 0009, kill the dead `test -s` assertion, and add the idempotent re-run fixture that makes the terminator alternation self-defending
+- [x] **Phase 9.1: §11 Strip Runaway** (INSERTED 2026-07-15) - Close the runaway-strip and unanchored-provenance data-loss paths that Phase 9's code review reproduced in the shipped 0009, kill the dead `test -s` assertion, and add the idempotent re-run fixture that makes the terminator alternation self-defending (completed 2026-07-15)
 
 ## Phase Details
 
@@ -201,7 +201,7 @@ rather than falsely parallelized; wave 2 is the only genuine parallelism.
 - [x] 09.1-04-PLAN.md — Criteria 1/2/3/7 RED: fixtures 13/14/15 runaway + 11-prose-mention ported from `f9354cc`; off-anchor `state-a` + mirror single-`##` guard (ANCHOR-05, TEST-02, TEST-03, MIGR-07) — wave 3
 - [x] 09.1-05-PLAN.md — Criteria 2/3/4 GREEN: anchored `PROV_RE`, the Q1 refuse gate, the END fail-closed guard, a distinguishable strip diagnostic (ANCHOR-05, MIGR-01, MIGR-04) — wave 4
 - [x] 09.1-06-PLAN.md — Criteria 5/6: `test -s` made live, `12-idempotent-rerun`; both proven by verified deletion mutations (MIGR-06, TEST-03, ANCHOR-05) — wave 5
-- [ ] 09.1-07-PLAN.md — Criteria 9/10: ADR-0010 corrections, WR-02, upstream CR-01 filing (DOC-01) — wave 6
+- [x] 09.1-07-PLAN.md — Criteria 9/10: ADR-0010 corrections, WR-02, upstream CR-01 filing (DOC-01) — wave 6
 
 **Planning rulings** (2026-07-15, verified against live files):
 
@@ -302,7 +302,7 @@ sequence matters):
 | ------------------------------- | --------- | --------------- | ----------- | ---------- |
 | 8. Plan-Review Gate             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
 | 9. Region-Aware §11 Placement   | v0.7.0    | 5/5             | In progress | —          |
-| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 6/7 | In Progress|  |
+| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 7/7 | Complete   | 2026-07-15 |
 
 ## Known Follow-ups
 
