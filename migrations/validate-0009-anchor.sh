@@ -117,6 +117,74 @@ candidate_insert() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# The WRONG rules — replayed as counter-cases (D-36 / Dimension 8)
+#
+# A counter-replay asserts that a WRONG rule FAILS. If a wrong rule passes, the
+# corresponding positive assertion above is dead-by-construction: it would pass
+# for any rule, discriminate nothing, and read as coverage while covering
+# nothing. That is the exact Phase 8 defect class (08-05 shipped two awk
+# patterns that could never match and silently passed). When a counter-case's
+# wrong rule behaves CORRECTLY, this script fails loudly and exits non-zero.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# NAIVE INSERT — the incumbent, verbatim from this repo's shipped
+# migrations/0001-inject-spec-11-coding-discipline.md:91: `/^## / && !done`,
+# with NO marker alternation. On a gitnexus-led file the first `## ` sits INSIDE
+# the region, so this rule injects §11 into managed territory and the next
+# `gitnexus analyze` silently destroys the block. That is the latent defect this
+# whole phase exists to close — counter-case A observes it happening.
+naive_insert() {
+  awk -v prov="$PROV" -v mirror="$MIRROR" '
+    /^## / && !done {
+      print prov
+      while ((getline line < mirror) > 0) print line
+      close(mirror)
+      print ""
+      done=1
+    }
+    { print }
+    END {
+      if (!done) {
+        print ""
+        print prov
+        while ((getline line < mirror) > 0) print line
+        close(mirror)
+      }
+    }
+  ' "$1"
+}
+
+# NARROW STRIP — candidate_strip with the marker alternation REMOVED from the
+# terminator (`/^## /` only). This is the highest-severity mechanic in the phase
+# (D-24). On an already-healed region-led file the strip runs past
+# `<!-- gitnexus:start -->` looking for a `## `, eating the start marker and the
+# region's real content, and stops only at the region's own `## Always Do` —
+# leaving an orphaned `<!-- gitnexus:end -->`, an unpaired region. Counter-case
+# B reproduces that destruction deliberately, in a scratch dir, to prove the
+# alternation is load-bearing rather than cosmetic (T-09-01).
+narrow_strip() {
+  awk '
+    BEGIN { in_block = 0; swallowed_own_h2 = 0 }
+    /<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->/ {
+      in_block = 1
+      next
+    }
+    in_block && !swallowed_own_h2 && /^## Coding Discipline \(NON-NEGOTIABLE\)$/ {
+      swallowed_own_h2 = 1
+      next
+    }
+    in_block && swallowed_own_h2 && (/^## /) {
+      in_block = 0
+      swallowed_own_h2 = 0
+      print
+      next
+    }
+    in_block { next }
+    !in_block { print }
+  ' "$1"
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Fixture synthesis (printf into $tmp — this repo's run-tests.sh idiom, D-34)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -160,10 +228,15 @@ line_of_sub() { grep -n -F -m1 -e "$2" "$1" 2>/dev/null | cut -d: -f1; }
 # Count of whole-line fixed matches.
 count_exact() { grep -c -x -F -e "$2" "$1" 2>/dev/null || true; }
 
+# This banner is deliberately DETERMINISTIC — no repo SHA, no absolute path.
+# The recorded evidence file (09-VALIDATION-EVIDENCE.md) must stay byte-
+# consistent with a fresh run so a verifier can re-run and diff (T-09-04).
+# Echoing `git rev-parse HEAD` here would invalidate the record on the very next
+# commit — including the commit that records it — and echoing $REPO_ROOT would
+# diverge between a worktree and the main checkout. The SHA and repo path belong
+# in the evidence file's own header, captured alongside the run, not in stdout.
 echo ""
 echo "=== validate-0009-anchor — empirical replay of the D-21 anchor + D-24 terminator ==="
-echo "Repo:            $REPO_ROOT"
-echo "Repo SHA:        $(git rev-parse HEAD)"
 echo "Pinned upstream: claude-workflow @ 8520f90d235e0c50b0484b170d595ab6f2cd1173 (D-48)"
 echo "Mirror:          skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md ($(wc -l < "$MIRROR" | tr -d ' ') lines)"
 
@@ -217,6 +290,76 @@ elif [ -z "$c2_body" ]; then
   fail "CASE 2 ABOVE REGION — region body was destroyed by the insert"
 else
   pass "CASE 2 ABOVE REGION — provenance at line $c2_prov is above gitnexus:start at line $c2_start; region intact and paired (start=$c2_start_n end=$c2_end_n), body at line $c2_body"
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COUNTER-CASE A — the NAIVE anchor must FAIL ANCHOR-04
+#
+# Replayed over the SAME synthesized gitnexus-led file as case 2. If the naive
+# rule somehow landed the block above the region, case 2 could not discriminate
+# between the two rules and would prove nothing — that is a FAIL here.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "--- COUNTER-CASE A (D-36): replay the NAIVE anchor (0001:91) over the same gitnexus-led file"
+
+naive_insert "$tmp/case2-input.md" > "$tmp/counterA-naive.md"
+
+cA_prov="$(line_of_sub "$tmp/counterA-naive.md" "$PROV")"
+cA_start="$(line_of_exact "$tmp/counterA-naive.md" '<!-- gitnexus:start -->')"
+
+if [ ! -s "$tmp/counterA-naive.md" ]; then
+  fail "COUNTER-CASE A NAIVE ANCHOR INSERTS INSIDE REGION — naive insert produced empty output"
+elif [ -z "$cA_prov" ] || [ -z "$cA_start" ]; then
+  fail "COUNTER-CASE A NAIVE ANCHOR INSERTS INSIDE REGION — provenance (line '${cA_prov:-none}') or start marker (line '${cA_start:-none}') absent"
+elif [ "$cA_prov" -gt "$cA_start" ]; then
+  pass "COUNTER-CASE A (counter) NAIVE ANCHOR INSERTS INSIDE REGION — naive rule put provenance at line $cA_prov, INSIDE the region that opens at line $cA_start (the latent defect, observed live)"
+else
+  fail "COUNTER-CASE A NAIVE ANCHOR INSERTS INSIDE REGION — naive rule anchored at line $cA_prov, above gitnexus:start at line $cA_start. The naive rule did NOT misbehave, so CASE 2 discriminates nothing and its PASS is dead-by-construction."
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COUNTER-CASE B — a NARROW strip terminator must DESTROY the region (D-24)
+#
+# State B, already-healed: case 2's candidate output, in which the block sits
+# correctly anchored immediately above <!-- gitnexus:start -->. This is the
+# assertion the pre-correction CONTEXT.md would not have caught: without it the
+# phase can ship green and still eat a GitNexus region.
+# ─────────────────────────────────────────────────────────────────────────────
+echo ""
+echo "--- COUNTER-CASE B (D-24): replay NARROW vs WIDENED strip terminators over the already-healed file"
+
+if [ ! -s "$tmp/case2-healed.md" ]; then
+  fail "COUNTER-CASE B NARROW TERMINATOR EATS REGION — no healed State-B file to strip (case 2 produced nothing)"
+  fail "WIDENED TERMINATOR PRESERVES REGION — no healed State-B file to strip"
+else
+  # B.1 — the narrow terminator must eat the region.
+  narrow_strip "$tmp/case2-healed.md" > "$tmp/counterB-narrow.md"
+  nb_start_n="$(count_exact "$tmp/counterB-narrow.md" '<!-- gitnexus:start -->')"
+  nb_end_n="$(count_exact "$tmp/counterB-narrow.md" '<!-- gitnexus:end -->')"
+  nb_body="$(line_of_sub "$tmp/counterB-narrow.md" 'This project is indexed by GitNexus')"
+
+  if [ ! -s "$tmp/counterB-narrow.md" ]; then
+    fail "COUNTER-CASE B NARROW TERMINATOR EATS REGION — narrow strip produced empty output"
+  elif [ "$nb_start_n" = "0" ] && [ "$nb_end_n" = "1" ] && [ -z "$nb_body" ]; then
+    pass "COUNTER-CASE B (counter) NARROW TERMINATOR EATS REGION — start marker DESTROYED (start=$nb_start_n) while gitnexus:end survives (end=$nb_end_n): an orphaned, unpaired region; region body content gone"
+  else
+    fail "COUNTER-CASE B NARROW TERMINATOR EATS REGION — narrow terminator did NOT destroy the region (start=$nb_start_n end=$nb_end_n, body line ${nb_body:-absent}). The narrow rule behaved correctly, so D-24's alternation is not shown to be load-bearing and the WIDENED assertion below is dead-by-construction."
+  fi
+
+  # B.2 — the widened terminator (the candidate) must preserve it.
+  candidate_strip "$tmp/case2-healed.md" > "$tmp/counterB-widened.md"
+  wb_start_n="$(count_exact "$tmp/counterB-widened.md" '<!-- gitnexus:start -->')"
+  wb_end_n="$(count_exact "$tmp/counterB-widened.md" '<!-- gitnexus:end -->')"
+  wb_body="$(line_of_sub "$tmp/counterB-widened.md" 'This project is indexed by GitNexus')"
+  wb_prov="$(line_of_sub "$tmp/counterB-widened.md" "$PROV")"
+
+  if [ ! -s "$tmp/counterB-widened.md" ]; then
+    fail "WIDENED TERMINATOR PRESERVES REGION — candidate strip produced empty output"
+  elif [ "$wb_start_n" = "1" ] && [ "$wb_end_n" = "1" ] && [ -n "$wb_body" ] && [ -z "$wb_prov" ]; then
+    pass "WIDENED TERMINATOR PRESERVES REGION — region intact and paired (start=$wb_start_n end=$wb_end_n), body at line $wb_body, and the §11 block was still cleanly stripped (no provenance left)"
+  else
+    fail "WIDENED TERMINATOR PRESERVES REGION — start=$wb_start_n end=$wb_end_n body=${wb_body:-absent} leftover-provenance=${wb_prov:-none} (expected start=1 end=1, body present, no provenance)"
+  fi
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
