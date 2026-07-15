@@ -19,7 +19,7 @@ source. GSD roadmap tracking starts at Phase 8.
 - Integer phases (8, 9, 10): planned work
 - Decimal phases (8.1, 8.2): urgent insertions (marked INSERTED)
 
-- [ ] **Phase 8: Plan-Review Gate** - Bind the core spec §02 `plan-review` pre-execution gate on the Codex host (all 6 plans executed 2026-07-15; VERIFICATION `gaps_found` — criterion 4 open, see `08-VERIFICATION.md`)
+- [x] **Phase 8: Plan-Review Gate** - Bind the core spec §02 `plan-review` pre-execution gate on the Codex host (all 6 plans executed 2026-07-15; VERIFICATION `gaps_found` — criterion 4 open, see `08-VERIFICATION.md`) (completed 2026-07-15)
 
 ## Phase Details
 
@@ -83,4 +83,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 8/9 | In Progress|  |
+| 8. Plan-Review Gate | 9/9 | Complete   | 2026-07-15 |
