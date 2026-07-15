@@ -229,6 +229,30 @@ elif grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md \
   echo ""
   echo "           immediately above the heading to adopt it as managed."
   exit 3
+elif grep -qE "$PROV_RE" AGENTS.md \
+     && ! grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md; then
+  # The literal INVERSE of the guard immediately above. Provenance is present
+  # but the exact heading is not — either drifted (CR-01a) or orphaned with no
+  # heading at all (CR-01b). Both reproduced runaway-strip shapes collapse to
+  # this ONE predicate: "provenance present, exact H2 absent". Q1's ruling
+  # (see this document's <interfaces>, or 09.1-05's plan): REFUSE, not
+  # heal-and-duplicate. This check runs BEFORE any file surgery, so the file
+  # is byte-identical by construction — a strip that refuses to run cannot
+  # run away. This gate is file-global: it cannot see a shape where a HEALTHY
+  # provenance+heading pair exists elsewhere in the same file alongside a
+  # drifted one (both satisfy "some provenance is present" / "some heading is
+  # present" in aggregate). That shape is caught downstream by the strip
+  # awk's own END guard instead.
+  echo "ABORT: AGENTS.md contains a spec-11 provenance line whose"
+  echo "       '## Coding Discipline (NON-NEGOTIABLE)' heading is drifted or"
+  echo "       absent. The offending line(s):"
+  grep -nE "$PROV_RE" AGENTS.md
+  echo ""
+  echo "       (a) restore the '## Coding Discipline (NON-NEGOTIABLE)' heading"
+  echo "           immediately below the provenance line, or"
+  echo "       (b) remove the provenance line."
+  echo "       Refusing to strip. AGENTS.md left untouched."
+  exit 3
 else
   # Two passes: strip the managed block wherever it currently sits, then
   # re-insert it at the region-aware anchor. The strip is a no-op when the block
@@ -244,21 +268,33 @@ else
   # terminator so a SECOND provenance line re-enters cleanly instead of
   # inheriting a stale swallow state and leaking its own heading.
   #
-  # The strip is deliberately BLIND to the block's content: it is bounded
-  # structurally, so a drifted block cannot cause a runaway, and no verbatim
-  # assertion gates it. This migration must not refuse to PLACE a block just
-  # because its prose drifted — content fidelity is 0004's job. A consequence,
-  # stated rather than accidental: moving a drifted block also silently
-  # re-vendors it from the mirror, repairing the drift.
+  # D-26's PRINCIPLE survives: the strip stays deliberately BLIND to the
+  # block's PROSE — content fidelity is 0004's job, not this migration's, and
+  # moving a drifted block also silently re-vendors it from the mirror,
+  # repairing the drift. D-26's CLAIM does not survive: the strip is bounded
+  # ONLY when the exact heading is where it is expected — the heading is a
+  # STRUCTURAL boundary marker, not content (the canonical mirror has exactly
+  # one `## ` line, and it is the heading — asserted by
+  # `test_migration_0004`'s single-`## ` invariant guard). So: prose drift ->
+  # stay blind and repair; HEADING drift -> the boundary itself is gone, and
+  # this migration must refuse rather than run away. The two `elif` refuse
+  # branches above cover the file-global case; the `unresolved` flag and the
+  # `END` guard immediately below cover the shape they cannot see.
   #
   # The strip's output is required non-empty before anything consumes it.
   # AGENTS.md must never be replaced by a result derived from a truncated or
   # failed strip (awk error, disk full) — on failure this aborts, leaves
   # AGENTS.md untouched, and cleans up the partial temp file.
-  if awk '
-    BEGIN { in_block = 0; swallowed_own_h2 = 0 }
+  awk '
+    BEGIN { in_block = 0; swallowed_own_h2 = 0; unresolved = 0 }
     /^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$/ {
+      # A second provenance line arriving while a previous one never found
+      # its heading (in_block still latched, swallowed_own_h2 never set) is
+      # itself an unresolved shape — record it before re-entering, and reset
+      # swallowed_own_h2 so this new entry is judged on its own.
+      if (in_block && !swallowed_own_h2) { unresolved = 1 }
       in_block = 1
+      swallowed_own_h2 = 0
       next
     }
     in_block && !swallowed_own_h2 && /^## Coding Discipline \(NON-NEGOTIABLE\)$/ {
@@ -273,7 +309,44 @@ else
     }
     in_block { next }
     !in_block { print }
-  ' AGENTS.md > AGENTS.md.0009.strip && [ -s AGENTS.md.0009.strip ]; then
+    END {
+      # Fail closed: a provenance entry that never finds its heading leaves
+      # in_block latched true to EOF (or an earlier one was overwritten by a
+      # second entry above, recorded as `unresolved`). Either shape means
+      # "in_block { next }" was about to eat content it had no structural
+      # right to eat. Exit 4 — NOT exit 1 — so the caller can distinguish
+      # this refusal from a genuine awk error. A LEGITIMATE block that runs
+      # to EOF (no trailing `## ` or region marker, e.g. fixture
+      # 06-no-heading-eof) has swallowed_own_h2 == 1 at EOF and is
+      # unaffected by this guard.
+      if (unresolved || (in_block && !swallowed_own_h2)) exit 4
+    }
+  ' AGENTS.md > AGENTS.md.0009.strip
+  strip_rc=$?
+  if [ "$strip_rc" -eq 4 ]; then
+    # The refuse-gate `elif`s above are file-global and cannot see a MIXED
+    # shape: a healthy provenance+heading pair elsewhere in the file makes
+    # both "provenance present" and "heading present" true in aggregate, so
+    # neither gate fires. The strip awk sees the file sequentially instead,
+    # so it is what actually catches this shape.
+    rm -f AGENTS.md.0009.strip
+    echo "ABORT: migration 0009 Step 1 — a spec-11 provenance line was never"
+    echo "       followed by its '## Coding Discipline (NON-NEGOTIABLE)'"
+    echo "       heading before the strip pass reached EOF or a second"
+    echo "       provenance line. The offending line(s):"
+    grep -nE "$PROV_RE" AGENTS.md
+    echo ""
+    echo "       (a) restore the '## Coding Discipline (NON-NEGOTIABLE)' heading"
+    echo "           immediately below the provenance line, or"
+    echo "       (b) remove the provenance line."
+    echo "       Refusing to strip. AGENTS.md left untouched."
+    exit 3
+  elif [ "$strip_rc" -ne 0 ] || [ ! -s AGENTS.md.0009.strip ]; then
+    rm -f AGENTS.md.0009.strip
+    echo "ABORT: migration 0009 Step 1 — the strip pass produced no output;"
+    echo "       refusing to replace AGENTS.md with a possibly-truncated result."
+    exit 3
+  else
     # Re-insert at the region-aware anchor. The alternation IS the fix: 0001 and
     # 0004 had only /^## /, which selects a heading INSIDE the region on a
     # region-led file. "Whichever comes first" is what keeps the block near the
@@ -284,8 +357,12 @@ else
     # `while ((getline ...))` loop read nothing, yet awk still exits 0 with
     # non-empty output (the rest of the file, plus an orphaned provenance line).
     # `[ -s ]` alone would pass and commit that data loss. Requiring the result
-    # to actually contain the block's own heading catches it. Pre-flight's
-    # `test -s` guards the common case; this is the last line of defense.
+    # to actually contain the block's own heading catches it. This guards
+    # MIRROR integrity, not strip integrity — it cannot guard strip integrity,
+    # because it looks for the very heading the insert pass itself just wrote;
+    # strip integrity is guarded upstream by `strip_rc` instead. Pre-flight's
+    # `test -s` guards the common mirror-missing case; this is the last line
+    # of defense against a present-but-empty-or-corrupt mirror.
     if awk -v prov="$PROV" -v block_file="$MIRROR" '
       BEGIN { inserted = 0 }
       !inserted && (/^## / || /^<!-- gitnexus:start -->$/) {
@@ -327,11 +404,6 @@ else
       echo "       Refusing to replace AGENTS.md. Left untouched."
       exit 3
     fi
-  else
-    rm -f AGENTS.md.0009.strip
-    echo "ABORT: migration 0009 Step 1 — the strip pass produced no output;"
-    echo "       refusing to replace AGENTS.md with a possibly-truncated result."
-    exit 3
   fi
 fi
 ```
