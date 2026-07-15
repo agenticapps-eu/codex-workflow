@@ -347,6 +347,25 @@ else
     echo "       refusing to replace AGENTS.md with a possibly-truncated result."
     exit 3
   else
+    # Strip-integrity guard (criterion 4). The strip may remove ONLY the
+    # '## ' heading(s) it owns; every OTHER '## ' heading in the input must
+    # survive into the strip output. This is a backstop for the refuse gate
+    # and the END guard above, not a replacement for either — by itself it
+    # is defeated by the orphan-PROV-at-EOF shape (no '## ' headings are
+    # lost when there is no trailing heading to lose in the first place).
+    # Source: 09-REVIEW.md CR-01 fix (b), repositioned between the passes,
+    # before the insert regenerates the evidence this guard checks.
+    h2_in=$(grep -c '^## ' AGENTS.md | tr -d ' ')
+    h2_own=$(grep -c '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md | tr -d ' ')
+    h2_out=$(grep -c '^## ' AGENTS.md.0009.strip | tr -d ' ')
+    if [ "$h2_out" -ne "$(( h2_in - h2_own ))" ]; then
+      rm -f AGENTS.md.0009.strip
+      echo "ABORT: migration 0009 Step 1 — the strip removed structural headings"
+      echo "       it does not own (expected $(( h2_in - h2_own )) '## ' headings"
+      echo "       to survive, found $h2_out). AGENTS.md left untouched."
+      exit 3
+    fi
+
     # Re-insert at the region-aware anchor. The alternation IS the fix: 0001 and
     # 0004 had only /^## /, which selects a heading INSIDE the region on a
     # region-led file. "Whichever comes first" is what keeps the block near the
