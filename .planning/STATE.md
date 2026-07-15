@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.6.0
-milestone_name: Plan-Review Gate
-status: Awaiting next milestone
-last_updated: "2026-07-15T10:51:36.182Z"
-last_activity: 2026-07-15 — Milestone v0.6.0 completed and archived
+milestone: v0.7.0
+milestone_name: Region-Aware §11 Placement
+status: planning
+last_updated: "2026-07-15T11:03:32.999Z"
+last_activity: 2026-07-15
 progress:
-  total_phases: 1
-  completed_phases: 1
-  total_plans: 9
-  completed_plans: 9
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -29,10 +29,10 @@ workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
 
 ## Current Position
 
-Phase: Milestone v0.6.0 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-07-15 — Milestone v0.6.0 completed and archived
+Status: Defining requirements
+Last activity: 2026-07-15 — Milestone v0.7.0 started
 
 ## Notes
 
