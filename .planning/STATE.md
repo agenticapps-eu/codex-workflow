@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.0
-milestone_name: milestone
-status: "Phase 08 shipped — PR #15"
-last_updated: "2026-07-15T10:32:30.801Z"
-last_activity: 2026-07-15
+milestone: v0.6.0
+milestone_name: Plan-Review Gate
+status: Awaiting next milestone
+last_updated: "2026-07-15T10:51:36.182Z"
+last_activity: 2026-07-15 — Milestone v0.6.0 completed and archived
 progress:
   total_phases: 1
-  completed_phases: 0
-  total_plans: 6
+  completed_phases: 1
+  total_plans: 9
   completed_plans: 9
-  percent: 0
+  percent: 100
 ---
 
 # Project State
@@ -29,15 +29,17 @@ workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
 
 ## Current Position
 
-Phase: 08
-Plan: Not started
-Status: Phase 08 shipped — PR #15
-Last activity: 2026-07-15
-
-Progress: [░░░░░░░░░░] 0%
+Phase: Milestone v0.6.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-07-15 — Milestone v0.6.0 completed and archived
 
 ## Notes
 
 - Legacy `.planning/phases/<NN>/` (bare-number) layout predates ADR-0007 point 4,
   which mandates GSD-native `<NN>-<slug>/`. Phase 08 is the first GSD-native
   phase. Migrating 00–07 is deliberately out of scope.
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
