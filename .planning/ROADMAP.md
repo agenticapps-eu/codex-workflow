@@ -19,7 +19,7 @@ source. GSD roadmap tracking starts at Phase 8.
 - Integer phases (8, 9, 10): planned work
 - Decimal phases (8.1, 8.2): urgent insertions (marked INSERTED)
 
-- [ ] **Phase 8: Plan-Review Gate** - Bind the core spec §02 `plan-review` pre-execution gate on the Codex host
+- [x] **Phase 8: Plan-Review Gate** - Bind the core spec §02 `plan-review` pre-execution gate on the Codex host (completed 2026-07-15)
 
 ## Phase Details
 
@@ -72,7 +72,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 08-06-PLAN.md — Migration 0008 bindings-table step (D-20) + CHANGELOG, TDD [wave 5] → closes criterion 7
+- [x] 08-06-PLAN.md — Migration 0008 bindings-table step (D-20) + CHANGELOG, TDD [wave 5] → closes criterion 7
 
 <sub>08-05/08-06 were one plan; split for context budget (operator-approved). 08-06 depends on 08-05 rather than running beside it because both edit `migrations/0008-plan-review-gate.md` and `migrations/run-tests.sh` — same-wave siblings must not share `files_modified`. The version bump stays with 08-05 because `run_drift_test` compares the latest migration's `to_version` against SKILL.md's `version`, and this repo hard-fails a mismatch: splitting them would leave the harness red across the wave boundary.</sub>
 
@@ -83,4 +83,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 5/6 | In Progress|  |
+| 8. Plan-Review Gate | 6/6 | Complete   | 2026-07-15 |
