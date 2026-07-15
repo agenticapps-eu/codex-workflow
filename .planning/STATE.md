@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: milestone_complete
-last_updated: 2026-07-15T10:06:39.545Z
-last_activity: 2026-07-15 -- Phase 08 execution started
+status: "Phase 08 shipped — PR #15"
+last_updated: "2026-07-15T10:32:30.801Z"
+last_activity: 2026-07-15
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
   completed_plans: 9
   percent: 0
-stopped_at: Milestone complete (Phase 08 was final phase)
 ---
 
 # Project State
@@ -32,7 +31,7 @@ workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
 
 Phase: 08
 Plan: Not started
-Status: Milestone complete
+Status: Phase 08 shipped — PR #15
 Last activity: 2026-07-15
 
 Progress: [░░░░░░░░░░] 0%
