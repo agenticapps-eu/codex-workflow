@@ -151,3 +151,211 @@ migration `0010+` never becomes pending either — the project is stranded at
 nothing. An abort is unrecoverable.
 
 ## Steps
+
+### Step 1: Heal the §11 block's placement
+
+**Idempotency check:**
+
+```bash
+[ -f AGENTS.md ] \
+  && grep -q '<!-- spec-source: agenticapps-workflow-core@0\.4\.0 §11 -->' AGENTS.md \
+  && ! awk '
+       /^<!-- gitnexus:start -->$/ { r = 1; next }
+       /^<!-- gitnexus:end -->$/   { r = 0; next }
+       r && /<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->/ { f = 1 }
+       END { exit(f ? 0 : 1) }
+     ' AGENTS.md
+```
+
+Returns 0 (**already applied — nothing to do**) only when the current-version
+provenance is present **and** the block is not inside a managed region. That
+conjunction is the whole point: a block sitting inside a region carries perfectly
+correct provenance but is **not safe**, so provenance alone must never
+short-circuit the heal.
+
+Returns non-zero when `AGENTS.md` is absent (routes to the informational-skip
+branch), when the block is missing entirely, and when the block is inside a
+region.
+
+Both marker regexes are anchored (`^...$`). A bare substring match also fires on
+prose that merely *mentions* the marker — a scaffolded project's own `AGENTS.md`
+guidance comment does exactly that — which would misjudge a healthy file as
+"inside a region" and propose to move §11 above a region that does not exist.
+
+The scan is single-pass and **fails closed** without any line-number arithmetic:
+if `<!-- gitnexus:end -->` never appears, `r` stays 1 to EOF, so provenance
+sitting after an unterminated `<!-- gitnexus:start -->` is correctly judged
+in-region and the block gets moved above the marker to safety. That is the same
+outcome as the well-formed case, reached with no extra branch.
+
+A **healthy-but-off-anchor** block — correct provenance, not in a region, but not
+at the anchor this migration would pick — has provenance and is not in a region,
+so this predicate returns 0 and it is **left exactly where it is**. That falls
+out of the predicate rather than a special case; there is deliberately no code
+that detects "off-anchor but healthy", and this migration does not move it.
+
+**Pre-condition:** pre-flight passed — the vendored mirror exists, is non-empty,
+and is not truncated (its final section is present).
+
+**Apply:**
+
+```bash
+PROV='<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->'
+PROV_RE='<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->'
+MIRROR="${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+
+if [ ! -f AGENTS.md ]; then
+  # Informational skip, NOT an abort. An abort would strand the project below
+  # to_version forever (see the pre-flight note above).
+  echo "INFO: migration 0009 Step 1 — no AGENTS.md in project; §11 heal skipped."
+  echo "      Scaffold one via /setup-codex-agenticapps-workflow, then re-run"
+  echo "      /update-codex-agenticapps-workflow to pick up §11 on the next pass."
+elif grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md \
+     && ! grep -qE "$PROV_RE" AGENTS.md; then
+  # A §11 heading with no provenance was hand-pasted outside this migration's
+  # management. Refuse, and leave the file byte-identical — this check runs
+  # before any surgery. Inherits 0001's never-overwrite-a-hand-paste rule.
+  echo "ABORT: AGENTS.md contains a '## Coding Discipline (NON-NEGOTIABLE)'"
+  echo "       heading but no provenance comment — it was hand-pasted outside"
+  echo "       this migration's management. Refusing to overwrite."
+  echo ""
+  echo "       (a) Remove that section and re-run /update-codex-agenticapps-workflow, or"
+  echo "       (b) add the line"
+  echo ""
+  echo "             $PROV"
+  echo ""
+  echo "           immediately above the heading to adopt it as managed."
+  exit 3
+else
+  # Two passes: strip the managed block wherever it currently sits, then
+  # re-insert it at the region-aware anchor. The strip is a no-op when the block
+  # is absent, so "inject" (no block yet) and "move" (block in the wrong place)
+  # are ONE code path — the insert always re-vendors from the mirror.
+  #
+  # The strip terminator recognizes the SAME anchor as the insert pass below
+  # (`## ` OR an anchored `<!-- gitnexus:start -->`) — see "The anchor rule"
+  # above for why the two must move together. The block contains exactly one
+  # `## ` line (its own heading), so that is swallowed explicitly first;
+  # naively stopping at the first `## ` would terminate on the block's own
+  # heading and leave the body behind. `swallowed_own_h2` is RESET at the
+  # terminator so a SECOND provenance line re-enters cleanly instead of
+  # inheriting a stale swallow state and leaking its own heading.
+  #
+  # The strip is deliberately BLIND to the block's content: it is bounded
+  # structurally, so a drifted block cannot cause a runaway, and no verbatim
+  # assertion gates it. This migration must not refuse to PLACE a block just
+  # because its prose drifted — content fidelity is 0004's job. A consequence,
+  # stated rather than accidental: moving a drifted block also silently
+  # re-vendors it from the mirror, repairing the drift.
+  #
+  # The strip's output is required non-empty before anything consumes it.
+  # AGENTS.md must never be replaced by a result derived from a truncated or
+  # failed strip (awk error, disk full) — on failure this aborts, leaves
+  # AGENTS.md untouched, and cleans up the partial temp file.
+  if awk '
+    BEGIN { in_block = 0; swallowed_own_h2 = 0 }
+    /<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->/ {
+      in_block = 1
+      next
+    }
+    in_block && !swallowed_own_h2 && /^## Coding Discipline \(NON-NEGOTIABLE\)$/ {
+      swallowed_own_h2 = 1
+      next
+    }
+    in_block && swallowed_own_h2 && (/^## / || /^<!-- gitnexus:start -->$/) {
+      in_block = 0
+      swallowed_own_h2 = 0
+      print
+      next
+    }
+    in_block { next }
+    !in_block { print }
+  ' AGENTS.md > AGENTS.md.0009.strip && [ -s AGENTS.md.0009.strip ]; then
+    # Re-insert at the region-aware anchor. The alternation IS the fix: 0001 and
+    # 0004 had only /^## /, which selects a heading INSIDE the region on a
+    # region-led file. "Whichever comes first" is what keeps the block near the
+    # top when the region starts late. The marker regex is anchored (`^...$`) so
+    # a prose mention of it can never be mistaken for a real region.
+    #
+    # Non-empty is not the same as correct: a zero-byte mirror makes the
+    # `while ((getline ...))` loop read nothing, yet awk still exits 0 with
+    # non-empty output (the rest of the file, plus an orphaned provenance line).
+    # `[ -s ]` alone would pass and commit that data loss. Requiring the result
+    # to actually contain the block's own heading catches it. Pre-flight's
+    # `test -s` guards the common case; this is the last line of defense.
+    if awk -v prov="$PROV" -v block_file="$MIRROR" '
+      BEGIN { inserted = 0 }
+      !inserted && (/^## / || /^<!-- gitnexus:start -->$/) {
+        print prov
+        while ((getline line < block_file) > 0) print line
+        close(block_file)
+        print ""
+        inserted = 1
+        print
+        next
+      }
+      { print }
+      END {
+        if (!inserted) {
+          print ""
+          print prov
+          while ((getline line < block_file) > 0) print line
+          close(block_file)
+        }
+      }
+    ' AGENTS.md.0009.strip > AGENTS.md.0009.tmp && [ -s AGENTS.md.0009.tmp ] \
+      && grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md.0009.tmp; then
+      if mv AGENTS.md.0009.tmp AGENTS.md; then
+        rm -f AGENTS.md.0009.strip AGENTS.md.0009.tmp
+        echo "INFO: migration 0009 Step 1 — §11 block anchored above any managed region."
+      else
+        rm -f AGENTS.md.0009.strip AGENTS.md.0009.tmp
+        echo "ABORT: migration 0009 Step 1 — mv failed; refusing to report"
+        echo "       success. AGENTS.md left as-is (mv is atomic on failure);"
+        echo "       check disk space / permissions."
+        exit 3
+      fi
+    else
+      rm -f AGENTS.md.0009.strip AGENTS.md.0009.tmp
+      echo "ABORT: migration 0009 Step 1 — the insert pass produced no output,"
+      echo "       or its result is missing the §11 heading. The vendored"
+      echo "       spec-mirror block is likely empty or corrupt:"
+      echo "       $MIRROR"
+      echo "       Refusing to replace AGENTS.md. Left untouched."
+      exit 3
+    fi
+  else
+    rm -f AGENTS.md.0009.strip
+    echo "ABORT: migration 0009 Step 1 — the strip pass produced no output;"
+    echo "       refusing to replace AGENTS.md with a possibly-truncated result."
+    exit 3
+  fi
+fi
+```
+
+**The terminator alternation is the highest-severity mechanic in this
+migration.** A `/^## /`-only strip terminator skips straight past
+`<!-- gitnexus:start -->` on a file this migration has already healed, and
+consumes the ENTIRE GitNexus region plus everything up to the next `## ` or EOF —
+on an ordinary idempotent re-run. It leaves an orphaned, unpaired
+`<!-- gitnexus:end -->` and destroys the region's content. This is exactly the
+runaway-strip hazard that the structural boundary was chosen to avoid,
+resurfacing *inside* that boundary. The structural boundary is only safe once its
+terminator set equals the anchor's terminator set. This was demonstrated
+empirically against real files before this document was written; it is not a
+theoretical concern.
+
+The payload is always **streamed from the mirror** (`getline line < block_file`),
+never `cat`'d inline and never transcribed into this document. The mirror is the
+single source of §11's prose.
+
+Rollback deliberately does **not** get a bespoke removal pass. Such a pass would
+need to carry the same terminator alternation as Apply, and it is precisely the
+construct upstream's own fixture had to be added to catch a file-destroying bug
+in — running a narrow-terminator removal over a healed region-led file eats the
+start marker and the region's real content. `git checkout` is *structurally
+immune*: there is no terminator to get wrong. Migration rollbacks in this repo
+already run inside a `test -d .git`-guarded context (pre-flight guard 1), and
+this is `0004:87`'s precedent.
+
+**Rollback:** `git checkout AGENTS.md`.
