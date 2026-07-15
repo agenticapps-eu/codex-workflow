@@ -20,10 +20,13 @@ must run before execution begins, enforced by a hybrid mechanism — a
 declarative binding plus a programmatic verifier (this repo's own ADR-0009,
 `docs/decisions/0009-plan-review-gate.md`). Plan `08-04` made **fresh**
 installs conformant by construction: the `config-hooks.json` template already
-carries the `hooks.pre_execution.plan_review` block, and the ritual section
-already ships inside `agents-md-additions.md`. An install already at `0.5.0`
-gets neither — this migration teaches an **existing install** the config
-block and the ritual section so a migrated install reaches the same bound
+carries the `hooks.pre_execution.plan_review` block, the ritual section
+already ships inside `agents-md-additions.md`, and that same template's
+bindings table already reads 16 distinct gates (D-20 — the `tdd` collapse,
+the `brainstorm-ui` / `brainstorm-architecture` split, and the `plan-review`
+row). An install already at `0.5.0` gets none of this — this migration
+teaches an **existing install** the config block, the ritual section, and
+the bindings-table corrections so a migrated install reaches the same bound
 state as a fresh one.
 
 **Config lives in the host-scoped `.planning/config.codex.json`, NOT the
@@ -198,10 +201,113 @@ rm -f "$SECFILE"
 line `## Pre-execution Gate — Plan Review (spec §02)` through the blank line
 before `<!-- END: agentic-apps-workflow sections -->`.
 
-### Step 3: Record `0.6.0` in `.codex/workflow-version.txt`
+### Step 3: Correct the AGENTS.md bindings table (D-20, all three corrections)
+
+The table read 15 gates before spec §02 added `plan-review`, and it
+duplicated `tdd` as two rows. Plan `08-04` corrected both defects — plus
+split the template's own combined `brainstorm-ui / brainstorm-architecture`
+row — in **fresh** installs, sourced once from `agents-md-additions.md`. An
+existing install's table still reads whatever it read at `0.5.0`: 15 rows,
+brainstorm combined into one row, two `tdd` rows, no `plan-review` row. This
+step applies the same three corrections an existing install is missing,
+every row read from the same template as Step 2's ritual section (D-19) —
+never a heredoc'd literal.
+
+**Shape guard first — and a mismatch is a FAILED PRECONDITION, not a
+success.** Read the template's table header line. Locate the target's table
+by the same header. If the target's header does not match, do not touch the
+table: print a warning naming both headers and exit with a distinct
+non-zero precondition code, routing to the update skill's per-step failure
+prompt (retry / skip-with-warning / rollback,
+`migrations/README.md:103-113`).
+
+**Why not a silent skip:** an earlier revision treated an unrecognised
+header as though the step had completed, which let the migration continue to
+Step 4 and record the project at `0.6.0` — an install stamped current whose
+table was never corrected, reading 15 gates while claiming 0.6.0, and
+nothing ever revisits it because the version record says there is nothing
+pending. A false "current" is worse than a reported failure. The step still
+refuses to touch a table whose shape it does not recognise — that decline is
+right, and OpenCode credited it as a strength — but its *status* is a failed
+precondition, not a skip. If the operator chooses skip-with-warning at the
+atomicity-contract prompt, the migration completes with the state recorded
+`partial` — a documented, consented, durable outcome, never a silent one.
+
+A downstream install's table came from the template and will match; this
+repo's own hand-maintained `AGENTS.md` uses a different third column
+(`Applies to scaffolder?` vs the template's `Scope`) and is exactly the kind
+of target this guard exists to decline — see `## Notes` on why this
+migration is never applied to this repo's own `AGENTS.md` in the first
+place.
+
+**Idempotency check:**
+```bash
+grep -q '^| plan-review' AGENTS.md
+```
+(Returns 0 when the table already carries a `plan-review` row — a fresh
+install got it from the template, or this step already ran; this step is
+then a no-op. **Step-local only** — it gates this step and nothing else.)
+
+**Pre-condition:** the target's table header line matches the template's
+(checked in Apply, below — a shape check, not a file-existence check).
+
+**Apply:**
+```bash
+CODEX="${CODEX_HOME:-$HOME/.codex}"
+TPL="$CODEX/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md"
+
+# The template's own header line — the shape every real fresh or migrated
+# install's table must match.
+TPL_HEADER="$(grep -m1 '^| Gate |' "$TPL")"
+TARGET_HEADER="$(grep -m1 '^| Gate |' AGENTS.md)"
+
+if [ "$TARGET_HEADER" != "$TPL_HEADER" ]; then
+  echo "ABORT: bindings-table header mismatch — declining rather than guessing." >&2
+  echo "  template header: $TPL_HEADER" >&2
+  echo "  target header:   $TARGET_HEADER" >&2
+  echo "  This is a FAILED PRECONDITION, not a successful step: choose retry," >&2
+  echo "  skip-with-warning (records this migration 'partial'), or rollback." >&2
+  exit 7
+fi
+
+# Rows extracted from the template — never a heredoc'd literal (D-19). All
+# three corrections read from here: the two split brainstorm rows, the
+# collapsed tdd row, and the plan-review row.
+ROW_PLAN_REVIEW="$(grep -m1 '^| plan-review |' "$TPL")"
+ROW_BRAINSTORM_UI="$(grep -m1 '^| brainstorm-ui |' "$TPL")"
+ROW_BRAINSTORM_ARCH="$(grep -m1 '^| brainstorm-architecture |' "$TPL")"
+ROW_TDD="$(grep -m1 '^| tdd |' "$TPL")"
+
+# Apply all THREE corrections in one pass:
+#   1. SPLIT the combined brainstorm row into the template's two rows.
+#   2. COLLAPSE the duplicate tdd rows to the template's single row.
+#   3. ADD plan-review as the first data row (right after the separator).
+# Leave every other row untouched. Net: 15 -> 16 -> 15 -> 16 rows / 16
+# distinct gates, identical to a fresh install.
+awk \
+  -v pr="$ROW_PLAN_REVIEW" \
+  -v bui="$ROW_BRAINSTORM_UI" \
+  -v barch="$ROW_BRAINSTORM_ARCH" \
+  -v tdd="$ROW_TDD" '
+  /^\|---/ && !ins_pr { print; print pr; ins_pr=1; next }
+  /^\| brainstorm-ui \/ brainstorm-architecture \|/ { print bui; print barch; next }
+  /^\| tdd \(new TS module\)/ { next }
+  /^\| tdd \|/ { print tdd; next }
+  { print }
+' AGENTS.md > AGENTS.md.0008-table.tmp && mv AGENTS.md.0008-table.tmp AGENTS.md
+```
+
+**Rollback:** `git checkout -- AGENTS.md`. Manual anchor: this step only
+rewrites data rows inside the existing bindings table — no heading, no
+marker to bound a deletion — so a targeted revert means restoring the
+pre-Step-3 table from git history; `git checkout -- AGENTS.md` also restores
+Step 2's ritual section along with it, per Step 2's own rollback.
+
+### Step 4: Record `0.6.0` in `.codex/workflow-version.txt`
 
 This is the project's durable version record, and the last step, per 0007's
-content-steps-then-version-seal convention.
+content-steps-then-version-seal convention — sealed after the table
+correction, not before it.
 
 **Idempotency check:** `grep -q '^0.6.0$' .codex/workflow-version.txt 2>/dev/null`
 
@@ -211,12 +317,12 @@ content-steps-then-version-seal convention.
 
 **Rollback:** `echo "0.5.0" > .codex/workflow-version.txt`
 
-**There is no Step that bumps a target project's local scaffolder trigger
+**There is no step that bumps a target project's local scaffolder trigger
 skill's SKILL.md, and none should be added.** No target project has a local
 `skills/` tree — the setup skill's project-side surface is `AGENTS.md`,
 `.planning/`, `.codex/`, and `docs/decisions/` only (see `## Notes` for the
-full evidence trail). This repo's own scaffolder bump happens separately,
-below, as a direct edit to this repo's own file in this same commit — never
+full evidence trail). This repo's own scaffolder bump happened separately,
+in plan `08-05`'s commit, as a direct edit to this repo's own file — never
 as a migration step shipped to other people's repos.
 
 **This repo's own scaffolder bump (direct edit, not a migration step, this
@@ -238,8 +344,24 @@ jq -e '.hooks.pre_execution.plan_review.min_reviewers == 2' .planning/config.cod
 # 2. Ritual section wired into AGENTS.md (ALWAYS true on success)
 grep -q '^## Pre-execution Gate — Plan Review (spec §02)' AGENTS.md
 
-# 3. Project version record bumped (ALWAYS true on success) — there is no
-#    target-project scaffolder-file check; see the Step 3 note above.
+# 3. Bindings table corrected (D-20): exactly one plan-review row, one tdd
+#    row, two brainstorm rows, and row count == distinct-gate count == 16 —
+#    identical to a fresh install. This block assumes Step 3 completed; if
+#    the operator instead chose skip-with-warning on Step 3's header-mismatch
+#    precondition failure, the migration is recorded partial (per the
+#    atomicity contract) and the table is intentionally left as it was — the
+#    partial record, not this check, is authoritative in that case. Gate the
+#    assertion on the recorded outcome, not on optimism: a post-check that
+#    fails on a step the operator explicitly chose to skip would turn a
+#    consented partial into a reported failure.
+if grep -q '^| plan-review' AGENTS.md; then
+  test "$(grep -c '^| plan-review' AGENTS.md)" = "1"
+  test "$(grep -c '^| tdd |' AGENTS.md)" = "1"
+  test "$(grep -ci '^| brainstorm-' AGENTS.md)" = "2"
+fi
+
+# 4. Project version record bumped (ALWAYS true on success) — there is no
+#    target-project scaffolder-file check; see the Step 4 note above.
 grep -q '^0.6.0$' .codex/workflow-version.txt
 ```
 
@@ -248,31 +370,46 @@ grep -q '^0.6.0$' .codex/workflow-version.txt
 
 ## Skip cases
 
-Every skip is **step-local**. There is no migration-level skip predicate —
-an earlier revision had one ("the whole migration skips when
-`.hooks.pre_execution.plan_review` is already present") and it is wrong: the
-atomicity contract (`migrations/README.md:103-113`) lets an operator choose
-*skip-with-warning* on a failed step, recording the migration `partial` and
-continuing — so a real install can legitimately have Step 1 applied and Step
-2 not, and re-running to finish is the documented recovery path. A
-whole-migration skip keyed on Step 1's artifact would make that recovery a
-no-op that reports success, stranding the install half-migrated while
-claiming it is current (T-08-39).
+Every skip is **step-local**, with one exception: Step 3's header mismatch,
+which is a **failed precondition**, not a skip (see below). There is no
+migration-level skip predicate — an earlier revision had one (the migration
+as a whole would skip when `.hooks.pre_execution.plan_review` is already
+present) and it is wrong: the atomicity contract
+(`migrations/README.md:103-113`) lets an operator choose *skip-with-warning*
+on a failed step, recording the migration `partial` and continuing — so a
+real install can legitimately have Step 1 applied and Step 2 not, and
+re-running to finish is the documented recovery path. A migration-wide skip
+keyed on Step 1's artifact would make that recovery a no-op that reports
+success, stranding the install half-migrated while claiming it is current
+(T-08-39).
 
 - **`from_version` mismatch** (project not at 0.5.0) → migration framework
   skips silently. Projects below 0.5.0 replay the chain through 0007 first.
 - **Step 1 already present** (a fresh install got it from the template, or a
   prior partial run applied it) → Step 1 idempotency is positive; the
-  existing block is preserved verbatim and **Steps 2 and 3 still run**.
+  existing block is preserved verbatim and **Steps 2, 3, and 4 still run**.
 - **Step 2 already present** (fresh install got the section from the
   template, or a prior partial run applied it) → Step 2 is a no-op; **Steps
-  1 and 3 still run**.
-- **Step 3 already present** (`.codex/workflow-version.txt` already reads
-  `0.6.0`) → Step 3 is a no-op.
+  1, 3, and 4 still run**.
+- **Step 3 already present** (the table already carries a `plan-review` row
+  — a fresh install got it from the template, or a prior partial run applied
+  it) → Step 3 is a no-op; **Steps 1, 2, and 4 still run**.
+- **Step 3's table header does not match the template's — NOT a skip, a
+  failed precondition.** The step declines to touch a table whose shape it
+  does not recognise, but reports this as a precondition failure, not a
+  successful step (T-08-40). Routes to the update skill's per-step failure
+  prompt: retry / skip-with-warning (records the migration `partial`) /
+  rollback. This repo's own hand-maintained `AGENTS.md` (`Applies to
+  scaffolder?` header, not the template's `Scope`) is exactly the shape that
+  would trigger this decline if it were ever a migration TARGET — which it
+  is not; `08-04` corrected this repo's own `AGENTS.md` by hand, and this
+  migration is never applied to this repo.
+- **Step 4 already present** (`.codex/workflow-version.txt` already reads
+  `0.6.0`) → Step 4 is a no-op.
 - **No verifier CLIs available on this machine** → not this migration's
-  concern: the config block and ritual section are wired regardless; the
-  producer skill's own graceful degradation (D-14, `< 2` reviewers → refuse)
-  handles that at invocation time, never here.
+  concern: the config block, ritual section, and bindings table are wired
+  regardless; the producer skill's own graceful degradation (D-14, `< 2`
+  reviewers → refuse) handles that at invocation time, never here.
 
 ## Compatibility
 
@@ -280,7 +417,10 @@ claiming it is current (T-08-39).
   a leaf key at `hooks.pre_execution.plan_review`, preserving every existing
   key at every level (sibling pre-execution gates, other hook groups,
   foreign top-level keys); Step 2 only inserts a section inside the existing
-  marker block.
+  marker block; Step 3 only rewrites bindings-table rows it recognises,
+  preserving every row it does not touch, and declines entirely (a failed
+  precondition, never a silent success) rather than guess on an
+  unrecognised table shape.
 - **Host-scoped, unlike 0007:** the `pre_execution` block lives in
   `.planning/config.codex.json`, matching the other 15 gates, not the
   host-neutral `.planning/config.json` (see the framing note above).
@@ -300,11 +440,17 @@ claiming it is current (T-08-39).
   (including the skip-when-a-sibling-exists case), merge preservation
   against a fixture carrying a sibling pre-execution gate, a different-group
   gate, and a foreign top-level key, rollback that removes only our leaf and
-  drops the parent only when empty, the AGENTS.md section insert + its
-  cksum-verified idempotent re-apply, the version-bump round-trip, a
-  no-scaffolder-tree fixture (a sandbox shaped like a real target project
-  with no local `skills/` directory), and a partial-application fixture
-  proving every skip is step-local.
+  drops the parent only when empty, the AGENTS.md ritual-section insert +
+  its cksum-verified idempotent re-apply, the bindings-table step's
+  header-shape guard (both the Scope-shaped target that applies and the
+  `Applies to scaffolder?`-shaped target that declines and is left
+  byte-identical), all three table corrections (brainstorm split, tdd
+  collapse, plan-review add) with row-count == distinct-gate-count == 16,
+  a row-for-row diff against the template, and a cksum-verified idempotent
+  re-apply, the version-bump round-trip, a no-scaffolder-tree fixture (a
+  sandbox shaped like a real target project with no local `skills/`
+  directory), and a partial-application fixture proving every skip is
+  step-local.
 - **Deliberate divergence from 0007's pre-flight and `applies_to`: this
   migration names no path under a target project's `skills/` tree, anywhere
   (T-08-38).** 0007's pre-flight greps
