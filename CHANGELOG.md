@@ -9,6 +9,21 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Backlog (beyond conformance)
+
+- Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
+- Cross-host Stage 2 review via Claude Code MCP (ADR-0002 Option B).
+- Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
+  §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
+  Codex) would remove migration 0003's relocate round-trip.
+- Native `~/.codex/hooks.json` `PreToolUse` binding for the plan-review gate
+  (D-02, ADR-0009 decision 9) — until it lands the gate is agent-mediated, not
+  enforced.
+- Real CI: `.github/workflows/ci.yml` is still the Phase 0 placeholder and
+  verifies nothing; `migrations/run-tests.sh` runs only locally.
+
+## [0.6.0] — 2026-07-15
+
 ### Added
 - **Bind the plan-review pre-execution gate — spec §02** (migration `0008`;
   [ADR-0009](docs/decisions/0009-plan-review-gate.md)). Multi-AI plan review
@@ -82,14 +97,6 @@ in every shipped artifact's frontmatter.
   Verified `0000-baseline.md` resolves through the install path; `run-tests.sh`
   gains a matching regression guard. No version bump (scaffolder wiring, no
   per-project effect, no migration).
-
-### Backlog (beyond conformance)
-
-- Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
-- Cross-host Stage 2 review via Claude Code MCP (ADR-0002 Option B).
-- Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
-  §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
-  Codex) would remove migration 0003's relocate round-trip.
 
 ## [0.5.0] — 2026-07-06
 

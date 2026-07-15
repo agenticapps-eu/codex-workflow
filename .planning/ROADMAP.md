@@ -12,6 +12,10 @@ lives in `.planning/phases/<NN>/` (bare-number layout) and `CHANGELOG.md`.
 Reconstructing them as roadmap entries would invent history this file cannot
 source. GSD roadmap tracking starts at Phase 8.
 
+## Milestones
+
+- ✅ **v0.6.0 Plan-Review Gate** — Phase 8 (shipped 2026-07-15)
+
 ## Phases
 
 **Phase Numbering:**
@@ -19,68 +23,51 @@ source. GSD roadmap tracking starts at Phase 8.
 - Integer phases (8, 9, 10): planned work
 - Decimal phases (8.1, 8.2): urgent insertions (marked INSERTED)
 
-- [x] **Phase 8: Plan-Review Gate** - Bind the core spec §02 `plan-review` pre-execution gate on the Codex host (9 plans — 6 build + 3 gap-closure; VERIFICATION `passed` 7/7, see `08-VERIFICATION.md`) (completed 2026-07-15)
+<details>
+<summary>✅ v0.6.0 Plan-Review Gate (Phase 8) — SHIPPED 2026-07-15</summary>
 
-## Phase Details
+- [x] Phase 8: Plan-Review Gate (9/9 plans — 6 build + 3 gap-closure) — completed 2026-07-15
 
-### Phase 8: Plan-Review Gate
+Bound the core spec §02 `plan-review` pre-execution gate on the Codex host: a
+declarative binding in `.planning/config.codex.json` plus a programmatic
+verifier (`check-plan-review.sh`) implementing the spec's resolution order and
+grandfather rule, the `codex-plan-review` producer skill, and migration 0008 for
+existing installs. VERIFICATION `passed` 7/7. Shipped in PR #15 (`cf51c73`).
 
-**Goal**: Bind the core spec §02 `plan-review` pre-execution gate on Codex — a declarative binding in `.planning/config.codex.json` plus a programmatic verifier implementing the spec's resolution order and grandfather rule — closing the follow-up the spec names at `spec/02:105-109`.
-**Depends on**: Nothing tracked in this roadmap (Phases 00–07 are pre-GSD legacy)
-**Requirements**: core spec §02 (`plan-review` gate), §09 (conformance)
-**Canonical refs**:
+Full phase detail — goal, canonical refs, all 7 success criteria, the criterion-1
+deviation notice, and the wave breakdown — is preserved verbatim in
+[`milestones/v0.6.0-ROADMAP.md`](milestones/v0.6.0-ROADMAP.md).
+Decision record: [ADR-0009](../docs/decisions/0009-plan-review-gate.md).
 
-  - `docs/briefs/plan-review-gate.md` — approved design brief for this phase
-  - `../agenticapps-workflow-core/spec/02-hook-taxonomy.md` — normative gate definition (lines 81–109)
-  - `../agenticapps-workflow-core/spec/09-conformance.md` — conformance levels and gate-binding rules
-  - `../agenticapps-workflow-core/adrs/0025-*` — resolver / grandfather rationale (referenced by spec/02)
-  - `../claude-workflow/templates/.claude/hooks/multi-ai-review-gate.sh` — reference implementation (NOTE: its resolver step 2 greps `## Current Phase`, which no real STATE.md uses — do not port verbatim)
-  - `docs/decisions/0007-bind-upstream-gsd.md` — thin-binding stance this phase must respect
-  - `AGENTS.md` — host hook-bindings table
-
-**Success Criteria** (what must be TRUE):
-
-  1. A phase with plans and no reviews is blocked before its first code-touching edit, via an **agent-mediated programmatic check**: the verifier returns exit 2 and the ritual instructs a hard stop *once the verifier runs*
-  2. A phase that already shipped (`*-SUMMARY.md` present) is allowed — never retroactively blocked
-  3. A legacy bare-number phase is allowed
-  4. `codex-plan-review` produces `<NN>-REVIEWS.md` carrying at least 2 independent external reviewers, and refuses rather than emitting a one-reviewer file
-  5. Both escape hatches (`GSD_SKIP_REVIEWS=1`, `multi-ai-review-skipped`) allow the edit
-  6. The resolver selects the active phase in the spec's documented order and fails open when nothing resolves
-  7. `migrations/run-tests.sh` passes, including a `test_migration_0008` that is a no-op on second run
-
-<sub>**Deviation notice — criterion 1 was relaxed on 2026-07-14, before execution.** It originally read "A phase with plans and no reviews is blocked before its first code-touching edit" — an unconditional block. Reworded from an unconditional block per D-02; see ADR-0009 decision 9. The mechanism is `AGENTS.md` ritual text plus a verifier script: `AGENTS.md` is always in context, but nothing *executes* it, so an agent that omits the invocation is not blocked. D-02 defers the native `~/.codex/hooks.json` `PreToolUse` surface — pointed at this same verifier, which is why the verifier carries a `--file` argument — to its own phase; when it lands, criterion 1 can be restated as an unconditional block. Amended during replanning after Cross-AI plan review (`08-REVIEWS.md` round 2, Codex + OpenCode agreed) so the reviewed contract is the contract used at closure. **Phase closure must not claim the original unconditional criterion 1 was met.**</sub>
-
-**Plans**: 6 plans in 5 waves
-
-Plans:
-**Wave 1**
-
-- [x] 08-01-PLAN.md — Verifier core: phase resolver (4 steps) + grandfather guards, TDD [wave 1] → criteria 2, 3, 6
-- [x] 08-03-PLAN.md — Producer skill `codex-plan-review` + ADR-0009 [wave 1] → criterion 4
-
-**Wave 2** *(blocked on Wave 1 completion)*
-
-- [x] 08-02-PLAN.md — Verifier enforcement: REVIEWS strictness (D-13), escape hatches, block message, TDD [wave 2] → criteria 1, 5
-
-**Wave 3** *(blocked on Wave 2 completion)*
-
-- [x] 08-04-PLAN.md — Declarative binding (`pre_execution`) + ritual wiring + 16-gate table (D-20) [wave 3] → criteria 1, 4
-
-**Wave 4** *(blocked on Wave 3 completion)*
-
-- [x] 08-05-PLAN.md — Migration 0008 core: config leaf-merge + ritual insert + `test_migration_0008` + version bump in lockstep, TDD [wave 4] → contributes to criterion 7
-
-**Wave 5** *(blocked on Wave 4 completion)*
-
-- [x] 08-06-PLAN.md — Migration 0008 bindings-table step (D-20) + CHANGELOG, TDD [wave 5] → closes criterion 7
-
-<sub>08-05/08-06 were one plan; split for context budget (operator-approved). 08-06 depends on 08-05 rather than running beside it because both edit `migrations/0008-plan-review-gate.md` and `migrations/run-tests.sh` — same-wave siblings must not share `files_modified`. The version bump stays with 08-05 because `run_drift_test` compares the latest migration's `to_version` against SKILL.md's `version`, and this repo hard-fails a mismatch: splitting them would leave the harness red across the wave boundary.</sub>
+</details>
 
 ## Progress
 
-**Execution Order:**
-Phases execute in numeric order: 8
+| Phase               | Milestone | Plans Complete | Status   | Completed  |
+| ------------------- | --------- | -------------- | -------- | ---------- |
+| 8. Plan-Review Gate | v0.6.0    | 9/9            | Complete | 2026-07-15 |
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 9/9 | Complete   | 2026-07-15 |
+## Known Follow-ups
+
+Carried out of v0.6.0, not yet scheduled into a phase:
+
+- **The gate is agent-mediated, not enforced.** Per D-02 / ADR-0009 decision 9,
+  `AGENTS.md` ritual text instructs the verifier's invocation but nothing
+  executes it, so an agent that omits the call is not blocked. The native
+  `~/.codex/hooks.json` `PreToolUse` surface — pointed at this same verifier,
+  which is why it already carries a `--file` argument — is deferred to its own
+  phase. When it lands, criterion 1 can be restated as an unconditional block.
+- **Phase 9 is the first genuinely gated phase.** ADR-0009 decision 8 records
+  the bootstrap paradox: Phase 8's own grandfathered pass is not evidence the
+  gate works.
+- **CI verifies nothing.** `.github/workflows/ci.yml` is still the Phase 0
+  placeholder (`echo` + `exit 0`); its own comment promises real checks in
+  "Phase 7", which never happened. `migrations/run-tests.sh` (278 assertions)
+  runs only locally — v0.6.0 was merged on a local green, not a CI green. A real
+  job needs checkout with `submodules: recursive`; the harness hard-fails
+  without `vendor/agenticapps-shared`.
+- **WR-03** (`--file` symlink-traversal guard is lexical-`..`-only) — accepted
+  as a documented limitation, ADR-0009 decision 12, with a concrete future fix
+  in that ADR's Open follow-ups.
+- **Upstream grandfather-conflation defect** — recorded as an open question for
+  a `claude-workflow` bug report, not resolved unilaterally here.
