@@ -60,7 +60,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 08-02-PLAN.md — Verifier enforcement: REVIEWS strictness (D-13), escape hatches, block message, TDD [wave 2] → criteria 1, 5
+- [x] 08-02-PLAN.md — Verifier enforcement: REVIEWS strictness (D-13), escape hatches, block message, TDD [wave 2] → criteria 1, 5
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -83,4 +83,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 2/6 | In Progress|  |
+| 8. Plan-Review Gate | 3/6 | In Progress|  |
