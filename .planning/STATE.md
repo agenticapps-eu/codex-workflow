@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: Region-Aware §11 Placement
-status: planning
-last_updated: "2026-07-15T13:07:00.000Z"
-last_activity: 2026-07-15
+status: Roadmap and requirements traceability finalized for v0.7.0
+last_updated: "2026-07-15T11:43:55.876Z"
+last_activity: 2026-07-15 — ROADMAP.md updated with Phase 9 detail (single
 progress:
   total_phases: 1
   completed_phases: 0
@@ -43,6 +43,7 @@ confirmed
 - Legacy `.planning/phases/<NN>/` (bare-number) layout predates ADR-0007 point 4,
   which mandates GSD-native `<NN>-<slug>/`. Phase 08 is the first GSD-native
   phase. Migrating 00–07 is deliberately out of scope.
+
 - Phase 9 carries two hard internal ordering constraints (see ROADMAP.md): the
   anchor rule must be validated empirically before migration 0009 is written
   (ANCHOR-03/04), and the TDD fixture suite must fail (RED) against the naive
