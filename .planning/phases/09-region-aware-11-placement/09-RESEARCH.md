@@ -378,19 +378,33 @@ This single-pass state machine is fail-closed for the unterminated-region case b
 | A1 | claude-workflow's `0029` and its fixtures represent a stable, final shape (not itself mid-revision) | Discretion Resolved, Code Examples | If claude-workflow revises 0029 again before this phase executes, the ported mechanics could drift from the upstream source a second time — low risk given the file is dated today and already reflects a post-review correction, but worth a final re-check at plan-execution time, not just at research time |
 | A2 | GitNexus indexes `run-tests.sh`'s bash functions as "symbols" subject to the CLAUDE.md impact-analysis mandate | Project Constraints | If GitNexus does not actually index shell functions (uncertain — the repo context states "0 execution flows" indexed), the impact-analysis step may be a no-op; low risk either way since running it is cheap and the instruction is unconditional ("MUST run impact analysis before editing any symbol") |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should TEST-03's locked six fixtures be extended to include claude-workflow's two post-review additions (`07-prose-mention-not-a-region`, `08-rollback-region-led`)?**
+> **All three resolved by user decision on 2026-07-15, after this research was written.**
+> `09-CONTEXT.md` is authoritative; the framing below is preserved as the rationale trail
+> only. Do not re-open these at execution time.
+>
+> | Q | Resolution | Locked as |
+> |---|-----------|-----------|
+> | 1 | Extend the fixture set — **to ten**, not eight (07/08 plus `09-two-provenance-heal`, `10-corrupt-mirror-refused`, both added upstream after this research ran) | **D-46**, TEST-03 reworded |
+> | 2 | Rollback = **`git checkout AGENTS.md`** (0004's precedent), NOT 0029's custom awk | **D-47** |
+> | 3 | Note the convergence in ADR-0010 | plan **09-05** |
+>
+> Two corrections landed alongside these that this section predates: **D-28.1**
+> (`test -f` → `test -s` + tail sentinel) and **D-48** (upstream pinned to
+> `claude-workflow @ 8520f90`).
+
+1. **(RESOLVED → D-46: extended to ten cases.)** Should TEST-03's locked six fixtures be extended to include claude-workflow's two post-review additions (`07-prose-mention-not-a-region`, `08-rollback-region-led`)?
    - What we know: claude-workflow added exactly these two after a review found the original six-case suite could still ship a file-destroying bug (unanchored marker match; untested Rollback on a region-led file).
    - What's unclear: TEST-03 as locked in REQUIREMENTS.md says "Six cases are covered: [exactly six named]" — this reads as prescriptive, not "at least six." Whether the user wants to lock in six (matching REQUIREMENTS.md literally) or expand to eight (matching the now-more-complete sibling suite) is a scope decision, not a research one.
    - Recommendation: bring this back with the Conflicts item above — folding in prose-mention coverage is near-zero cost (it can be a shape-assertion addition to an existing fixture rather than a new fixture file, given D-34's synthesized-fixture idiom). Rollback coverage depends on what shape 0009's Rollback takes — see next question.
 
-2. **What shape should migration 0009's Rollback take — a custom awk strip (claude-workflow's shape) or the simpler `git checkout AGENTS.md` (0001/0004's shape)?**
+2. **(RESOLVED → D-47: `git checkout AGENTS.md`.)** What shape should migration 0009's Rollback take — a custom awk strip (claude-workflow's shape) or the simpler `git checkout AGENTS.md` (0001/0004's shape)?
    - What we know: 0004's Rollback is the one-liner `git checkout AGENTS.md`. 0001's is prose-described manual deletion or `git checkout`. Neither has an executable, fixture-tested Rollback awk. claude-workflow's 0029, by contrast, ships a full custom Rollback awk with the same strip-terminator-alternation requirement as Apply — and that Rollback awk is exactly what its fixture 08 exists to catch a bug in.
    - What's unclear: CONTEXT.md's D-24/D-30 don't specify Rollback's shape explicitly; D-41 says "0004's three-step shape" (which implies `git checkout`-style rollback, matching 0004, not claude-workflow's custom awk).
    - Recommendation: if 0009 follows 0004's precedent (`git checkout AGENTS.md` as Rollback — simplest, matches D-41's stated model, and this repo's own migration steps already carry that convention for AGENTS.md-touching migrations), the "Rollback eats the region" bug class is structurally impossible, because there is no custom Rollback awk to have that bug. This resolves Open Question 1's second half in favor of NOT needing an `08`-equivalent fixture. This is the simpler, lower-risk choice and this research recommends it, but it is the user's call since D-41 only says "3-step shape," not "rollback shape."
 
-3. **Should the upstream note (deferred idea, CONTEXT.md) be revised now that the timing has changed?**
+3. **(RESOLVED → plan 09-05: one sentence in ADR-0010.)** Should the upstream note (deferred idea, CONTEXT.md) be revised now that the timing has changed?
    - What we know: the original deferred note said "report that the source prompt's premise is stale... if claude-workflow ships 0029 differently from this design, the two hosts diverge." claude-workflow has now shipped, and it matches the design closely (with the one correction noted in Conflicts).
    - What's unclear: whether codex-workflow's PR/ADR should note the convergence explicitly (both hosts landed on the same fix within hours of each other, no divergence) rather than treating this as a still-open risk.
    - Recommendation: low-stakes, defer to the ADR-writing task — worth one sentence in ADR-0010 noting the timing rather than a new deferred-idea entry.
