@@ -144,6 +144,38 @@ problems.
    resolved phase dir, not also at a raw `.planning/current-phase/` path
    that could re-follow a rejected symlink.
 
+   **Gap-closure addition (D-15, WR-01).** The strict path enforced reviewer
+   COUNT (`>=2` distinct entries) but not IDENTITY: `reviewers: [codex,
+   codex-self]` is two distinct strings and zero genuine external
+   reviewers — the exact self-review D-15 (`08-CONTEXT.md`) names as
+   forbidden ("Exclude `codex` — the implementing host self-skips") — yet it
+   passed at exit 0. Reproduced live twice: once during this phase's own
+   code review, once again during gap-closure planning. Fixed in plan
+   `08-07`: codex-derived reviewer entries (`codex`, `codex-self`,
+   `codex_foo`, `"codex bar"`, matched case-insensitively) are now excluded
+   from the distinct-count before the `>=2` floor test. Exclusion was chosen
+   over a hard-coded vendor allowlist: an allowlist would silently
+   false-block a legitimate future vendor, or a cross-host `REVIEWS.md`
+   naming a reviewer this host doesn't recognize (the ADR-0007 point 5
+   case) — exactly the failure mode D-13's hand-written-file tolerance
+   above already exists to avoid. An allowlist also buys nothing against a
+   determined spoofer, who already has `touch multi-ai-review-skipped`
+   available and accepted under decisions 10/11. Exclusion closes exactly
+   the honest mistake D-15 names — counting the implementing host as an
+   external reviewer — and nothing more.
+
+   **Residual, recorded and not silently absorbed.** A `REVIEWS.md`
+   produced on another host that legitimately used `codex` as an external
+   reviewer (e.g. `[codex, gemini]`, written by `claude-workflow` in a
+   shared tree) now blocks on this host, where it previously passed. This
+   is D-15 applied exactly as written: from codex's own vantage, codex is
+   always self-review. Both escape hatches (`GSD_SKIP_REVIEWS=1`, a
+   `multi-ai-review-skipped` marker file) remain available if this is a
+   false positive in a specific cross-host scenario. This repo's own
+   `08-REVIEWS.md` (`[gemini, codex, opencode]`) survives with exactly 2
+   external reviewers after exclusion — zero margin — and
+   `test_check_plan_review_contract` pins that round trip.
+
 5. **Existing-install migration story (D-19).** Migration 0008 is
    idempotent, template-extracted (per the 0007 single-source-of-truth
    lesson), and merges `pre_execution` at the **leaf** of `.hooks` rather
@@ -154,6 +186,25 @@ problems.
    "preserves existing keys." The leaf-level merge and a rollback that
    removes only `.hooks.pre_execution.plan_review` implement D-19 correctly;
    they do not override it.
+
+   **Gap-closure correction (WR-02).** `08-REVIEW.md` flagged, as
+   code-inspection-only, that migration 0008 Step 3's bindings-table row
+   insertion matched on the first `|---` line anywhere in a target
+   `AGENTS.md`, not specifically the already-validated `| Gate |` bindings
+   header — so an unrelated Markdown table preceding the bindings table
+   could silently absorb the plan-review row. Reproduced live during
+   gap-closure planning (a decoy-table fixture landed the row at the wrong
+   line, one table too early), upgrading it from suspected to confirmed.
+   The defect was self-sealing: Step 3's own idempotency check
+   (`grep -q '^| plan-review' AGENTS.md`) would then find the misplaced row
+   on every future run and mark the step permanently applied — masking a
+   bindings table that never received the plan-review row, forever, with
+   no re-run able to fix it. That self-sealing property is why this finding
+   was fixed rather than accepted-and-documented, unlike WR-03 below. Fixed
+   in plan `08-08` by gating the row insertion on a flag set only after the
+   validated `| Gate |` header line is seen, correlating the insertion with
+   the header the step already checked rather than the first structurally
+   similar line in the file.
 
 6. **`implements_spec` stays 0.4.0 (D-17).** It tracks the last full
    conformance audit, not one gate (`CHANGELOG.md:88-91`). This phase
@@ -284,6 +335,68 @@ problems.
     a limitation recorded is a limitation a later reader can act on; a
     limitation only the planner knew about is a trap.
 
+    **Gap-closure correction (CR-01): the preceding paragraph's contract
+    was aspirational, not actual, until this phase's own gap-closure.**
+    "A present, well-formed frontmatter is authoritative" describes intent
+    that the byte-exact `---` comparison at (pre-fix)
+    `check-plan-review.sh:539` did not deliver: a `REVIEWS.md` whose opening
+    `---` carried a trailing space or a CRLF line ending had frontmatter a
+    human would call present and well-formed, yet silently fell through to
+    the reviewer-check-free fallback above anyway — reachable via an
+    ordinary authoring accident (a Windows-edited file, a stray trailing
+    space), not only via deliberate frontmatter omission. Found by this
+    phase's own code review (CR-01), independently re-reproduced during
+    verification, and reproduced a third time during gap-closure planning —
+    three independent confirmations of the same live exit-0 result. Fixed
+    in plan `08-07` by normalizing (stripping `\r` and trailing whitespace)
+    the opening-delimiter comparison and mirroring the identical
+    normalization onto the closing-delimiter `awk` search; normalizing only
+    one side would have traded this fail-open for a false MALFORMED report
+    on some CRLF files, the opposite failure mode. The fallback ITSELF is
+    unchanged by this fix and remains exactly as spoofable as the paragraph
+    above describes — the fix narrowed WHEN the fallback is reached, not
+    what it accepts once reached; D-13 keeps the fallback for the
+    hand-written cross-host case regardless. One further, intended
+    consequence: a closing `--- ` (trailing space) that used to be
+    misclassified MALFORMED (blocking, exit 2) is now accepted as
+    well-formed once the opening and closing comparisons agree, and such a
+    file is parsed strictly and allowed or blocked on its actual reviewer
+    content instead of on delimiter whitespace.
+
+12. **The `--file` bypass's traversal guard is lexical-`..`-only, not
+    symlink-safe — a known, accepted, documented limitation (WR-03).**
+    The bypass at `check-plan-review.sh:84-118` rejects a `--file` value
+    containing a literal `..` path component, and its own comment block
+    already scopes the claim exactly that far ("reject on the `..`
+    component itself"). It does not detect a pre-existing symlinked
+    directory component inside `.planning/phases/<phase>/` that resolves
+    outside the tree without the literal string ever containing `..` — a
+    textually-legitimate-looking `--file` value can still fire the bypass
+    in that case. Executed directly during code review, confirmed live:
+    `ln -s /tmp/outside .planning/phases/09-test-phase/evil-link && bash
+    check-plan-review.sh --file
+    ".planning/phases/09-test-phase/evil-link/some-PLAN.md"` exits 0.
+
+    Deferred rather than fixed, mirroring decision 11's treatment of the
+    `>=5`-line fallback: the whole gate is agent-mediated advisory text
+    (decision 9) — an agent able to construct a crafted `--file` value is
+    already able to skip the verifier entirely by simply not invoking it,
+    so the traversal guard is a hygiene check against an accidental
+    over-broad bypass, not a security boundary against a hostile caller.
+    Canonicalize-and-contain, the pattern the resolver uses for
+    `.planning/current-phase`, is not available at this call site: `_canon_dir`
+    `cd`'s into a path and therefore requires it to exist, and `--file` may
+    legitimately name a file about to be created. This is the same
+    constraint the script's own comment block already states for why it
+    checks the `..` component lexically instead of resolving the path —
+    the ADR now agrees with the code rather than being silent about the
+    gap between "traversal-safe" and "symlink-safe." A limitation recorded
+    is a limitation a later reader can act on; a limitation only the
+    planner knew about is a trap. The concrete future fix — reject any
+    `--file` value with a symlinked existing prefix component, testable by
+    walking and `[ -L ]`-testing each existing prefix directory without
+    requiring the leaf to exist — is carried in Open follow-ups below.
+
 ## Consequences
 
 Phases 00-07 stay legacy and grandfathered. Phase 08 is grandfathered
@@ -302,12 +415,31 @@ advisory (decision 10) rather than technically enforced.
 `test_check_plan_review_enforcement`, `test_check_plan_review_contract`, and
 `test_migration_0008`; and ROADMAP.md's 7 Phase 8 success criteria.
 
+**Gap-closure additions.** `test_check_plan_review_enforcement` now also
+covers delimiter tolerance (CR-01: CR/trailing-whitespace-normalized open
+and close, in both directions — fail-open closed, no new false-MALFORMED
+introduced) and the D-15 codex-identity exclusion (WR-01: case-insensitive
+match, zero-margin count, the honest-mistake case), 13 fixtures total.
+`test_migration_0008` now also covers the unrelated-preceding-table case
+(WR-02: a decoy Markdown table before the bindings table no longer absorbs
+the plan-review row), 4 assertions. Both fixture sets pin their respective
+fixes in the direction that would regress silently if reverted.
+
 ## Open follow-ups
 
 All recorded as follow-ups, not implemented in this phase. Each upstream
 defect below carries the repo, the file and line, what is wrong, and the
 executed evidence, so it can be filed upstream as-is rather than
 reconstructed by hand.
+
+- **WR-03's symlinked-prefix-component fix** (decision 12): reject any
+  `--file` value with a symlinked existing prefix directory component, not
+  only a literal `..` component. Testable without requiring the leaf to
+  exist, by walking each existing prefix directory of the `--file` value
+  and `[ -L ]`-testing it. Deferred, not fixed, in this gap-closure —
+  decision 12 records why: the gate is agent-mediated, so this guard is
+  hygiene against an accidental over-broad bypass, not a boundary against a
+  hostile caller.
 
 - **D-02's native `PreToolUse` surface** (decision 9) as the documented
   upgrade path to real enforcement, pointing at the same verifier — note
