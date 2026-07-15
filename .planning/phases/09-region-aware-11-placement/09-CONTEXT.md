@@ -106,8 +106,29 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
   — exactly what 0001 and 0004 both do. This unifies **States B and C into one code
   path** (inject always reads the mirror; B simply strips first).
 - **D-28:** Two consequences of D-27, both to be stated rather than left implicit:
-  1. 0009's **pre-flight must verify the mirror exists** (0004's shape:
-     `test -f "$MIRROR" || { …; exit 1; }`).
+  1. 0009's **pre-flight must verify the mirror is present AND intact.**
+
+     **Corrected 2026-07-15 — `test -f` is insufficient and was proven so upstream.**
+     The original wording locked 0004's shape (`test -f "$MIRROR" || { …; exit 1; }`).
+     But D-27 makes the mirror the **sole** re-injection source, so a mirror that
+     exists but is **zero-byte or truncated** passes `test -f` and 0009 then
+     **silently commits a maimed AGENTS.md** — destroying §11 on every heal. This is
+     the gap `claude-workflow` closed in its own third review (commit `8520f90`,
+     *"close truncated-mirror gap, add its missing test"*). Two guard layers, both
+     refusing with **`exit 3`**:
+     ```sh
+     SPEC_BLOCK="…/spec-mirrors/11-coding-discipline-0.4.0.md"
+     test -s "$SPEC_BLOCK" || { echo "…mirror missing or empty"; exit 3; }   # zero-byte
+     grep -q '^### 4\. Goal-Driven Execution$' "$SPEC_BLOCK" || {            # truncated
+       echo "…mirror truncated — refusing to inject a partial §11"; exit 3; }
+     ```
+     **This does NOT re-introduce D-25's rejected content sentinel.** D-25 rejected
+     coupling the **strip terminator** to §11's last *prose* line (runaway-strip
+     hazard + prose drift is why 0004 exists). This is a **read-only integrity check
+     on the mirror**, anchored to its last **structural `### ` heading** (verified
+     present at `11-coding-discipline-0.4.0.md:57`, the last of four). It bounds
+     nothing, strips nothing, and cannot run away. Different mechanism, different
+     failure mode, different file.
   2. A State-B move **silently repairs a drifted block** as a side effect. Record
      this in the ADR as a stated consequence, not an accident.
 - **D-29:** The injected provenance stays `<!-- spec-source:
@@ -183,12 +204,11 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
   after-state. Catches both a too-permissive check (skips unapplied work) and a
   too-strict one (re-applies applied work).
 
-- **D-46:** **Eight fixture cases, not six** (widens TEST-03; decided 2026-07-15
-  after research). The locked six stand, plus the two `claude-workflow` added
-  *after* its own Task 2 review — which it describes as *"the two gaps that let a
-  green suite ship file-destroying bugs: no fixture covered Rollback at all, and
-  none covered a file mentioning the marker in prose."* Adopting them here is
-  cheaper than rediscovering them:
+- **D-46:** **Ten fixture cases, not six** (widens TEST-03; decided 2026-07-15
+  after research, extended the same day after pattern-mapping). The locked six stand,
+  plus four `claude-workflow` added across its second and third reviews — each
+  encoding a defect it actually hit. Adopting them is cheaper than rediscovering
+  them one file-destroying bug at a time:
   1. **`07-prose-mention-not-a-region`** — an AGENTS.md whose *prose* contains the
      text `<!-- gitnexus:start -->` (e.g. documentation about the marker) must NOT
      be treated as region-led. This is the fixture that forces D-21's **anchored**
@@ -198,6 +218,34 @@ Numbering continues from Phase 8's D-01..D-20 (see `../08-plan-review-gate/08-CO
      it is the only case that exercises Rollback at all, and it is the regression
      guard that keeps a future author from "improving" Rollback into the awk that
      eats the region.
+  3. **`09-two-provenance-heal`** — an AGENTS.md carrying **two** provenance+block
+     pairs, each terminated by a real `## ` heading, must heal down to exactly one.
+     Guards a **stale-state bug in the awk this phase ports**: once the strip pass
+     swallows the first block's own `## Coding Discipline` heading, `swallowed_own_h2`
+     must **reset at the terminator** — otherwise it is stale-true when the second
+     provenance line arrives, the second block's own heading is mistaken for *its*
+     terminator, and the second block is left orphaned in the output. Upstream hit
+     this and fixed it; without the fixture we would not catch the regression.
+  4. **`10-corrupt-mirror-refused`** — binds **both** D-28.1 guard layers: a
+     zero-byte mirror must be refused by `test -s`, a truncated mirror by the
+     tail-sentinel grep, and a healthy mirror must pass. Asserted in **both**
+     directions per D-38 — a guard never observed refusing is not a guard.
+
+- **D-48:** **Pin the upstream reference; do not chase it.** `claude-workflow`'s 0029
+  changed **four times during this phase's planning session alone** (13:52 ship →
+  14:08 fixture 09 → 14:27 fixture 10 → 14:34 third-review mirror fix). Plan and
+  execute against exactly:
+
+  > **`claude-workflow` @ `8520f90d235e0c50b0484b170d595ab6f2cd1173`**
+  > *"fix(migration): 0029 — close truncated-mirror gap, add its missing test, fix
+  > doc drift (third review)"* — 2026-07-15 14:34:00 +0200 (working tree clean at
+  > pin time; 10 fixtures; `common-verify.sh` 6.3k)
+
+  Record this SHA **in the ADR** (DOC-01). Any upstream change after this pin is a
+  **deliberate follow-up diff**, not an invisible mid-execution scope change. If an
+  executor finds upstream has moved, that is a note for the follow-up — not a licence
+  to absorb it. Rationale: the phase's scope must be knowable at plan time, and three
+  of the four upstream revisions landed *after* this phase's CONTEXT.md was finalized.
 
 - **D-47:** **Rollback is `git checkout AGENTS.md`** — 0004's existing precedent in
   this repo. Chosen over porting `0029`'s custom Rollback awk: the awk is exactly
