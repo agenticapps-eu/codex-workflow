@@ -542,19 +542,24 @@ Recorded, not implemented in this phase.
   both hosts shipped the same rule and the same correction independently, from the
   same design. Worth reporting so the two hosts' fixture sets can be reconciled —
   upstream has an idempotent-re-run gap of its own to compare against.
-- **Upstream CR-01 defect report — DRAFTED, NOT FILED.** CR-01 (the Correction
-  section's item 1) is **live at upstream HEAD** `f9354cc:0029:222-241`, and
-  upstream's own "Known limitations" section (`f9354cc:0029:411-420`) lists CRLF
-  and fenced-code-block markers but **not** the runaway — so upstream is unaware,
-  not accepting. Both facts were re-verified live in Phase 9.1, and the repro was
-  re-run against upstream's own unmodified strip awk (retargeted `AGENTS.md` →
-  `CLAUDE.md`): **18 lines → 4**, destroying two real headings. The report is
-  drafted and committed at
+- **Upstream CR-01 defect report — FILED 2026-07-15:**
+  https://github.com/agenticapps-eu/claude-workflow/issues/90 — **criterion 10
+  satisfied.** CR-01 (the Correction section's item 1) was **live at upstream HEAD**
+  `f9354cc:0029:222-241`, and upstream's own "Known limitations" section
+  (`f9354cc:0029:411-420`) listed CRLF and fenced-code-block markers but **not** the
+  runaway — so upstream was unaware, not accepting. Both facts were re-verified live
+  immediately before filing, and the repro was re-run against upstream's own
+  unmodified strip awk (retargeted `AGENTS.md` → `CLAUDE.md`): **18 lines → 4**,
+  destroying two real headings. The report body is committed at
   [`.planning/phases/09.1-11-strip-runaway-inserted/09.1-UPSTREAM-CR-01.md`](../../.planning/phases/09.1-11-strip-runaway-inserted/09.1-UPSTREAM-CR-01.md),
   scoped to **CR-01 only** (CR-02 is already fixed upstream by PR #89; V-01 is
-  this host's own porting error — see Correction item 3). **Filing was attempted
-  and blocked**: the approval reaching the executor was agent-relayed rather than
-  the user's own, so the permission system refused the outbound action. No issue
-  URL exists yet, and **criterion 10 is deliberately NOT marked satisfied on an
-  unfiled draft**. The draft file carries the exact command to file it manually;
-  record the resulting URL here and in that file's Status line.
+  this host's own porting error — see Correction item 3).
+
+  Recorded for the next reader: a first filing attempt was **denied by the
+  permission system** because the approval reaching the executor was agent-relayed
+  rather than the user's own. The executor refused to route around the denial —
+  notably declining the available GitHub MCP tool, since the objection was to
+  authorization, not tooling — and did not fabricate a URL. The block was resolved by
+  obtaining the user's approval **directly**, after which the orchestrator filed from
+  the main checkout. The refusal was correct behaviour and is kept here on purpose:
+  the lesson is that an agent relay is not consent, not that the gate was noise.
