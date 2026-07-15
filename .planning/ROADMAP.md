@@ -68,7 +68,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 08-05-PLAN.md — Migration 0008 core: config leaf-merge + ritual insert + `test_migration_0008` + version bump in lockstep, TDD [wave 4] → contributes to criterion 7
+- [x] 08-05-PLAN.md — Migration 0008 core: config leaf-merge + ritual insert + `test_migration_0008` + version bump in lockstep, TDD [wave 4] → contributes to criterion 7
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -83,4 +83,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 4/6 | In Progress|  |
+| 8. Plan-Review Gate | 5/6 | In Progress|  |
