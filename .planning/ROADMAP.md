@@ -42,9 +42,59 @@ Decision record: [ADR-0009](../docs/decisions/0009-plan-review-gate.md).
 
 </details>
 
-- [x] **Phase 9: Region-Aware §11 Placement** - Migration 0009 heals the §11 anchor so a leading GitNexus region can no longer silently destroy the block, with the anchor rule validated empirically before it is written (completed 2026-07-15)
+- [ ] **Phase 9: Region-Aware §11 Placement** - Migration 0009 heals the §11 anchor so a leading GitNexus region can no longer silently destroy the block, with the anchor rule validated empirically before it is written (5/5 plans executed; NOT complete — code review reproduced a data-loss defect, see 09-REVIEW.md CR-01; closes via Phase 9.1)
+- [ ] **Phase 9.1: §11 Strip Runaway** (INSERTED 2026-07-15) - Close the runaway-strip and unanchored-provenance data-loss paths that Phase 9's code review reproduced in the shipped 0009, kill the dead `test -s` assertion, and add the idempotent re-run fixture that makes the terminator alternation self-defending
 
 ## Phase Details
+
+### Phase 9.1: §11 Strip Runaway (INSERTED)
+
+**Goal**: Close the data-loss paths `09-REVIEW.md` reproduced in the shipped
+migration 0009, so the migration cannot destroy user content in the states it
+does not abort on — and make the suite capable of catching it if it regresses.
+
+Phase 9 shipped a migration whose *stated* purpose is closing a latent
+block-destruction defect, and its code review reproduced a **different** latent
+block-destruction defect in the mechanic immediately adjacent to the one that was
+hardened. The anchor rule and terminator alternation Phase 9 built hold up under
+mutation — the review tried to break them and could not. The defects are inherited
+from upstream and were ported faithfully.
+
+**Depends on**: Phase 9 (5/5 plans executed; 0009 exists and its suite is GREEN)
+
+**Ordering constraints**:
+
+1. **RED before GREEN, again.** The runaway must be captured as a *failing*
+   fixture against the current 0009 before the awk is touched. Phase 9's own
+   discipline; the repro is already written (16 lines → 4 lines, provenance
+   present + drifted H2).
+2. **Fix locally, file upstream.** CR-01/CR-02 are byte-identical to
+   `claude-workflow @ 8520f90:0029:192-210`. The local fix deliberately diverges
+   from the D-48 pin — record the divergence in ADR-0010 and file the defect
+   upstream so the six repos carrying 0029 are not left exposed.
+3. **No assertion weakening.** As in 09-04: the fixtures must be satisfied by the
+   code, never the reverse.
+
+**Requirements**: ANCHOR-05, MIGR-04, MIGR-09, TEST-02, TEST-03, DOC-01
+
+**Success Criteria** (what must be TRUE):
+
+  1. A fixture reproduces the runaway (provenance present, exact H2 drifted) and
+     is observed FAILING against the current 0009 before any awk change.
+  2. The strip's entry and exit conditions are coupled: a provenance match that
+     never finds its exact heading cannot latch `in_block` to EOF. Verified by
+     the fixture from criterion 1 turning GREEN.
+  3. The provenance regex is anchored, with a fixture-07 twin proving a prose
+     mention of the provenance line cannot trigger the strip.
+  4. The `grep -q` post-strip guard is no longer satisfiable by the insert pass
+     re-adding the heading it checks for — i.e. it can actually fail.
+  5. `test -s`'s assertion is live: deleting the guard fails the suite. The
+     document check skips comment lines, and case 10(a) isolates layer 1 from the
+     tail sentinel (mirroring the version-gate control 12 lines earlier).
+  6. `11-idempotent-rerun` exists: narrowing the strip terminator fails the suite.
+  7. ADR-0010 records the runaway, the D-26 correction ("bounded by construction"
+     was false), and the deliberate divergence from the 8520f90 pin.
+  8. Upstream defect filed against `claude-workflow`.
 
 ### Phase 9: Region-Aware §11 Placement
 
@@ -121,11 +171,57 @@ MIGR-09, TEST-01, TEST-02, TEST-03, TEST-04, SETUP-01, DOC-01, DOC-02
 | Phase                          | Milestone | Plans Complete | Status      | Completed  |
 | ------------------------------- | --------- | --------------- | ----------- | ---------- |
 | 8. Plan-Review Gate             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
-| 9. Region-Aware §11 Placement   | v0.7.0    | 5/5 | Complete   | 2026-07-15 |
+| 9. Region-Aware §11 Placement   | v0.7.0    | 5/5             | In progress | —          |
+| 9.1 §11 Strip Runaway (INSERTED)| v0.7.0    | 0/0             | Not planned | —          |
 
 ## Known Follow-ups
 
-Carried out of v0.6.0, not yet scheduled into a phase. These are **not** in
+### Scheduled into Phase 9.1 (from 09-REVIEW.md — data loss, urgent)
+
+- **CR-01 — the strip runs away to EOF.** Reproduced independently: 16-line input
+  → 4-line output, destroying `## Critical Project Rules` and `## Deployment`.
+  The strip's entry condition (unanchored provenance substring) is decoupled from
+  its exit condition (which requires `swallowed_own_h2`, set only by the *exact*
+  `## Coding Discipline (NON-NEGOTIABLE)` heading). A drifted heading latches
+  `in_block=1` forever and `in_block { next }` eats to EOF. **All three guards
+  pass** — the `grep -q` on the tmp is satisfied by the *insert* pass re-adding
+  the heading the guard looks for, and `[ -s ]` passes because output is
+  non-empty — so `mv` commits the truncation. Reachable: the abort branch fires
+  only when heading-present AND provenance-absent; the runaway needs the inverse.
+  Falsifies ADR-0010 D-26's "bounded by construction". This is D-25's rejected
+  bug class resurfacing inside the boundary chosen to prevent it.
+- **CR-02 — the provenance regex is unanchored.** D-21 requires the *marker*
+  regex be anchored and builds fixture 07 to detect it, but the *provenance*
+  regex — the strip's entry condition, a strictly more dangerous position — is
+  unanchored on both sides with no fixture-07 twin. A backticked prose mention
+  deletes everything between it and the real block. Plausibility raised by 0009's
+  own abort message, which tells operators to paste that exact line into AGENTS.md.
+- **CR-03 — dead assertion.** The `test -s` pre-flight guard can be deleted and
+  the suite stays green. Two causes: the document check `*'test -s'*` matches the
+  pre-flight's own comments (`:108`, `:114`), and case 10(a) passes for the wrong
+  reason (guard 4's tail sentinel also fails zero-byte with the same `exit 3`).
+  **Decision: fix the assertion** — make the document check skip comment lines and
+  control case 10(a) to isolate layer 1, the same way the harness already controls
+  the version gate 12 lines earlier.
+- **`11-idempotent-rerun` fixture.** The highest-value gap this phase produced.
+  Without it, narrowing the strip terminator does NOT fail the suite — ANCHOR-05
+  is covered live only by `migrations/validate-0009-anchor.sh` counter-case B.
+  The difference between "the alternation is correct" and "the suite would catch
+  it if it stopped being correct".
+- **WR-02** — the setup-SKILL note cites "Step 6" for the `agents-md-additions.md`
+  append; it is Step 3 (Step 6 is a different template to `${CODEX_HOME}/AGENTS.md`,
+  skipped on Option B). Contradicts ADR-0010:265, which cites `0000-baseline.md:102`
+  correctly.
+
+**Upstream note required:** CR-01 and CR-02 are *faithful ports* — diffed against
+`claude-workflow @ 8520f90:0029:192-210`, byte-identical modulo filename. They are
+inherited upstream defects, not porting errors, and affect every repo carrying 0029.
+File upstream in addition to fixing locally. Fixing locally diverges from the D-48
+pin deliberately; record that divergence in ADR-0010.
+
+### Carried out of v0.6.0
+
+Not yet scheduled into a phase. These are **not** in
 v0.7.0's scope (verified 2026-07-15 against the source prompt) and are now also
 tracked as Future Requirements in `REQUIREMENTS.md`:
 
