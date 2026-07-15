@@ -207,10 +207,21 @@ PROV='<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->'
 PROV_RE='^<!-- spec-source: agenticapps-workflow-core@[^[:space:]]+ §11 -->$'
 MIRROR="${CODEX_HOME:-$HOME/.codex}/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
 
-if [ ! -f AGENTS.md ]; then
+if [ ! -s AGENTS.md ]; then
   # Informational skip, NOT an abort. An abort would strand the project below
-  # to_version forever (see the pre-flight note above).
-  echo "INFO: migration 0009 Step 1 — no AGENTS.md in project; §11 heal skipped."
+  # to_version forever (see the pre-flight note above). `test -s` (not
+  # `test -f`) deliberately covers BOTH a missing AGENTS.md AND a
+  # zero-byte one: `test -f` alone PASSES on an empty file (e.g. `touch
+  # AGENTS.md`, an interrupted write, or a prior tool crash), which would
+  # fall through to the strip below, run it on zero input, and hard-ABORT at
+  # the strip-output guard (`:` "the strip pass produced no output") with a
+  # misleading "possibly-truncated" diagnostic — nothing was truncated, the
+  # input was already empty. A zero-byte file is materially identical to a
+  # missing one: "nothing to heal." Routing it through this same skip avoids
+  # stranding the project below `to_version` over a file with nothing in it
+  # to lose (09.1-REVIEW.md WR-01).
+  echo "INFO: migration 0009 Step 1 — no AGENTS.md in project (or it is empty);"
+  echo "      §11 heal skipped."
   echo "      Scaffold one via /setup-codex-agenticapps-workflow, then re-run"
   echo "      /update-codex-agenticapps-workflow to pick up §11 on the next pass."
 elif grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md \
@@ -492,7 +503,9 @@ After applying, a human can check:
   still records the version.
 - **Healthy but off-anchor** — provenance present, not in a region: left exactly
   where it is, by the same predicate. Not a special case.
-- **No `AGENTS.md`** — Step 1 emits an informational message; Step 2 still runs.
+- **No `AGENTS.md`, or `AGENTS.md` is zero bytes** — Step 1 emits an
+  informational message; Step 2 still runs. Both shapes are "nothing to
+  heal" and route through the same `test -s` skip (WR-01).
 - **Unmanaged `## Coding Discipline (NON-NEGOTIABLE)` heading** — Step 1 aborts
   with `exit 3` and leaves the file untouched; resolve per its message.
 

@@ -3797,6 +3797,41 @@ test_migration_0009() {
     [ ! -f "$p/AGENTS.md" ]
     _m0009_ok $? "04-no-agentsmd: Apply created no AGENTS.md out of thin air"
 
+    # ── 16-zero-byte-agentsmd (09.1-REVIEW.md WR-01 — the "nothing to heal"
+    #    twin of 04-no-agentsmd) ──
+    # BEFORE: AGENTS.md is PRESENT but zero bytes (e.g. `touch AGENTS.md`, an
+    # interrupted write, or a prior tool crash). `test -f` PASSES on an empty
+    # file — that is precisely the gap: the pre-fix Apply routes this past the
+    # `[ ! -f AGENTS.md ]` skip branch, into the strip, which runs on zero
+    # input, produces zero-byte output, and hard-ABORTS (exit 3) at the
+    # strip-output guard with a diagnostic that says "possibly-truncated
+    # result" — misleading, since nothing was truncated; the input was already
+    # empty. Per WR-01's fix and the user's binding ruling: a zero-byte
+    # AGENTS.md is materially identical to a missing one — "nothing to heal" —
+    # and must route through the SAME informational-skip branch as
+    # 04-no-agentsmd, not an abort. An abort here is UNRECOVERABLE by this
+    # migration's own stated design principle (Step 2 never records 0.7.0, so
+    # 0009 stays pending forever and 0010+ never become pending either).
+    p="$(_m0009_mk_project "$tmp" 16)"; h="$(_m0009_mk_fake_home "$tmp" 16 "$mirror")"
+    : > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "16-zero-byte-agentsmd: Apply exits ZERO on a zero-byte AGENTS.md (informational skip, not the unrecoverable abort) — got exit=$rc"
+
+    case "$out" in
+      *'possibly-truncated'*) _m0009_ok 1 "16-zero-byte-agentsmd: diagnostic is NOT the misleading 'possibly-truncated result' message (input was already empty, nothing was truncated)" ;;
+      *)                      _m0009_ok 0 "16-zero-byte-agentsmd: diagnostic is NOT the misleading 'possibly-truncated result' message (input was already empty, nothing was truncated)" ;;
+    esac
+
+    case "$out" in
+      *update-codex-agenticapps-workflow*) _m0009_ok 0 "16-zero-byte-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), matching 04's skip path" ;;
+      *)                                   _m0009_ok 1 "16-zero-byte-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), matching 04's skip path" ;;
+    esac
+
+    [ -f "$p/AGENTS.md" ] && [ ! -s "$p/AGENTS.md" ]
+    _m0009_ok $? "16-zero-byte-agentsmd: AGENTS.md still exists and is still zero bytes after the skip (untouched, not deleted or rewritten)"
+
     # ── 05-unmanaged-conflict (MIGR-05, State D — D-30 branch 1) ──
     # BEFORE: a §11 heading with hand-written prose and NO provenance. The
     # operator pasted it outside this migration's management. 0009 must refuse
@@ -3938,6 +3973,10 @@ test_migration_0009() {
     _m0009_fail "02-inside-region-move — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "03-healthy-noop — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "04-no-agentsmd — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: Apply exits ZERO on a zero-byte AGENTS.md — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: diagnostic is NOT the misleading 'possibly-truncated result' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: skip message names THIS host's skill — NOT ASSERTED: extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: AGENTS.md still exists and is still zero bytes after the skip — NOT ASSERTED: extraction failed"
     _m0009_fail "05-unmanaged-conflict — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "09-two-provenance-heal — NOT ASSERTED: Step 1 Apply extraction failed"
