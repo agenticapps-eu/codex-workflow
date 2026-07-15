@@ -49,15 +49,28 @@ block-destruction defect for projects this host scaffolds.
   checks, and a 278-assertion local harness (`migrations/run-tests.sh`).
 - ✓ Spec §11 Coding Discipline injected verbatim from a byte-identical spec
   mirror rather than transcribed — migrations 0001/0004.
+- ✓ Region-aware §11 anchor rule, validated empirically before adoption, and
+  re-proven live under mutation in Phase 9.1 (narrowing the terminator
+  alternation breaks `12-idempotent-rerun`) — v0.7.0 (Phases 9, 9.1), ADR-0010.
+- ✓ Migration 0009 healing states A–D, and — after Phase 9.1 — actually running
+  on real target projects: its pre-flight now reads `.codex/workflow-version.txt`
+  instead of a scaffolder-only path no consumer has. Validated in Phase 9.1.
+- ✓ Fixture suite sourced from the migration document, not a copy — extended in
+  Phase 9.1 to 345 assertions, with the sandbox no longer manufacturing the
+  precondition under test.
+- ✓ ADR recording the anchor decision and its rejected alternative — ADR-0010,
+  corrected in Phase 9.1 (D-26's "bounded by construction" claim was falsified
+  and is now recorded as false; the dead `8520f90` pin re-pinned to `f9354cc`).
 
 ### Active
 
 <!-- Current scope. Building toward these. See REQUIREMENTS.md for REQ-IDs. -->
 
-- [ ] Region-aware §11 anchor rule, validated empirically before adoption
-- [ ] Migration 0009 healing states A–D
-- [ ] Fixture suite sourced from the migration document, not a copy
-- [ ] ADR recording the anchor decision and its rejected alternative
+- [ ] MIGR-08 execution coverage: no fixture runs Step 2's Apply block and
+      asserts the resulting `.codex/workflow-version.txt` content. Correct by
+      inspection and reachable now that V-01 is fixed, but untested — flagged by
+      Phase 9.1's verification as the one residual of the exact class that phase
+      existed to close.
 
 ### Out of Scope
 
@@ -132,7 +145,9 @@ block-destruction defect for projects this host scaffolds.
 | GSD roadmap tracking starts at Phase 8; 00–07 stay legacy | Back-filling would invent unsourceable history | ✓ Good |
 | Plan-review gate is agent-mediated, not enforced (ADR-0009 d.9) | Native `PreToolUse` hook surface deferred to its own phase | ⚠️ Revisit |
 | §11 injected verbatim from a spec mirror, never transcribed | Byte-identity with core spec is checkable; transcription drifts | ✓ Good |
-| Region-aware anchor: first `## ` **or** `gitnexus:start`, whichever comes first | One-alternation delta preserves the structural invariant; the region-only alternative violates §12 placement | — Pending |
+| Region-aware anchor: first `## ` **or** `gitnexus:start`, whichever comes first | One-alternation delta preserves the structural invariant; the region-only alternative violates §12 placement | ✓ Good — held under mutation (Phase 9.1) |
+| A migration records its version in the TARGET project (MIGR-08), never bumps this scaffolder's own files (MIGR-09) | Phase 9 conflated them and shipped a Step that wrote scaffolder files into consumers' repos; 0008 had kept them apart on purpose | ✓ Good — Step deleted in Phase 9.1 |
+| A guard is not shipped until it has been observed failing | Phase 9 shipped 314 PASS / 0 FAIL on a migration that never ran; assertions that cannot fail read as coverage | ✓ Good — mutation gate, Phase 9.1 |
 
 ## Evolution
 
@@ -155,4 +170,9 @@ This document evolves at phase transitions and milestone boundaries.
 *Created: 2026-07-15 at the start of milestone v0.7.0 — this repo had no
 PROJECT.md through v0.6.0 (see STATE.md); content here is sourced from ROADMAP.md,
 STATE.md, ADR-0007, ADR-0009, and direct verification of the working tree.*
-*Last updated: 2026-07-15 after starting milestone v0.7.0*
+*Last updated: 2026-07-15 after Phase 9.1 (§11 Strip Runaway) — the last phase of
+milestone v0.7.0. Migration 0009's data-loss paths are closed and the suite is at
+345 PASS / 0 FAIL / 1 SKIP. Upstream CR-01 filed as
+[claude-workflow#90](https://github.com/agenticapps-eu/claude-workflow/issues/90).
+All v0.7.0 phases are complete; the milestone is ready for
+`/gsd-complete-milestone`.*
