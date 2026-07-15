@@ -3870,6 +3870,70 @@ test_migration_0009() {
     _m0009_fail "07-prose-mention-not-a-region — NOT ASSERTED: Step 1 Idempotency check extraction failed"
   fi
 
+  # ── 11-prose-mention-provenance (CR-02 — 07's PROVENANCE twin) ──
+  # PORTED, not re-derived, from `claude-workflow f9354cc`
+  # (migrations/test-fixtures/0029/11-prose-mention-provenance/{setup,verify}.sh,
+  # PR #89), which fixed CR-02 upstream before we did. Verified before reading:
+  # `git -C ../claude-workflow fetch && git log --oneline -1 origin/main` is
+  # STILL `f9354cc` as of this port. Re-deriving would risk prose divergence
+  # from the exact fixture this repo's 0009 is a port of; validated across six
+  # repos upstream.
+  #
+  # 07 above proves the REGION marker (`gitnexus:start`) is anchored (`^...$`);
+  # this is the PROVENANCE marker's twin — it proves `PROV_RE` must be too.
+  # BEFORE: a guard comment near the top MENTIONS the provenance marker in
+  # prose (indented inside an HTML comment, not a whole-line match), followed
+  # by real project content ("IMPORTANT PROJECT RULE...") an unanchored
+  # PROV_RE would destroy, THEN the real, correctly-placed §11 block with NO
+  # GitNexus region anywhere in the file. Translated: upstream's CLAUDE.md →
+  # this repo's AGENTS.md; upstream's per-directory setup.sh/verify.sh harness
+  # → this repo's inline _m0009_mk_project + _m0009_mk_fake_home + _m0009_apply
+  # idiom.
+  #
+  # THIS IS ALSO A DEAD-ASSERTION DETECTOR, mirroring 07's design (09-VALIDATION.md
+  # Dimension 8 item 4): the real block is already healthy and un-regioned, so
+  # this MUST be a legitimate heal/no-op — rc 0, NOT a refusal. An unanchored
+  # PROV_RE substring-matches the prose line, enters `in_block` there instead
+  # of at the real marker, and (per fixture 13/14's mechanism above) destroys
+  # everything between the prose mention and the block's own heading — upstream
+  # measured this turning their 91-line fixture into 85 lines.
+  if [ "$apply_ok" = "1" ]; then
+    p="$(_m0009_mk_project "$tmp" 11)"; h="$(_m0009_mk_fake_home "$tmp" 11 "$mirror")"
+    {
+      printf '<!--\n'
+      printf '  The §11 block is anchored behind\n'
+      printf '  %s below.\n' "$PROV_LIT"
+      printf '  This is prose ONLY — the real marker is further down.\n'
+      printf -- '-->\n'
+      printf '\n'
+      printf 'IMPORTANT PROJECT RULE: never deploy on Friday.\n'
+      printf '\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff. No GitNexus region anywhere in this file.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "11-prose-mention-provenance: rc is 0 — a legitimate heal/no-op, NOT a refusal (the anchored regex must not turn a prose mention into a refuse-gate trigger either) — got exit=$rc, before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines"
+
+    grep -q 'IMPORTANT PROJECT RULE' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "11-prose-mention-provenance: content between the prose mention and the next heading survives ('IMPORTANT PROJECT RULE') — the content-survival assertion (CR-02's independent second reproduction)"
+
+    nprov="$(grep -c -x -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "11-prose-mention-provenance: exactly ONE real (whole-line) provenance line remains after Apply (found $nprov)"
+
+    grep -q -F -- '  The §11 block is anchored behind' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "11-prose-mention-provenance: the prose-mention guard-comment line survives verbatim in the after-state"
+  else
+    _m0009_fail "11-prose-mention-provenance: rc is 0 — a legitimate heal/no-op — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "11-prose-mention-provenance: content between the prose mention and the next heading survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "11-prose-mention-provenance: exactly ONE real provenance line remains after Apply — NOT ASSERTED: extraction failed"
+    _m0009_fail "11-prose-mention-provenance: the prose-mention guard-comment line survives verbatim — NOT ASSERTED: extraction failed"
+  fi
+
   # ── 08-rollback-region-led (D-46.2, kept even under D-47) ──
   # 0009's Rollback is `git checkout AGENTS.md` (D-47), so the region-eating-
   # rollback bug class is STRUCTURALLY UNREACHABLE here — there is no terminator
