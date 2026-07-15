@@ -3964,6 +3964,83 @@ test_migration_0009() {
     [ "$nprov" = "1" ]
     _m0009_ok $? "12-idempotent-rerun: exactly ONE provenance line remains after the second run (found $nprov)"
 
+    # ── 17-crlf-region-led (09.1-REVIEW.md CR-01 — D-38 double-sided) ──
+    # Same region-led BEFORE shape as 01-gitnexus-led-inject (no §11 yet, the
+    # first `## ` is INSIDE the region), built twice: (a) with CRLF line
+    # endings, (b) with ordinary LF line endings. This is the ONLY structural
+    # variable between the two sub-cases.
+    #
+    # WHY (a) MUST REFUSE: every `$`-anchored regex this migration depends on
+    # (the strip terminator's `/^<!-- gitnexus:start -->$/` alternative, the
+    # insert anchor's twin) does NOT match a `\r`-terminated line — the `\r`
+    # sits between the matched text and the record's true end, in standard
+    # POSIX awk (gawk/mawk/BWK awk all agree). The unanchored `/^## /`
+    # alternative is unaffected. On THIS fixture that asymmetry lands the §11
+    # block INSIDE `<!-- gitnexus:start -->` while Apply reports success —
+    # reproducing the exact defect this migration exists to fix, silently.
+    # Per the user's binding ruling: fail closed. Refuse, do not normalize.
+    #
+    # WHY (b) MUST ACCEPT (D-38's other half — a guard never observed
+    # accepting is a brick wall, not a guard): an ordinary LF file with the
+    # identical byte content must heal exactly as 01-gitnexus-led-inject does.
+    # If the CRLF guard fired on (b) too, it would be a brick wall, not a
+    # guard — this is what actually proves the guard is CRLF-specific.
+    local s17
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$tmp/17-source.md"
+
+    # (a) CRLF variant.
+    p="$(_m0009_mk_project "$tmp" 17a)"; h="$(_m0009_mk_fake_home "$tmp" 17a "$mirror")"
+    awk '{ printf "%s\r\n", $0 }' "$tmp/17-source.md" > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/17a-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "17-crlf-region-led (a) CRLF: Apply refuses with exit 3 rather than mis-anchor inside the region — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/17a-pristine.md"
+    _m0009_ok $? "17-crlf-region-led (a) CRLF: AGENTS.md is BYTE-IDENTICAL after the refusal (fail-closed, not normalized/rewritten)"
+
+    case "$out" in
+      *'CRLF'*) _m0009_ok 0 "17-crlf-region-led (a) CRLF: diagnostic names CRLF as the cause" ;;
+      *)        _m0009_ok 1 "17-crlf-region-led (a) CRLF: diagnostic names CRLF as the cause" ;;
+    esac
+
+    case "$out" in
+      *'perl -pi -e'*) _m0009_ok 0 "17-crlf-region-led (a) CRLF: diagnostic states a concrete, actionable remedy command (the user's binding ruling — a refusal without a stated remedy is not acceptable)" ;;
+      *)               _m0009_ok 1 "17-crlf-region-led (a) CRLF: diagnostic states a concrete, actionable remedy command" ;;
+    esac
+
+    case "$out" in
+      *update-codex-agenticapps-workflow*) _m0009_ok 0 "17-crlf-region-led (a) CRLF: diagnostic names the re-run command after the remedy" ;;
+      *)                                   _m0009_ok 1 "17-crlf-region-led (a) CRLF: diagnostic names the re-run command after the remedy" ;;
+    esac
+
+    # (b) LF variant — the D-38 accept direction. Same content, ordinary line
+    # endings; must heal exactly like 01-gitnexus-led-inject.
+    p="$(_m0009_mk_project "$tmp" 17b)"; h="$(_m0009_mk_fake_home "$tmp" 17b "$mirror")"
+    cp "$tmp/17-source.md" "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "17-crlf-region-led (b) LF (accept direction): Apply exits 0 on an ordinary LF file — the CRLF guard must NOT fire here — got exit=$rc"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "17-crlf-region-led (b) LF (accept direction): provenance (line ${prov_line:-ABSENT}) lands ABOVE gitnexus:start (line ${start_line:-ABSENT}), same as 01-gitnexus-led-inject"
+
+    case "$out" in
+      *'CRLF'*) _m0009_ok 1 "17-crlf-region-led (b) LF (accept direction): diagnostic does NOT mention CRLF (guard is CRLF-specific, not a brick wall)" ;;
+      *)        _m0009_ok 0 "17-crlf-region-led (b) LF (accept direction): diagnostic does NOT mention CRLF (guard is CRLF-specific, not a brick wall)" ;;
+    esac
+
   else
     # The Apply extraction gate is DOWN. Report every case as FAILED rather than
     # skipping it. A case that silently vanishes when its input is missing is the
@@ -3981,6 +4058,14 @@ test_migration_0009() {
     _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "09-two-provenance-heal — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "12-idempotent-rerun — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: Apply refuses with exit 3 — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: AGENTS.md is BYTE-IDENTICAL after the refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: diagnostic names CRLF as the cause — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: diagnostic states a concrete, actionable remedy command — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: diagnostic names the re-run command after the remedy — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (b) LF (accept direction): Apply exits 0 — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (b) LF (accept direction): provenance lands ABOVE gitnexus:start — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (b) LF (accept direction): diagnostic does NOT mention CRLF — NOT ASSERTED: extraction failed"
   fi
 
   # ── 07-prose-mention-not-a-region (D-46.1 — forces D-21's ANCHORED regex) ──

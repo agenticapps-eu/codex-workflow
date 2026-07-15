@@ -224,6 +224,38 @@ if [ ! -s AGENTS.md ]; then
   echo "      §11 heal skipped."
   echo "      Scaffold one via /setup-codex-agenticapps-workflow, then re-run"
   echo "      /update-codex-agenticapps-workflow to pick up §11 on the next pass."
+elif grep -q "$(printf '\r')" AGENTS.md; then
+  # CR-01, closed per the user's binding fail-closed ruling: normalize
+  # nothing, rewrite nothing, refuse. Every `$`-anchored regex this migration
+  # depends on (the strip terminator's and the insert anchor's
+  # `/^<!-- gitnexus:start -->$/` alternative) does NOT match a
+  # `\r`-terminated line in standard POSIX awk — the `\r` sits between the
+  # matched text and the record's true end. The unanchored `/^## /`
+  # alternative is unaffected by this. On a REGION-LED CRLF file that
+  # asymmetry lands the §11 block INSIDE `<!-- gitnexus:start -->` while this
+  # migration reports success — reproducing the exact defect it exists to
+  # fix, silently, and the block is then destroyed by the next
+  # `gitnexus analyze` with no diagnostic from either tool. Refusing here,
+  # before any surgery, is strictly safer than guessing at a line-ending
+  # normalization this migration was never asked to own.
+  #
+  # THE REMEDY MUST BE STATED, NOT JUST THE REFUSAL (the user's binding
+  # ruling's critical corollary): unlike a missing/empty AGENTS.md (WR-01,
+  # which has a true "nothing to heal" skip) or an unmanaged heading (which
+  # requires a human decision), CRLF has a real, mechanical escape hatch —
+  # convert the line endings and re-run. A bare `exit 3` here with no stated
+  # remedy would strand the project exactly as permanently as WR-01's
+  # abort did, for a hazard that is trivially fixable. Name the concrete
+  # command.
+  echo "ABORT: migration 0009 Step 1 — AGENTS.md uses CRLF (\\r\\n) line endings,"
+  echo "       which defeat the anchor/terminator matching this migration"
+  echo "       depends on. Refusing rather than risk mis-anchoring the §11"
+  echo "       block inside a managed region."
+  echo ""
+  echo "       To proceed: convert AGENTS.md to LF line endings and re-run, e.g."
+  echo "         perl -pi -e 's/\r\n\$/\n/' AGENTS.md"
+  echo "       Then: re-run /update-codex-agenticapps-workflow"
+  exit 3
 elif grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md \
      && ! grep -qE "$PROV_RE" AGENTS.md; then
   # A §11 heading with no provenance was hand-pasted outside this migration's
