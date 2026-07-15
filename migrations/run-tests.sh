@@ -510,6 +510,25 @@ test_migration_0004() {
     echo "  ${RED}FAIL${RESET} mirror is the stale shape ($n lines; expected ≥79)"
     FAIL=$((FAIL+1))
   fi
+
+  # WR-01/Q2 — the mirror's single-`## ` invariant. 0009 Step 1's strip pass
+  # explicitly swallows the block's OWN `## ` heading first, then terminates
+  # at the NEXT `## ` line. That is only correct because the canonical mirror
+  # carries exactly ONE `## ` line, on line 1 — 09.1-05's refuse gate rests on
+  # the same invariant. It was unasserted, and it lives in a file this repo
+  # vendors rather than authors: if the mirror ever gains a second `## `, the
+  # strip terminates early and leaves body behind. Asserted at `== 1`, not
+  # `>= 1` — a count of 1 today and 2 tomorrow must fail.
+  local n_h2 first_h2
+  n_h2=$(grep -c '^## ' "$mirror" | tr -d ' ')
+  first_h2=$(grep -n '^## ' "$mirror" | head -1 | cut -d: -f1)
+  if [ "$n_h2" = "1" ] && [ "$first_h2" = "1" ]; then
+    echo "  ${GREEN}PASS${RESET} mirror carries exactly ONE '## ' line, on line 1 (the strip's single-heading swallow invariant, WR-01/Q2)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} mirror carries $n_h2 '## ' line(s), first at line ${first_h2:-ABSENT} (expected exactly 1, on line 1 — the strip's single-heading swallow would terminate early and leave body behind)"
+    FAIL=$((FAIL+1))
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3528,17 +3547,29 @@ test_migration_0009() {
   # `AGENTS.md`, and assert_check cd's into the fixture dir.
   # ───────────────────────────────────────────────────────────────────────────
 
-  # State A — correctly anchored block, current provenance, region present but
-  # LATER in the file. This repo's own real AGENTS.md shape (§11 at L18, region
-  # at L271-313) ⇒ this host is SAFE and the defect is LATENT.
+  # State A — genuinely OFF-ANCHOR but healthy: correct provenance, placed
+  # BELOW a real project heading (not at the anchor this migration would
+  # pick), and NO region anywhere in the file — position is the ONLY
+  # variable. (V-02: the PRIOR version of this fixture put the block BEFORE
+  # the first heading — i.e. exactly ON the anchor — while ALSO carrying a
+  # trailing region, so it varied two things at once and its "off-anchor"
+  # label read as coverage it did not provide. This rewrite isolates position
+  # as the sole variable, per RESEARCH's off-anchor shape.)
   local sa="$tmp/state-a"; mkdir -p "$sa"
   {
     printf '# Title\n\nGuidance.\n\n'
+    printf '## Project Overview\nStuff.\n\n'
     printf '%s\n' "$PROV_LIT"
     cat "$mirror"
-    printf '\n## Project Overview\nStuff.\n\n'
-    printf '<!-- gitnexus:start -->\n# GitNexus\n\n## Always Do\n- x\n<!-- gitnexus:end -->\n'
+    printf '\n## Deployment\nMore stuff.\n'
   } > "$sa/AGENTS.md"
+  # Belt-and-braces self-guard, immune to the comment-matching hazard entirely
+  # (CR-03's class): the GENERATED file has no comments to collide with, so
+  # asserting on it directly cannot mistake a rewritten source comment for a
+  # region. Checked unconditionally, not gated on idem_ok — a structural
+  # property of the fixture itself, not a consumer of the extraction.
+  [ "$(grep -c 'gitnexus' "$sa/AGENTS.md" 2>/dev/null)" = "0" ]
+  _m0009_ok $? "state A self-guard: generated AGENTS.md carries no 'gitnexus' string anywhere (no region — position is the only variable)"
 
   # State B — provenance present BUT the block sits INSIDE the region.
   local sb="$tmp/state-b"; mkdir -p "$sb"
