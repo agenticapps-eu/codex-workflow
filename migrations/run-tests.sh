@@ -749,6 +749,480 @@ MD
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# check-plan-review.sh — resolver + grandfather test suite (phase 08, plan 01)
+#
+# Verifier CLI contract: skills/agentic-apps-workflow/scripts/check-plan-review.sh
+#   Exit 0 = ALLOW, exit 2 = BLOCK (08-02 owns the block path; this plan only
+#   exercises allow paths). GSD_PLAN_REVIEW_DEBUG=1 makes it print
+#   `repo-root: <dir>` and `resolved-phase: <dir>` to stderr without changing
+#   the exit code — the assertion surface for resolution order and for the
+#   ambiguity contract's load-bearing "no resolution happened" proof.
+#
+# `_cpr_case` is the ONE pinned invocation helper (08-01-PLAN.md <action>):
+# captures the verifier's exit status on the line immediately after invoking
+# it, no intervening `local`/color/`set` toggle. Its stderr-exposure shape is
+# an out-path argument (`--err-out <path>`) defaulting to a per-call mktemp
+# that is cleaned up automatically. Plan 08-02 reuses this same helper.
+# ─────────────────────────────────────────────────────────────────────────────
+
+_cpr_case() {
+  local label sandbox expected rc err own_err
+  label="${1:-}"; sandbox="${2:-}"; expected="${3:-}"; shift 3
+  err=""
+  own_err=0
+  if [ "${1:-}" = "--err-out" ]; then
+    err="${2:-}"; shift 2
+  fi
+  [ "${1:-}" = "--" ] && shift
+  if [ -z "$err" ]; then
+    err="$(mktemp)"
+    own_err=1
+  fi
+  ( cd "$sandbox" && bash "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" "$@" ) >/dev/null 2>"$err"
+  rc=$?
+  if [ "$rc" = "$expected" ]; then
+    echo "  ${GREEN}PASS${RESET} $label (exit=$rc)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $label (expected exit=$expected, got exit=$rc)"
+    FAIL=$((FAIL+1))
+  fi
+  if [ "$own_err" = "1" ]; then
+    rm -f "$err"
+  fi
+}
+
+# Assert an already-captured stderr file's `resolved-phase:` line matches a
+# substring. Read-only on the capture — never re-invokes the verifier.
+_cpr_check_resolved() {
+  local label errfile expected_substr
+  label="${1:-}"; errfile="${2:-}"; expected_substr="${3:-}"
+  if grep -q "resolved-phase:.*${expected_substr}" "$errfile" 2>/dev/null; then
+    echo "  ${GREEN}PASS${RESET} $label"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $label"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# Assert an already-captured stderr file contains a literal needle.
+_cpr_check_contains() {
+  local label errfile needle
+  label="${1:-}"; errfile="${2:-}"; needle="${3:-}"
+  if grep -qF -- "$needle" "$errfile" 2>/dev/null; then
+    echo "  ${GREEN}PASS${RESET} $label"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $label"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# Compound assertion for the tri-state ambiguity contract and the path-safety
+# escape cases: exit code must equal expected AND a literal needle must be
+# ABSENT from stderr (captured with debug on). Folding both checks into one
+# PASS/FAIL avoids a false PASS during RED — an absence-only check would
+# spuriously pass when the verifier doesn't exist yet and prints nothing at
+# all (08-REVIEWS.md round 2, Codex, HIGH: the ambiguity contract's absence
+# assertion must be load-bearing, not just "nothing was printed").
+_cpr_case_and_absent() {
+  local label sandbox expected needle err rc
+  label="${1:-}"; sandbox="${2:-}"; expected="${3:-}"; needle="${4:-}"
+  err="$(mktemp)"
+  ( cd "$sandbox" && GSD_PLAN_REVIEW_DEBUG=1 bash "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ) >/dev/null 2>"$err"
+  rc=$?
+  if [ "$rc" = "$expected" ] && ! grep -qF -- "$needle" "$err"; then
+    echo "  ${GREEN}PASS${RESET} $label"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $label (rc=$rc)"
+    FAIL=$((FAIL+1))
+  fi
+  rm -f "$err"
+}
+
+test_check_plan_review_resolver() {
+  echo ""
+  echo "${YELLOW}=== check-plan-review.sh — resolver + grandfather (phase 08-01) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp" "${tmp}-escape"' RETURN
+  mkdir -p "$tmp/.planning"
+
+  local errdir; errdir="$tmp/err"
+  mkdir -p "$errdir"
+
+  local s e r1 r2 r3 e1 e2 e3 escdir
+
+  # ── Repo-root location (<root_location>; T-08-28) ──────────────────────────
+
+  if command -v git >/dev/null 2>&1; then
+    s="$tmp/rootloc-git"
+    mkdir -p "$s/.planning/phases/08-rootcase"
+    touch "$s/.planning/phases/08-rootcase/08-01-PLAN.md"
+    cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (Root location test) - DOING
+EOF
+    ( cd "$s" && git init -q )
+    mkdir -p "$s/src"
+
+    e1="$errdir/rootloc-root.err"
+    GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "root-location: git repo, invoked from sandbox root" "$s" 0 --err-out "$e1"
+    e2="$errdir/rootloc-nested.err"
+    GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "root-location: git repo, invoked from a nested subdirectory (src/)" "$s/src" 0 --err-out "$e2"
+
+    r1="$(grep 'resolved-phase:' "$e1")"; r2="$(grep 'resolved-phase:' "$e2")"
+    if [ -n "$r1" ] && [ "$r1" = "$r2" ]; then
+      echo "  ${GREEN}PASS${RESET} root-location: nested subdirectory resolves the SAME phase as root (T-08-28 regression guard)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} root-location: nested subdirectory diverged from root resolution"
+      FAIL=$((FAIL+1))
+    fi
+  else
+    echo "  ${YELLOW}SKIP${RESET} git not available — root-location git-repo cases not run"
+    SKIP=$((SKIP+1))
+  fi
+
+  # Non-git ancestor walk: same-phase resolution from root and from a nested
+  # subdirectory when the sandbox is NOT a git tree at all.
+  s="$tmp/rootloc-nogit"
+  mkdir -p "$s/.planning/phases/08-rootcase2" "$s/src"
+  touch "$s/.planning/phases/08-rootcase2/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (Root location test, non-git) - DOING
+EOF
+  e1="$errdir/rootloc-nogit-root.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "root-location: non-git tree, invoked from sandbox root" "$s" 0 --err-out "$e1"
+  e2="$errdir/rootloc-nogit-nested.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "root-location: non-git tree, invoked from a nested subdirectory (src/)" "$s/src" 0 --err-out "$e2"
+  r1="$(grep 'resolved-phase:' "$e1")"; r2="$(grep 'resolved-phase:' "$e2")"
+  if [ -n "$r1" ] && [ "$r1" = "$r2" ]; then
+    echo "  ${GREEN}PASS${RESET} root-location: non-git ancestor .planning walk resolves the same phase from a nested dir"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} root-location: non-git ancestor walk diverged"
+    FAIL=$((FAIL+1))
+  fi
+
+  # No .planning/ in any ancestor and not a git tree -> fail open.
+  s="$tmp/rootloc-none"
+  mkdir -p "$s"
+  _cpr_case "root-location: no .planning/ anywhere, not a git tree -> fail open" "$s" 0
+
+  # ── Resolution order (D-05) ─────────────────────────────────────────────────
+
+  # Step 1a: explicit pointer, absolute path.
+  s="$tmp/step1a"
+  mkdir -p "$s/.planning/phases/08-pointer-abs"
+  touch "$s/.planning/phases/08-pointer-abs/08-01-PLAN.md"
+  ln -s "$s/.planning/phases/08-pointer-abs" "$s/.planning/current-phase"
+  e="$errdir/step1a.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 1a — absolute pointer wins" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: step 1a resolves 08-pointer-abs" "$e" "08-pointer-abs"
+
+  # Step 1b: explicit pointer, .planning/-relative value.
+  s="$tmp/step1b"
+  mkdir -p "$s/.planning/phases/08-pointer-rel"
+  touch "$s/.planning/phases/08-pointer-rel/08-01-PLAN.md"
+  ( cd "$s/.planning" && ln -s "phases/08-pointer-rel" current-phase )
+  e="$errdir/step1b.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 1b — .planning-relative pointer wins" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: step 1b resolves 08-pointer-rel" "$e" "08-pointer-rel"
+
+  # Step 2: STATE.md, canonical '## Current Position' heading.
+  s="$tmp/step2a"
+  mkdir -p "$s/.planning/phases/08-state-basic"
+  touch "$s/.planning/phases/08-state-basic/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (State basic) - DOING
+EOF
+  e="$errdir/step2a.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 2 — '## Current Position' + 'Phase: 08'" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: step 2 resolves 08-state-basic" "$e" "08-state-basic"
+
+  # Step 2, D-06 tolerated fallback heading '## Current Phase'.
+  s="$tmp/step2b"
+  mkdir -p "$s/.planning/phases/08-heading-fallback"
+  touch "$s/.planning/phases/08-heading-fallback/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Phase
+
+Phase: 08 (Heading fallback) - DOING
+EOF
+  e="$errdir/step2b.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 2 — D-06 '## Current Phase' heading fallback" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: step 2 heading fallback resolves 08-heading-fallback" "$e" "08-heading-fallback"
+
+  # Step 2, zero-pad a single-digit integer phase.
+  s="$tmp/step2c"
+  mkdir -p "$s/.planning/phases/08-zeropad"
+  touch "$s/.planning/phases/08-zeropad/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 8 (Zero pad) - DOING
+EOF
+  e="$errdir/step2c.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 2 — 'Phase: 8' zero-pads to 08-*" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: step 2 zero-pad resolves 08-zeropad" "$e" "08-zeropad"
+
+  # Step 2, third resolver defect regression: canonical 'Phase:' line wins over
+  # a later prose decoy naming a different phase, in the SAME section.
+  s="$tmp/step2d"
+  mkdir -p "$s/.planning/phases/08-prose-decoy"
+  touch "$s/.planning/phases/08-prose-decoy/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (Prose decoy) - DOING
+Last activity: phase 03 shipped last week; unrelated prose mention.
+EOF
+  e="$errdir/step2d.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 2 — canonical 'Phase:' line wins over a prose decoy" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: prose-decoy case resolves 08, not the decoy's 03" "$e" "08-prose-decoy"
+
+  # Step 3: newest *-PLAN.md by mtime, no pointer, no STATE.md.
+  s="$tmp/step3"
+  mkdir -p "$s/.planning/phases/08-older" "$s/.planning/phases/09-newer"
+  touch -t 202501010000 "$s/.planning/phases/08-older/08-01-PLAN.md"
+  touch -t 202601010000 "$s/.planning/phases/09-newer/09-01-PLAN.md"
+  e="$errdir/step3.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: step 3 — newest *-PLAN.md by mtime wins" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: step 3 resolves the newer dir (09-newer)" "$e" "09-newer"
+
+  # Step 4: fail-open, .planning/ exists but is empty.
+  s="$tmp/step4-empty"
+  mkdir -p "$s/.planning/phases"
+  _cpr_case "resolution: step 4 — .planning/ exists but empty -> fail open" "$s" 0
+
+  # Step 4: fail-open, no .planning/ at all (D-05's own explicit case).
+  s="$tmp/step4-none"
+  mkdir -p "$s"
+  _cpr_case "resolution: step 4 — no .planning/ at all -> fail open" "$s" 0
+
+  # Precedence: pointer -> A, STATE.md -> B, newest plan -> C, all present and
+  # each holding an unreviewed *-PLAN.md -> the pointer's A wins.
+  s="$tmp/precedence"
+  mkdir -p "$s/.planning/phases/08-pointer-wins" "$s/.planning/phases/08-state-loser" "$s/.planning/phases/09-newest-loser"
+  touch "$s/.planning/phases/08-pointer-wins/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-state-loser/08-01-PLAN.md"
+  touch -t 202601010000 "$s/.planning/phases/09-newest-loser/09-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (State loser) - DOING
+EOF
+  ln -s "$s/.planning/phases/08-pointer-wins" "$s/.planning/current-phase"
+  e="$errdir/precedence.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: precedence — pointer wins over STATE.md and newest-plan" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: precedence resolves via pointer (08-pointer-wins)" "$e" "08-pointer-wins"
+
+  # ── Decimal phases (<resolver_defects> item 5) ──────────────────────────────
+
+  s="$tmp/dec1"
+  mkdir -p "$s/.planning/phases/08.1-inserted"
+  touch "$s/.planning/phases/08.1-inserted/08.1-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 8.1 (Inserted) - DOING
+EOF
+  e="$errdir/dec1.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: decimal — 'Phase: 8.1' zero-pads integer part to 08.1-*" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: decimal 8.1 resolves 08.1-inserted" "$e" "08.1-inserted"
+
+  s="$tmp/dec2"
+  mkdir -p "$s/.planning/phases/08.1-inserted"
+  touch "$s/.planning/phases/08.1-inserted/08.1-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08.1 (Inserted, already padded) - DOING
+EOF
+  e="$errdir/dec2.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: decimal — 'Phase: 08.1' (already padded) resolves directly" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: decimal 08.1 resolves 08.1-inserted" "$e" "08.1-inserted"
+
+  s="$tmp/dec3"
+  mkdir -p "$s/.planning/phases/12.3-x"
+  touch "$s/.planning/phases/12.3-x/12.3-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 12.3 (No pad needed) - DOING
+EOF
+  e="$errdir/dec3.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: decimal — 'Phase: 12.3' needs no padding (integer part already 2 digits)" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: decimal 12.3 resolves 12.3-x" "$e" "12.3-x"
+
+  s="$tmp/dec4"
+  mkdir -p "$s/.planning/phases"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 8.1 (No matching dir) - DOING
+EOF
+  _cpr_case_and_absent "resolution: decimal — 'Phase: 8.1' with no matching dir falls through to fail-open, never matches 08-*" "$s" 0 "resolved-phase:"
+
+  # ── STATE.md section bounding (<resolver_defects> item 4) ───────────────────
+
+  s="$tmp/sec1"
+  mkdir -p "$s/.planning/phases/08-bound-good"
+  touch "$s/.planning/phases/08-bound-good/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (Bounded) - DOING
+
+## Notes
+
+Phase: 03 (unrelated prose in a later section, must not win)
+EOF
+  e="$errdir/sec1.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: STATE.md section bounding — later '## Notes' Phase: does not override Current Position" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: section-bounded parse resolves 08-bound-good, not 03" "$e" "08-bound-good"
+
+  s="$tmp/sec2"
+  mkdir -p "$s/.planning/phases/03-decoy" "$s/.planning/phases/08-step3-winner"
+  touch -t 202501010000 "$s/.planning/phases/03-decoy/03-PLAN.md"
+  touch -t 202601010000 "$s/.planning/phases/08-step3-winner/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Status: Ready to execute (no Phase: line in this section)
+
+## Notes
+
+Phase: 03 (must not be picked up from a later section)
+EOF
+  e="$errdir/sec2.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: STATE.md section bounding — no Phase: in Current Position falls through past Notes to step 3" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: falls through to step 3, resolves 08-step3-winner not 03-decoy" "$e" "08-step3-winner"
+
+  # ── Ambiguity — TERMINAL fail-open (<resolver_defects> item 6; T-08-01) ────
+
+  s="$tmp/ambiguous"
+  mkdir -p "$s/.planning/phases/08-old" "$s/.planning/phases/08-plan-review-gate"
+  touch "$s/.planning/phases/08-old/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-plan-review-gate/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (Ambiguous) - DOING
+EOF
+  e="$errdir/amb-nodebug.err"
+  _cpr_case "ambiguity: two 08-* dirs -> allow (fail-open), no GSD_PLAN_REVIEW_DEBUG set" "$s" 0 --err-out "$e"
+  _cpr_check_contains "ambiguity: diagnostic unconditionally names 08-old" "$e" "08-old"
+  _cpr_check_contains "ambiguity: diagnostic unconditionally names 08-plan-review-gate" "$e" "08-plan-review-gate"
+
+  # Load-bearing: WITH debug set, NO resolved-phase: line at all — proves
+  # resolution was terminal, not merely that the outcome happened to allow.
+  _cpr_case_and_absent "ambiguity: WITH GSD_PLAN_REVIEW_DEBUG=1, resolution is terminal (no resolved-phase: line)" "$s" 0 "resolved-phase:"
+
+  # Ambiguity must not fall through to step 3 even when a third, unambiguous,
+  # newer-by-mtime phase dir exists.
+  s="$tmp/ambiguous-fallthrough"
+  mkdir -p "$s/.planning/phases/08-old" "$s/.planning/phases/08-plan-review-gate" "$s/.planning/phases/09-later"
+  touch "$s/.planning/phases/08-old/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-plan-review-gate/08-01-PLAN.md"
+  touch -t 202601010000 "$s/.planning/phases/09-later/09-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 08 (Ambiguous with fallthrough temptation) - DOING
+EOF
+  _cpr_case_and_absent "ambiguity: does not fall through to step 3 despite a newer unambiguous 09-later dir" "$s" 0 "resolved-phase:"
+
+  # Absent (status 1) vs ambiguous (status 2) are distinct: an unmatched
+  # phase number is ABSENT, not ambiguous, so resolution continues to step 3.
+  s="$tmp/absent-vs-amb"
+  mkdir -p "$s/.planning/phases/08-x"
+  touch "$s/.planning/phases/08-x/08-01-PLAN.md"
+  cat > "$s/.planning/STATE.md" <<'EOF'
+## Current Position
+
+Phase: 42 (No matching directory exists) - DOING
+EOF
+  e="$errdir/absent-vs-amb.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: absent (status 1) is distinct from ambiguous (status 2) — Phase: 42 has no dir, continues to step 3" "$s" 0 --err-out "$e"
+  _cpr_check_resolved "resolution: step 2 absent falls through, step 3 resolves 08-x" "$e" "08-x"
+
+  # ── Newest-plan determinism (<resolver_defects> item 7) ─────────────────────
+
+  s="$tmp/mtime-eq"
+  mkdir -p "$s/.planning/phases/08-eq-a" "$s/.planning/phases/08-eq-b"
+  touch -t 202601010000 "$s/.planning/phases/08-eq-a/08-01-PLAN.md" "$s/.planning/phases/08-eq-b/08-01-PLAN.md"
+  e1="$errdir/mtime-eq-1.err"; e2="$errdir/mtime-eq-2.err"; e3="$errdir/mtime-eq-3.err"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: mtime tie-break — invocation 1 of 3" "$s" 0 --err-out "$e1"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: mtime tie-break — invocation 2 of 3" "$s" 0 --err-out "$e2"
+  GSD_PLAN_REVIEW_DEBUG=1 _cpr_case "resolution: mtime tie-break — invocation 3 of 3" "$s" 0 --err-out "$e3"
+  r1="$(grep 'resolved-phase:' "$e1")"; r2="$(grep 'resolved-phase:' "$e2")"; r3="$(grep 'resolved-phase:' "$e3")"
+  if [ -n "$r1" ] && [ "$r1" = "$r2" ] && [ "$r2" = "$r3" ]; then
+    echo "  ${GREEN}PASS${RESET} resolution: equal-mtime tie-break is deterministic across 3 consecutive invocations"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} resolution: equal-mtime tie-break was NOT stable across invocations"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Empty input: directories exist but zero *-PLAN.md anywhere.
+  s="$tmp/mtime-empty"
+  mkdir -p "$s/.planning/phases/08-nofiles/sub"
+  _cpr_case_and_absent "resolution: step 3 — zero *-PLAN.md anywhere -> fail open, no 'operand' error leaked" "$s" 0 "operand"
+
+  # ── Grandfather guards (D-08/D-09) ──────────────────────────────────────────
+
+  s="$tmp/legacy"
+  mkdir -p "$s/.planning/phases/03"
+  cat > "$s/.planning/phases/03/PLAN.md" <<'EOF'
+# Legacy bare-number phase plan (pre-GSD)
+EOF
+  ln -s "$s/.planning/phases/03" "$s/.planning/current-phase"
+  _cpr_case "grandfather: legacy bare-number layout (phases/03/PLAN.md) resolved via pointer -> allow" "$s" 0
+
+  s="$tmp/summary-present"
+  mkdir -p "$s/.planning/phases/08-shipped"
+  touch "$s/.planning/phases/08-shipped/08-01-PLAN.md"
+  touch "$s/.planning/phases/08-shipped/08-01-SUMMARY.md"
+  ln -s "$s/.planning/phases/08-shipped" "$s/.planning/current-phase"
+  _cpr_case "grandfather: *-SUMMARY.md present alongside *-PLAN.md -> allow (already shipped)" "$s" 0
+
+  s="$tmp/no-plan"
+  mkdir -p "$s/.planning/phases/08-unplanned"
+  ln -s "$s/.planning/phases/08-unplanned" "$s/.planning/current-phase"
+  _cpr_case "grandfather: no *-PLAN.md at all in resolved phase -> allow" "$s" 0
+
+  # ── Path safety (threat T-08-01) ─────────────────────────────────────────────
+
+  s="$tmp/escape-sibling"
+  mkdir -p "$s/.planning/phases" "$s/scratch-outside"
+  touch "$s/scratch-outside/PLAN.md"
+  ln -s "$s/scratch-outside" "$s/.planning/current-phase"
+  _cpr_case_and_absent "path-safety: pointer to a sibling dir OUTSIDE .planning/phases is rejected, falls through" "$s" 0 "scratch-outside"
+
+  escdir="${tmp}-escape"
+  mkdir -p "$escdir"
+  touch "$escdir/PLAN.md"
+  s="$tmp/escape-tmp"
+  mkdir -p "$s/.planning/phases"
+  ln -s "$escdir" "$s/.planning/current-phase"
+  _cpr_case_and_absent "path-safety: pointer to a /tmp-rooted escape target (derived from sandbox mktemp) is rejected" "$s" 0 "$escdir"
+
+  s="$tmp/escape-traversal"
+  mkdir -p "$s/.planning/phases"
+  ( cd "$s/.planning" && ln -s "phases/../../../tmp" current-phase )
+  _cpr_case "path-safety: '..'-traversal pointer value is rejected, falls through to fail-open" "$s" 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Drift test — the scaffolder's SKILL.md version MUST equal the latest
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -883,6 +1357,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0007" ]; then
   test_migration_0007
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
+  test_check_plan_review_resolver
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
