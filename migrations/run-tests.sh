@@ -3504,13 +3504,26 @@ test_migration_0009() {
   assert_extracted_shape "0009 Pre-flight" "$pf_block" \
     'spec-mirrors/11-coding-discipline-0.4.0.md' || pf_ok=0
 
+  # CR-03 fix: derive a COMMENT-STRIPPED view of the pre-flight before matching
+  # either D-28.1 `case` below. A bare substring `case "$pf_block" in *'test -s'*`
+  # matches the pre-flight's OWN COMMENTS at 0009:108/:120 ("`test -s` catches
+  # that...") just as readily as the executable guard at :111 — so the guard can
+  # be deleted entirely and this check stays green, satisfied by prose describing
+  # a guard that no longer exists. A header that documents a guard is not the
+  # guard. Match against $pf_code, never $pf_block, below.
+  local pf_code
+  pf_code="$(printf '%s\n' "$pf_block" | grep -v '^[[:space:]]*#')"
+
   # D-28.1 contract, layer 1 (zero-byte): `test -f` alone passes a zero-byte
   # mirror, and D-27 makes the mirror the SOLE re-injection source — so a
   # zero-byte mirror would strip §11 and inject nothing, silently committing a
   # maimed AGENTS.md on every heal. Asserted behaviorally by case 10(a).
-  case "$pf_block" in
-    *'test -s'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
-    *)           _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+  # Pattern tightened from the bare `*'test -s'*` to the executable shape
+  # `*'test -s "$MIRROR"'*` — a check that only works by accident of comment
+  # wording is one prose edit from being dead.
+  case "$pf_code" in
+    *'test -s "$MIRROR"'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+    *)                     _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
   esac
 
   # D-28.1 contract, layer 2 (truncation): the mirror's heading is on L1, so a
@@ -3521,7 +3534,10 @@ test_migration_0009() {
   # TERMINATOR to §11's last prose line (runaway-strip hazard). This is a
   # read-only integrity check on a different file, anchored to a structural
   # heading; it bounds nothing and cannot run away. Asserted by case 10(b).
-  case "$pf_block" in
+  # Also matched against $pf_code (CR-03): it does not collide with a comment
+  # today, but a check that only works by accident of comment wording is one
+  # prose edit from being dead, same as layer 1 above.
+  case "$pf_code" in
     *'Goal-Driven Execution'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
     *)                         _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
   esac
@@ -3858,6 +3874,61 @@ test_migration_0009() {
       && grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
     _m0009_ok $? "09-two-provenance-heal: both terminating '## ' headings survived (## Workflow, ## Deployment) — the strip did not over-run"
 
+    # ── 12-idempotent-rerun (ANCHOR-05 / MIGR-06 — the highest-value gap this
+    #    phase produced, per 09-REVIEW.md) ──
+    # BEFORE state is NOT hand-written: it is case 01-gitnexus-led-inject's
+    # BEFORE fixture (a region-LED file, no §11 anywhere), run through Apply
+    # ONCE to produce a genuinely healed region-led AGENTS.md, then Apply is
+    # run a SECOND time against that same output. Building the BEFORE this way
+    # means the fixture cannot drift from what 0009 actually emits — a
+    # hand-authored "healed" file would silently stop testing the re-run path
+    # the moment the insert's exact output shape changed.
+    #
+    # WHY THIS SHAPE SPECIFICALLY: 0009's own prose (Step 1 Apply, near the
+    # strip terminator) calls a `/^## /`-only terminator "the highest-severity
+    # mechanic in this migration" because it "skips straight past
+    # `<!-- gitnexus:start -->` on a file this migration has already healed."
+    # A re-run against an OFF-ANCHOR-BUT-HEALTHY file (state A) never reaches
+    # the strip's terminator at all — the idempotency check short-circuits
+    # Apply entirely — so state A cannot exercise this. Only a REGION-LED
+    # healed file (healed block immediately followed by
+    # `<!-- gitnexus:start -->`, not by a `## `) puts the terminator's
+    # alternation on the critical path of an ordinary second run. This is
+    # ANCHOR-05's ONLY live suite coverage: the anchor and the terminator are
+    # one decision, not two, and this fixture is what proves they still move
+    # together.
+    p="$(_m0009_mk_project "$tmp" 12)"; h="$(_m0009_mk_fake_home "$tmp" 12 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+    cp "$p/AGENTS.md" "$tmp/12-first-run.md"
+
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "12-idempotent-rerun: second Apply against an already-healed region-led file exits 0 — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/12-first-run.md"
+    _m0009_ok $? "12-idempotent-rerun: second run leaves AGENTS.md BYTE-IDENTICAL to the first run's output (true idempotency, MIGR-06)"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ]
+    _m0009_ok $? "12-idempotent-rerun: region markers still paired exactly once each (start=$nstart end=$nend) — ANCHOR-05's only live suite coverage"
+
+    grep -q 'MUST run impact analysis before editing any symbol' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "12-idempotent-rerun: the region's own body content survived the second run"
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "12-idempotent-rerun: exactly ONE provenance line remains after the second run (found $nprov)"
+
   else
     # The Apply extraction gate is DOWN. Report every case as FAILED rather than
     # skipping it. A case that silently vanishes when its input is missing is the
@@ -3870,6 +3941,7 @@ test_migration_0009() {
     _m0009_fail "05-unmanaged-conflict — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
     _m0009_fail "09-two-provenance-heal — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "12-idempotent-rerun — NOT ASSERTED: Step 1 Apply extraction failed"
   fi
 
   # ── 07-prose-mention-not-a-region (D-46.1 — forces D-21's ANCHORED regex) ──
@@ -4026,6 +4098,21 @@ test_migration_0009() {
     out="$(_m0009_apply "$p10" "$h10a" "$pf_block")"; rc=$?
     [ "$rc" -eq 3 ]
     _m0009_ok $? "10-corrupt-mirror-refused (a) zero-byte mirror: pre-flight refuses with exit 3 (D-28.1 layer 1, test -s) — got exit=$rc"
+
+    # WR-04: `rc -eq 3` above CANNOT discriminate layer 1 (test -s) from layer 2
+    # (the tail sentinel) — guard 4 also fails a zero-byte mirror with the same
+    # exit 3 BY CONSTRUCTION (a zero-byte file has no `### 4. Goal-Driven
+    # Execution` line either), so guard 4 subsumes guard 3 on this exact
+    # fixture. The diagnostic TEXT is the only thing that differs: guard 3's is
+    # "missing or empty" (0009:115), guard 4's is "missing its final section...
+    # truncated or corrupt" (0009:140) and does NOT contain "missing or empty"
+    # (re-confirmed by A4 in this plan's acceptance criteria). This mirrors how
+    # the harness already isolates the version gate from the mirror guards 12
+    # lines earlier by construction (mk_project supplies a passing version).
+    case "$out" in
+      *'missing or empty'*) _m0009_ok 0 "10-corrupt-mirror-refused (a) zero-byte mirror refused BY THE test -s layer" ;;
+      *)                    _m0009_ok 1 "10-corrupt-mirror-refused (a) zero-byte mirror refused, but not by test -s (wrong layer)" ;;
+    esac
 
     # (b) TRUNCATED mirror (head -20: keeps the L1 `## ` heading, drops
     #     `### 4. Goal-Driven Execution` at L57) → the tail-sentinel layer.
