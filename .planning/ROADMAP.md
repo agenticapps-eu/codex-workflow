@@ -55,8 +55,8 @@ source. GSD roadmap tracking starts at Phase 8.
 Plans:
 **Wave 1**
 
-- [ ] 08-01-PLAN.md — Verifier core: phase resolver (4 steps) + grandfather guards, TDD [wave 1] → criteria 2, 3, 6
-- [ ] 08-03-PLAN.md — Producer skill `codex-plan-review` + ADR-0009 [wave 1] → criterion 4
+- [x] 08-01-PLAN.md — Verifier core: phase resolver (4 steps) + grandfather guards, TDD [wave 1] → criteria 2, 3, 6
+- [x] 08-03-PLAN.md — Producer skill `codex-plan-review` + ADR-0009 [wave 1] → criterion 4
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -83,4 +83,4 @@ Phases execute in numeric order: 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 8. Plan-Review Gate | 0/6 | In progress | - |
+| 8. Plan-Review Gate | 2/6 | In Progress|  |
