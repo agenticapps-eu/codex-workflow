@@ -4594,6 +4594,43 @@ test_migration_0009() {
     _m0009_fail "no-scaffolder-tree: Step 1's idempotency check runs cleanly (exit <= 1) with no skills/ tree — NOT ASSERTED: Pre-flight extraction failed"
     _m0009_fail "no-scaffolder-tree: MIGR-08/MIGR-09 separation — NOT ASSERTED: Pre-flight extraction failed"
   fi
+
+  # ── Known-limitations document contract (09.1-REVIEW.md WR-02) ──
+  # Asserted against the RAW DOCUMENT, not execution — mirrors
+  # 08-rollback-region-led's own style just above, for the same reason: this
+  # is a document-shape/disclosure contract, not behavior. Checks that 0009
+  # carries its own "Known limitations" section naming both hazards CR-01/
+  # CR-02 closed (rather than leaving the reader to assume the anchoring note
+  # at :640 means the whole marker-matching hazard class is resolved), states
+  # the concrete CRLF remedy command, and records the deliberate divergence
+  # from upstream's own still-accepting 0029.
+  local known_lim
+  known_lim="$(awk '/^## Known limitations/{f=1} f{print} /^## Notes/{exit}' "$MIGRATION_0009")"
+
+  case "$known_lim" in
+    *'## Known limitations'*) _m0009_ok 0 "WR-02: 0009 carries its own '## Known limitations' section" ;;
+    *)                        _m0009_ok 1 "WR-02: 0009 carries its own '## Known limitations' section" ;;
+  esac
+
+  case "$known_lim" in
+    *'CRLF'*) _m0009_ok 0 "WR-02: Known limitations names CRLF as a refused (not silently mis-healed) hazard" ;;
+    *)        _m0009_ok 1 "WR-02: Known limitations names CRLF as a refused (not silently mis-healed) hazard" ;;
+  esac
+
+  case "$known_lim" in
+    *'code fence'*) _m0009_ok 0 "WR-02: Known limitations names the fenced/quoted-marker hazard" ;;
+    *)              _m0009_ok 1 "WR-02: Known limitations names the fenced/quoted-marker hazard" ;;
+  esac
+
+  case "$known_lim" in
+    *'perl -pi -e'*) _m0009_ok 0 "WR-02: Known limitations states the concrete CRLF remedy command" ;;
+    *)               _m0009_ok 1 "WR-02: Known limitations states the concrete CRLF remedy command" ;;
+  esac
+
+  case "$known_lim" in
+    *'0029'*) _m0009_ok 0 "WR-02: Known limitations records the deliberate divergence from upstream's 0029" ;;
+    *)        _m0009_ok 1 "WR-02: Known limitations records the deliberate divergence from upstream's 0029" ;;
+  esac
 }
 
 # ─────────────────────────────────────────────────────────────────────────────

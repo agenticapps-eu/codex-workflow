@@ -592,6 +592,45 @@ After applying, a human can check:
 - **Unmanaged `## Coding Discipline (NON-NEGOTIABLE)` heading** — Step 1 aborts
   with `exit 3` and leaves the file untouched; resolve per its message.
 
+## Known limitations
+
+This migration **refuses** (does not silently mis-heal) on two input shapes
+that upstream `claude-workflow`'s own `0029-region-aware-spec-11-placement.md`
+still accepts by design — its "Known limitations" section
+(`f9354cc:0029:411-420`) names both as open, unaddressed hazards in the same
+strip mechanism this migration ports. `09.1-REVIEW.md` (CR-01, CR-02)
+reproduced both live against this repo's own, already-CR-02-anchored 0009 and
+they are **closed here**, not inherited as open — this repo's 0009 now
+diverges from upstream's 0029, which still silently accepts both shapes.
+
+- **CRLF line endings** (`AGENTS.md` uses `\r\n`). Every `$`-anchored regex
+  the strip/insert awk depends on does not match a `\r`-terminated line,
+  while the unanchored `/^## /` alternative still does — on a region-led
+  file that asymmetry would land the §11 block *inside* the GitNexus-managed
+  region while Step 1 reports success. Step 1 detects any `\r` byte in
+  `AGENTS.md` and aborts with `exit 3` **before any surgery**, leaving
+  `AGENTS.md` byte-identical, and prints the concrete recovery command:
+  convert the file to LF and re-run, e.g.
+  `perl -pi -e 's/\r\n$/\n/' AGENTS.md`, then re-run
+  `/update-codex-agenticapps-workflow`.
+- **An exact, whole-line quotation of the provenance marker and/or the §11
+  heading inside a markdown code fence** (e.g. a troubleshooting note
+  showing "what a healthy block looks like"). The quotation is a real,
+  anchored match — indistinguishable from a genuine block by the strip's own
+  state machine — and would make the strip silently swallow real, unrelated
+  content up to the next heading. Step 1 detects a fence-delimiter line
+  (`` ``` `` or `~~~`) inside the span it is about to discard and aborts
+  with `exit 3` **before any surgery**, leaving `AGENTS.md` byte-identical,
+  and names both recovery options: move the quoted text out of `AGENTS.md`
+  (e.g. into a separate docs file), or edit it so it no longer reproduces
+  the marker/heading verbatim.
+
+Neither refusal normalizes, rewrites, or auto-corrects `AGENTS.md` — both are
+fail-closed by the user's binding ruling on this hazard class: when Step 1
+cannot safely determine the file's real structure, it refuses rather than
+guesses, and always states the concrete remedy rather than leaving the
+project stranded with no path forward.
+
 ## Notes
 
 - **`PROV_RE` anchoring, ported from upstream `f9354cc` (not re-derived).** All
