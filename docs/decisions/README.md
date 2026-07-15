@@ -24,3 +24,4 @@ template shape — risk owner, re-audit date, compensating controls.
 | [0007](0007-bind-upstream-gsd.md) | Bind upstream GSD + Superpowers; stop re-porting | Accepted |
 | [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the Codex host | Accepted |
 | [0009](0009-plan-review-gate.md) | Bind the plan-review pre-execution gate on the Codex host | Accepted |
+| [0010](0010-region-aware-spec-11-placement.md) | Anchor the §11 block above a leading GitNexus region | Accepted |
