@@ -26,17 +26,16 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** v0.7.0 roadmap created (Phase 9: Region-Aware §11 Placement).
-Ready for `/gsd-plan-phase 9`.
+**Current focus:** v0.7.0 Phase 9 (Region-Aware §11 Placement) planned.
+Ready for `/gsd-execute-phase 9`.
 
 ## Current Position
 
-Phase: 9 (Region-Aware §11 Placement) — not started
-Plan: — (roadmap created; no plans generated yet)
+Phase: 9 (Region-Aware §11 Placement) — planned, not started
+Plan: 5 plans across 4 waves (09-01..09-05); 21/21 requirements, 28/28 decisions covered
 Status: Ready to execute
-Last activity: 2026-07-15 -- Phase 9 planning complete
-phase, 21 requirements, 6 success criteria); REQUIREMENTS.md traceability
-confirmed
+Last activity: 2026-07-15 -- Phase 9 planning complete (research → plan → verify;
+0 blockers). Plan-checker PASSED with 2 warnings, both closed before commit.
 
 ## Notes
 
@@ -47,9 +46,28 @@ confirmed
 - Phase 9 carries two hard internal ordering constraints (see ROADMAP.md): the
   anchor rule must be validated empirically before migration 0009 is written
   (ANCHOR-03/04), and the TDD fixture suite must fail (RED) against the naive
-  anchor before 0009 exists (TEST-02). `/gsd-plan-phase 9` should sequence plan
-  waves accordingly.
+  anchor before 0009 exists (TEST-02). Both are now encoded as wave topology:
+  09-01 (validate) and 09-03 (RED) both gate 09-04 via `depends_on`.
+
+- **Phase 9's premise changed during planning.** `claude-workflow`'s migration 0029
+  did not exist when 09-CONTEXT.md was written; it shipped ~10 min later and revised
+  four times that afternoon. Phase 9 is now a **port of working, six-repo-validated
+  code**, pinned to `claude-workflow @ 8520f90` (D-48). Upstream HEAD has already
+  moved past the pin — plans read the analog via `git -C ../claude-workflow show
+  8520f90:<path>`, never the working tree. Do not absorb later upstream changes
+  mid-execution; log them as follow-ups.
+
+- **Five locked decisions were corrected during planning**, after research verified
+  them against live files and the user approved each: D-21 (the "invariant survives"
+  rationale was **false** — it is widened, not preserved), D-24 (strip terminator
+  must carry the anchor's alternation or it eats the GitNexus region), D-28.1
+  (`test -f` → `test -s` + tail sentinel), plus new D-46 (fixtures 6→10), D-47
+  (Rollback = `git checkout`), D-48 (upstream pin). ANCHOR-05 and TEST-03 were
+  reworded in REQUIREMENTS.md to match.
+
+- **09-03 ends with a failing suite by design.** That RED is its deliverable
+  (TEST-02), not a defect. Do not "fix" it; 09-04 turns it green.
 
 ## Operator Next Steps
 
-- Run `/gsd-plan-phase 9` to decompose Phase 9 into plans.
+- Run `/gsd-execute-phase 9` to execute the 5 plans (wave 1: 09-01 + 09-02 in parallel).
