@@ -299,5 +299,14 @@ success and failure paths are demonstrated above.
   never transcribed. Mechanism exists and is proven live.
 - **TEST-04** — the inlined anchor copy at `run-tests.sh:119` is gone, replaced by
   document-sourced extraction (ROADMAP Success Criterion 5).
+
+## Self-Check: PASSED
+
+- Files verified present: `migrations/run-tests.sh`,
+  `.planning/phases/09-region-aware-11-placement/09-02-SUMMARY.md`
+- Commits verified in `git log`: `d51b032`, `69209cf`, `85b244b`
+- Helpers verified in committed HEAD (comment-filtered): 5 code references
+- Final suite re-run on a clean tree: **exit 0, PASS: 279, FAIL: 0, SKIP: 2**
+- STATE.md / ROADMAP.md deliberately untouched (worktree mode — orchestrator owns those writes)
 </content>
 </invoke>
