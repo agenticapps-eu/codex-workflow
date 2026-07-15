@@ -231,23 +231,62 @@ test_migration_0001() {
     FAIL=$((FAIL+1))
   fi
 
-  # Injection byte-identity: applying Step 1's awk to fixture A must produce a
-  # §11 block byte-identical to the mirror.
-  awk -v mirror="$mirror" '
-    /^## / && !done {
-      print "<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->"
-      while ((getline line < mirror) > 0) print line
-      close(mirror); print ""; done=1
-    }
-    { print }
-  ' "$tmp/a-AGENTS.md" > "$tmp/a-injected.md"
-  awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
-    "$tmp/a-injected.md" > "$tmp/a-block.md"
-  if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
-    echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
-    PASS=$((PASS+1))
+  # Injection byte-identity: executing 0001's OWN Step 1 Apply block against
+  # fixture A must produce a §11 block byte-identical to the mirror.
+  #
+  # This closes TEST-04 / Success Criterion 5. Until now this assertion ran an
+  # INLINED COPY of 0001's injection awk transcribed into this harness — a
+  # second source of truth that could drift from the document it claimed to
+  # test. It is now extracted from 0001's document itself (TEST-01).
+  #
+  # 0001 IS IMMUTABLE (fix-forward). Its anchor is the naive `/^## / && !done`,
+  # which is exactly the defect migration 0009 exists to heal. Asserting it here
+  # FAITHFULLY is deliberate: this test documents what 0001 actually does, not
+  # what we wish it did. That is a fidelity improvement, not a behavior change,
+  # and it does not conflict with 0009's fixtures going RED.
+  #
+  # KNOWN, DEFERRED (D-37): 0008's Step-3 insert-awk copy near :985 is a real
+  # instance of this same drift class. It is scoped OUT of this phase — reaching
+  # into another migration's tests widens a placement fix into harness
+  # refactoring across a 278-assertion suite. It was not missed; it is tracked.
+  local step1_apply
+  step1_apply="$(extract_step_block \
+    "$REPO_ROOT/migrations/0001-inject-spec-11-coding-discipline.md" 1 Apply)"
+
+  # Extraction from the REAL document must be non-empty AND identifiably the
+  # mirror-streaming injection block BEFORE the injection is asserted — a
+  # heading-regex drift must report as "extraction empty/wrong" rather than as a
+  # confusing downstream injection failure (T-08-23 precedent at :967-977, here
+  # generalized from template content to the migration's own shell).
+  if assert_extracted_shape "0001 Step 1 Apply" "$step1_apply" 'getline line < mirror'; then
+    # Scratch project root + fake Codex home. 0001's Apply block is
+    # self-contained: it re-declares MIRROR from ${CODEX_HOME:-$HOME/.codex} and
+    # operates on AGENTS.md in the current directory — which is what makes it
+    # eval-able here without modification.
+    local proj="$tmp/proj0001"
+    local fakehome="$tmp/codexhome"
+    local fakemirrors="$fakehome/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors"
+    mkdir -p "$proj" "$fakemirrors"
+    cp "$mirror" "$fakemirrors/11-coding-discipline-0.4.0.md"
+    printf '# Title\n\n## Some Section\n\nbody\n' > "$proj/AGENTS.md"
+
+    # SUBSHELL IS MANDATORY: an extracted block that takes an `exit` path would
+    # otherwise terminate the whole suite mid-run, hiding every later assertion.
+    ( cd "$proj" && export CODEX_HOME="$fakehome" && eval "$step1_apply" ) \
+      >/dev/null 2>&1
+
+    awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
+      "$proj/AGENTS.md" > "$tmp/a-block.md"
+    if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} injected §11 block differs from the mirror"
+      FAIL=$((FAIL+1))
+    fi
   else
-    echo "  ${RED}FAIL${RESET} injected §11 block differs from the mirror"
+    echo "  ${RED}FAIL${RESET} injected §11 block byte-identity NOT asserted — 0001's"
+    echo "         Step 1 Apply block could not be extracted from its document."
     FAIL=$((FAIL+1))
   fi
 
