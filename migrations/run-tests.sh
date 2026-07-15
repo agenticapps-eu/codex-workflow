@@ -3371,6 +3371,22 @@ _m0009_mk_project() {
   printf '%s\n' "$p"
 }
 
+# _m0009_apply <proj> <fake_home> <apply_text>
+# Runs an extracted block against a scratch project. Prints its combined
+# output; returns its exit status.
+#
+# THE SUBSHELL IS MANDATORY, NOT STYLE (T-09-07): cases 05 and 10 exercise
+# blocks that deliberately `exit 3`. Un-subshelled, that would terminate the
+# whole harness mid-suite and silently hide every later assertion — the suite
+# would report a truncated PASS count and exit 0.
+# CODEX_HOME and cwd are BOTH redirected under $tmp (T-09-10 / T-09-11): these
+# blocks perform real file surgery and resolve their mirror from
+# ${CODEX_HOME:-$HOME/.codex}. Run at the real repo root against the real Codex
+# home, they would rewrite the developer's own AGENTS.md.
+_m0009_apply() {
+  ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
+}
+
 # _m0009_ok <rc> <label> — PASS iff rc is 0.
 _m0009_ok() {
   if [ "$1" -eq 0 ]; then
@@ -3569,6 +3585,196 @@ test_migration_0009() {
   # (`exit 3`, file untouched), not by the idempotency check. It is asserted by
   # case `05-unmanaged-conflict` below. The four-state table is therefore
   # complete across this function: A/B/C (+ D-32) here, D at case 05.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # TEST-03's ten cases. Each synthesizes its BEFORE state with `printf` into
+  # $tmp (D-34), runs the extracted Step 1 Apply against that scratch root, and
+  # asserts the AFTER state. Case labels are carried in the assertion text so a
+  # failure names itself.
+  # ───────────────────────────────────────────────────────────────────────────
+  local p h out rc prov_line start_line nstart nend nprov
+
+  if [ "$apply_ok" = "1" ]; then
+
+    # ── 01-gitnexus-led-inject (MIGR-04 — inject at the region-led anchor) ──
+    # BEFORE: a gitnexus-LED file with no §11 anywhere (State C).
+    # The first `## ` in this file is `## Always Do`, which is INSIDE the region
+    # — that is what makes this case discriminating. The naive `/^## / && !done`
+    # anchor (0001:91, 0004:77) lands on it and injects §11 inside a region that
+    # `gitnexus analyze` later regenerates, destroying the block. D-21's rule
+    # anchors on whichever comes FIRST — here the marker — so it lands above.
+    # `## Some Section` sits AFTER the region deliberately: that ordering is what
+    # discriminates D-21 from D-22.1's rejected "the region is always the anchor"
+    # (which would drop §11 hundreds of lines down when the region comes late).
+    p="$(_m0009_mk_project "$tmp" 01)"; h="$(_m0009_mk_fake_home "$tmp" 01 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "01-gitnexus-led-inject: provenance (line ${prov_line:-ABSENT}) is ABOVE gitnexus:start (line ${start_line:-ABSENT})"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ]
+    _m0009_ok $? "01-gitnexus-led-inject: region markers still paired exactly once (start=$nstart end=$nend)"
+
+    grep -q 'MUST run impact analysis before editing any symbol' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "01-gitnexus-led-inject: the region's own body content survived"
+
+    # ── 02-inside-region-move (MIGR-03 — State B strip+reinject) ──
+    # BEFORE: provenance + full mirror already sit INSIDE the region. This is
+    # what the naive anchor produces on a gitnexus-led file. Not yet eaten; 0009
+    # must move it out before the next `gitnexus analyze` does.
+    #
+    # THIS IS THE CASE THAT PROVES THE STRIP TERMINATOR'S ALTERNATION (D-24).
+    # 09-01's counter-case B observed the narrow `/^## /`-only terminator EATING
+    # the region here: it runs past `<!-- gitnexus:start -->` hunting a `## `,
+    # consuming the marker and the region's real content, halting only at the
+    # region's own `## Always Do` — leaving start=0/end=1, an orphaned unpaired
+    # region. The marker-count assertion below is what catches that.
+    p="$(_m0009_mk_project "$tmp" 02)"; h="$(_m0009_mk_fake_home "$tmp" 02 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Always Do\n- MUST run impact analysis.\n<!-- gitnexus:end -->\n\n'
+      printf '## Workflow\nProject stuff.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "02-inside-region-move: exactly ONE provenance line remains (found $nprov) — moved, not duplicated"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "02-inside-region-move: provenance (line ${prov_line:-ABSENT}) moved ABOVE gitnexus:start (line ${start_line:-ABSENT})"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ] && grep -q 'MUST run impact analysis' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "02-inside-region-move: region survived intact and paired (start=$nstart end=$nend) — the D-24 terminator assertion"
+
+    # ── 03-healthy-noop (MIGR-02, MIGR-07 — zero churn) ──
+    # BEFORE: this repo's own real AGENTS.md shape — §11 correctly anchored at
+    # the first `## `, region LATER in the file (State A).
+    #
+    # WHY APPLY IS RUN HERE EVEN THOUGH THE RUNTIME WOULD SKIP IT: in real
+    # operation State A's idempotency check returns `applied`, so the runtime
+    # skips Step 1 entirely — that skip is already asserted by the State A row
+    # above. If this case ALSO merely skipped Apply, `cmp -s` would compare a
+    # file nothing had touched and pass unconditionally: a dead assertion, and
+    # exactly the defect class this phase exists to close. The plan's stated
+    # purpose for this case is to "catch an over-eager anchor", and an over-eager
+    # anchor can only manifest if Apply RUNS. So Apply is run deliberately, and
+    # byte-identity is asserted against a pristine copy — the fixture-level twin
+    # of 09-01's CASE 1 (ANCHOR-03), which observed strip+insert re-deriving
+    # §11's position byte-identically on the real AGENTS.md.
+    #
+    # NOT VACUOUS: the strip genuinely removes 81 lines (provenance + 79 mirror
+    # lines + the trailing blank) and the insert genuinely re-adds them; a strip
+    # that silently did nothing would make the insert add a SECOND block and fail
+    # this cmp. `grep`-based "block still present" would pass for an over-eager
+    # anchor that MOVED the block — byte-identity is the assertion that does not.
+    p="$(_m0009_mk_project "$tmp" 03)"; h="$(_m0009_mk_fake_home "$tmp" 03 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus\n\n## Always Do\n- x\n<!-- gitnexus:end -->\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/03-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    cmp -s "$p/AGENTS.md" "$tmp/03-pristine.md"
+    _m0009_ok $? "03-healthy-noop: AGENTS.md is BYTE-IDENTICAL after Apply (zero churn — catches an over-eager anchor)"
+
+    # ── 04-no-agentsmd (D-33 — informational skip, NOT an abort) ──
+    # BEFORE: a project with no AGENTS.md at all.
+    #
+    # WHY A SKIP AND NOT 0004's PRE-FLIGHT ABORT (0004:44): the update engine
+    # marks a migration pending iff `installed >= from && installed < to`. An
+    # abort here leaves the project at 0.6.0 forever — Step 2 never records
+    # 0.7.0, so 0009 stays pending AND 0010+ never become pending either. The
+    # project is stranded below to_version PERMANENTLY. A skip costs nothing;
+    # an abort is unrecoverable without manual intervention.
+    p="$(_m0009_mk_project "$tmp" 04)"; h="$(_m0009_mk_fake_home "$tmp" 04 "$mirror")"
+    rm -f "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "04-no-agentsmd: Apply exits ZERO (informational skip, so Step 2's version bump still runs) — got exit=$rc"
+
+    case "$out" in
+      *update-codex-agenticapps-workflow*) _m0009_ok 0 "04-no-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), not claude-workflow's slug" ;;
+      *)                                   _m0009_ok 1 "04-no-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), not claude-workflow's slug" ;;
+    esac
+
+    [ ! -f "$p/AGENTS.md" ]
+    _m0009_ok $? "04-no-agentsmd: Apply created no AGENTS.md out of thin air"
+
+    # ── 05-unmanaged-conflict (MIGR-05, State D — D-30 branch 1) ──
+    # BEFORE: a §11 heading with hand-written prose and NO provenance. The
+    # operator pasted it outside this migration's management. 0009 must refuse
+    # rather than clobber it (inherits 0001's conflict rule).
+    #
+    # BOTH HALVES ARE REQUIRED: an `exit 3` that already mangled the file is
+    # still a destroyed hand-authored §11. Asserting only the exit code would
+    # pass for a block that rewrote AGENTS.md and then errored.
+    p="$(_m0009_mk_project "$tmp" 05)"; h="$(_m0009_mk_fake_home "$tmp" 05 "$mirror")"
+    {
+      printf '# AGENTS.md\n\n## Coding Discipline (NON-NEGOTIABLE)\n\n'
+      printf 'Hand-pasted content the operator wrote themselves. Must not be clobbered.\n\n'
+      printf '## Workflow\nStuff.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/05-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "05-unmanaged-conflict: Apply exits exactly 3 on an unmanaged §11 heading (State D) — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/05-pristine.md"
+    _m0009_ok $? "05-unmanaged-conflict: hand-written §11 is BYTE-IDENTICAL after the refusal (refused AND untouched)"
+
+    # ── 06-no-heading-eof (ANCHOR-02 — the END fallback) ──
+    # BEFORE: no `## ` heading and no marker anywhere. The anchor scan finds
+    # nothing, so awk's END branch must APPEND rather than silently drop the
+    # block. Without the END branch the insert is a no-op and §11 vanishes.
+    p="$(_m0009_mk_project "$tmp" 06)"; h="$(_m0009_mk_fake_home "$tmp" 06 "$mirror")"
+    printf '# AGENTS.md\n\nJust prose. No level-2 headings anywhere in this file.\n' > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    grep -q -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "06-no-heading-eof: provenance is present after Apply (END fallback fired, block not dropped)"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ "$prov_line" -gt 3 ]
+    _m0009_ok $? "06-no-heading-eof: block was APPENDED at EOF (provenance at line ${prov_line:-ABSENT}, below the 3 lines of pre-existing prose)"
+
+  else
+    # The Apply extraction gate is DOWN. Report every case as FAILED rather than
+    # skipping it. A case that silently vanishes when its input is missing is the
+    # dead-assertion defect wearing a different hat: the suite would exit 0 and
+    # read as coverage.
+    _m0009_fail "01-gitnexus-led-inject — NOT ASSERTED: 0009's Step 1 Apply could not be extracted (the 0009 document does not exist yet)"
+    _m0009_fail "02-inside-region-move — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "03-healthy-noop — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "04-no-agentsmd — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "05-unmanaged-conflict — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
