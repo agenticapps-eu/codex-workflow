@@ -42,7 +42,7 @@ Decision record: [ADR-0009](../docs/decisions/0009-plan-review-gate.md).
 
 </details>
 
-- [ ] **Phase 9: Region-Aware §11 Placement** - Migration 0009 heals the §11 anchor so a leading GitNexus region can no longer silently destroy the block, with the anchor rule validated empirically before it is written (5/5 plans executed; NOT complete — code review reproduced a data-loss defect, see 09-REVIEW.md CR-01; closes via Phase 9.1)
+- [x] **Phase 9: Region-Aware §11 Placement** - Migration 0009 heals the §11 anchor so a leading GitNexus region can no longer silently destroy the block, with the anchor rule validated empirically before it is written (5/5 plans executed; completed 2026-07-16 — every blocker closed via Phase 9.1: CR-01/CR-02/CR-03 fixed, and all five gaps 09-VERIFICATION.md deferred to 9.1 [MIGR-01, MIGR-06, MIGR-07, MIGR-08, ANCHOR-05] verified closed. Deferred, non-blocking: 09-REVIEW.md WR-05 + IN-01..IN-04, consciously out of scope)
 - [x] **Phase 9.1: §11 Strip Runaway** (INSERTED 2026-07-15) - Close the runaway-strip and unanchored-provenance data-loss paths that Phase 9's code review reproduced in the shipped 0009, kill the dead `test -s` assertion, and add the idempotent re-run fixture that makes the terminator alternation self-defending (completed 2026-07-15)
 
 ## Phase Details

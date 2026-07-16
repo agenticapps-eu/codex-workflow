@@ -1,19 +1,39 @@
 ---
 phase: 09-region-aware-11-placement
 verified: 2026-07-15T16:12:25Z
-status: gaps_found
-score: 14/21 requirements DELIVERED, 5 DELIVERED-UNTESTED, 2 PARTIAL, 0 NOT-DELIVERED
+status: gaps_closed_via_09.1
+score: 14/21 requirements DELIVERED, 5 DELIVERED-UNTESTED, 2 PARTIAL, 0 NOT-DELIVERED (as scored 2026-07-15, BEFORE Phase 9.1 ran)
 overrides_applied: 0
 re_verification:
-  previous_status: none
-  previous_score: n/a
-  gaps_closed: []
+  previous_status: gaps_found
+  previous_score: 14/21 DELIVERED, 5 DELIVERED-UNTESTED, 2 PARTIAL
+  closed_by: phase 09.1-11-strip-runaway-inserted
+  closed_date: 2026-07-16
+  gaps_closed: [MIGR-01, MIGR-06, MIGR-07, MIGR-08, ANCHOR-05]
   gaps_remaining: []
   regressions: []
+  note: >
+    This body was written 2026-07-15T16:12 and is NOT re-scored in place — it is
+    preserved as the record of what was true then. Every gap it names was
+    explicitly deferred to Phase 9.1 by this document's own Gaps Summary
+    ("Recommended: fold V-01 and V-02 into Phase 9.1's scope"), and 9.1 closed
+    each. See the Gap Closure Record appended at the end of this file. This is a
+    disposition record, not a fresh 21-requirement re-derivation.
 gaps:
   - truth: "Migration 0009 applies to the projects this host scaffolds — the entire stated purpose of the phase"
-    status: failed
-    reason: >-
+    status: closed
+    closed_by: "Phase 9.1 — 09.1-01 (2f4d9d5, dc540b7) + 09.1-02 (f1a1da8, 2fe23d4)"
+    closed_date: 2026-07-16
+    closed_evidence: >-
+      V-01 closed. Pre-flight now reads `.codex/workflow-version.txt` per 0008:73-79
+      (`0009:98`); Step 2's scaffolder bump deleted entirely and dropped from
+      `applies_to`; `_m0009_mk_project` no longer manufactures a synthetic SKILL.md;
+      0008's `no-scaffolder-tree` fixture ported. All four "missing" items below were
+      done. Independently re-proven in UAT (09.1-UAT.md test 2) against a real
+      target-project shape: pre-flight exit 0 at 0.6.0 and 0.7.0, exit 3 with the
+      correct diagnostic at 0.2.1 — and the counterfactual, `git show f1a1da8^`'s
+      pre-flight on the SAME sandbox, still aborts exit 3 ("version is unknown").
+    reason_at_time: >-
       0009's pre-flight guard 2 greps the PROJECT-RELATIVE path
       `skills/agentic-apps-workflow/SKILL.md` for its version floor, and Step 2 seds
       that same path. No target project has a local `skills/` tree. On every real
@@ -48,8 +68,15 @@ gaps:
       - "Port 0008's `no-scaffolder-tree` regression fixture (run-tests.sh:1633-1706) to `test_migration_0009`: a sandbox with NO local `skills/` directory that must migrate end-to-end. Without it this defect class stays invisible."
       - "Stop manufacturing a synthetic SKILL.md in `_m0009_mk_project`, or the ported fixture is neutralized on arrival."
   - truth: "The suite's MIGR-07 assertion discriminates a healthy-but-off-anchor block"
-    status: partial
-    reason: >-
+    status: closed
+    closed_by: "Phase 9.1 — 09.1-04 (d360fac)"
+    closed_date: 2026-07-16
+    closed_evidence: >-
+      V-02 closed. `state-a` rewritten to place the block BELOW a real project heading
+      with no region anywhere, isolating position as the sole variable. Proven
+      falsifiable by verified mutation: expected arg flipped to "not-applied" → observed
+      FAIL → restored → PASS. The assertion can now fail for the reason it claims.
+    reason_at_time: >-
       The BEHAVIOR is correct — verified live: the Step 1 idempotency predicate
       returns exit 0 (skip) on a genuinely off-anchor healthy block. But the fixture
       labeled "D-31/MIGR-07" is ON-anchor: `state-a` (run-tests.sh:3509-3516) places
@@ -64,8 +91,17 @@ gaps:
     missing:
       - "A fixture whose §11 block sits BELOW the first `## ` heading (no region), asserted `applied` — the only shape that makes the MIGR-07 label load-bearing."
   - truth: "This repo's own version records are internally consistent"
-    status: partial
-    reason: >-
+    status: closed
+    closed_by: "Phase 9.1 — 09.1-03 (fb6b148 RED, 7a1e7bc GREEN)"
+    closed_date: 2026-07-16
+    closed_evidence: >-
+      V-03 closed. `.codex/workflow-version.txt` bumped 0.6.0 → 0.7.0 as a direct edit
+      (MIGR-09), matching 0008's 98c06f5 precedent of bumping both records in one
+      commit. `test_drift()` gained a consumer-owned third leg reading BOTH records and
+      failing on mismatch — the exact blind spot named below. RED observed before GREEN
+      (skill_v=0.7.0 / proj_v=0.6.0), and the leg proven falsifiable by verified
+      mutation. UAT test 8: both read 0.7.0; `run-tests.sh drift` → 2 PASS / 0 FAIL.
+    reason_at_time: >-
       `skills/agentic-apps-workflow/SKILL.md:3` reads `version: 0.7.0` but
       `.codex/workflow-version.txt` still reads `0.6.0`. This diverges from the 0008
       precedent, where commit 98c06f5 bumped BOTH in the migration's own commit. The
@@ -96,6 +132,17 @@ human_verification:
   - test: "Decide the disposition of V-01: is migration 0009 intended to run on target projects at all, or was it authored against this repo's own layout deliberately?"
     expected: "If target projects are in scope (the phase goal says they are), V-01 must be scheduled into 9.1 alongside CR-01. If not, the phase goal and ROADMAP need rewording."
     why_human: "Scope decision. The evidence is unambiguous that 0009 cannot run on a target project; whether that inverts the phase's purpose is a product call."
+    status: resolved
+    resolved_date: 2026-07-16
+    resolution: >-
+      RESOLVED as "target projects ARE in scope" — the first of the two branches this
+      item names. V-01 was scheduled into Phase 9.1 alongside CR-01 and closed there
+      (09.1-01/09.1-02), and 9.1's ROADMAP entry made criterion 0 an explicit BLOCKER:
+      "0009 actually runs on a real target project". The phase goal and ROADMAP did NOT
+      need rewording — the goal was right and the implementation was wrong. Recorded in
+      ADR-0010's Correction section as a codex-side PORTING ERROR (upstream greps
+      `.claude/skills/…`, a path its own setup skill creates; our port dropped the
+      `.claude/` prefix), against 0008's T-08-38 precedent for the same defect class.
 ---
 
 # Phase 9: Region-Aware §11 Placement — Verification Report
@@ -268,3 +315,38 @@ suite-wide invariant — that no migration may name a path under a target projec
 
 _Verified: 2026-07-15T16:12:25Z_
 _Verifier: Claude (gsd-verifier)_
+
+---
+
+## Gap Closure Record — appended 2026-07-16 (Phase 9.1 complete)
+
+The body above is preserved verbatim as the 2026-07-15 record. It is not re-scored;
+this section records the disposition of each gap it raised. Phase 9's checkbox was
+marked complete in ROADMAP.md on 2026-07-16 on this basis.
+
+| Gap (as scored above) | This document's own note | Closed by | Independent evidence |
+|---|---|---|---|
+| **MIGR-01** `PARTIAL` — "greps `skills/agentic-apps-workflow/SKILL.md`, a path no target project has. The gate is non-functional on every real install (V-01)" | reproduced, unscheduled | `09.1-02` (`f1a1da8`) — pre-flight reads `.codex/workflow-version.txt` per `0008:73-79` | UAT test 2 (`09.1-UAT.md`): real target project at 0.6.0, no `skills/` tree → pre-flight **exit 0**. Counterfactual proven — the pre-fix pre-flight (`git show f1a1da8^`) on the SAME sandbox → `grep: skills/agentic-apps-workflow/SKILL.md: No such file or directory` → **exit 3**. |
+| **MIGR-08** `PARTIAL` + untested — "unreachable in production via V-01. Also: this repo's own `.codex/workflow-version.txt` still reads `0.6.0` (V-03)" | two distinct defects | `09.1-02` (V-01) + `09.1-03` (`7a1e7bc`, V-03) | UAT test 8: both records read `0.7.0`; `run-tests.sh drift` PASSes and now hard-fails on a future split (third leg, mutation-proven). |
+| **ANCHOR-05** untested — "No `11-idempotent-rerun` fixture ⇒ narrowing the terminator does not fail the suite. *(known; deferred to 9.1)*" | deferred by name | `09.1-06` (`b940f09`) — `12-idempotent-rerun` (numbered 12 per Q4; `11-` went to the ported upstream fixture) | Mutation gate: narrowing the terminator alternation (2→1) produced 2 FAIL with `start=0 end=1`; restored, suite 0 FAIL. Independently re-proven in `09.1-VERIFICATION.md` by scratch-clone mutation. |
+| **MIGR-06** untested — "No `11-idempotent-rerun` fixture exercises a full re-run. *(known; deferred to 9.1)*" | deferred by name | same fixture | UAT test 7: second run exits 0, byte-identical to first, markers paired 1/1, exactly one provenance line. |
+| **MIGR-07** untested — "`state-a` is ON-anchor, so the assertion labeled 'D-31/MIGR-07' cannot discriminate. *(new — V-02)*" | new finding | `09.1-04` (`d360fac`) — `state-a` rewritten genuinely off-anchor | Falsifiability proven by verified mutation (expected arg flipped → FAIL → restored → PASS). |
+
+**This document's own recommendation was followed.** Its Gaps Summary reads:
+*"Recommended: fold V-01 and V-02 into Phase 9.1's scope."* V-01 closed in `09.1-01`/`09.1-02`,
+V-02 in `09.1-04`, and V-03 (found in the same pass) in `09.1-03`.
+
+**Deferred, non-blocking — carried forward as debt, NOT closed:**
+
+- `09-REVIEW.md` **WR-05** — `validate-0009-anchor.sh`'s "deterministic banner" claim contradicted by its own output.
+- `09-REVIEW.md` **IN-01..IN-04** — `extract_step_block` prefix-matching `### Step 1` vs `### Step 10`; CASE 1's unasserted line drop; the ADR/migration numbering collision; predictable temp-file names in CWD.
+- Migration `0007`'s identical pre-flight bug — `0008` deferred it explicitly ("different migration, own scope").
+
+These were consciously scoped out by `09.1-07` and are recorded here so Phase 9's
+completion does not silently absorb them. Review via `/gsd-audit-uat`.
+
+**Phase 9.1's own state at closure:** verification 11/11 criteria passed; UAT 10 passed /
+1 issue (AG-01, accepted-and-disclosed by user ruling); security 37/37 threats closed,
+`threats_open: 0`. Full suite 369 PASS / 0 FAIL / 1 SKIP.
+
+_Gap closure recorded: 2026-07-16_

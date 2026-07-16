@@ -3,15 +3,21 @@ gsd_state_version: 1.0
 milestone: v0.7.0
 milestone_name: Region-Aware §11 Placement
 status: milestone_complete
-last_updated: 2026-07-15T20:01:06.700Z
-last_activity: 2026-07-15 -- Phase 09.1 execution started
+last_updated: 2026-07-16T06:33:07.129Z
+last_activity: 2026-07-16 -- Phase 09.1 verified, secured (37/37, threats_open 0) and closed; Phase 9 closed on 9.1's evidence
 progress:
   total_phases: 2
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 12
-  completed_plans: 21
-  percent: 50
-stopped_at: Milestone complete (Phase 09.1 was final phase)
+  completed_plans: 12
+  percent: 100
+  scope_note: >
+    These counts are MILESTONE-scoped (v0.7.0 = Phase 9's 5 plans + Phase 9.1's 7).
+    Do not paste `gsd-sdk query progress.bar` here — it is PROJECT-scoped
+    (21/27 plans, 78%, including the pre-GSD legacy phases 00-07). Mixing the two
+    is what produced the prior `completed_plans: 21` against `total_plans: 12`,
+    i.e. more plans complete than exist.
+stopped_at: Milestone v0.7.0 complete (Phase 9 + Phase 9.1)
 ---
 
 # Project State
@@ -27,16 +33,54 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** Milestone complete
-Ready for `/gsd-execute-phase 9`.
+**Current focus:** Milestone v0.7.0 complete — ready to archive via
+`/gsd-complete-milestone v0.7.0`.
 
 ## Current Position
 
-Phase: 09.1
+Phase: 09.1 (final phase of v0.7.0)
 Plan: Not started
-Status: Milestone complete
-Last activity: 2026-07-15
-0 blockers). Plan-checker PASSED with 2 warnings, both closed before commit.
+Status: Milestone complete — both phases closed, verified, and threat-secure
+Last activity: 2026-07-16
+
+## Session Continuity
+
+Last session: 2026-07-16
+Stopped at: Milestone v0.7.0 complete (Phase 9 + 9.1 both closed); ready to archive
+Resume file: None
+
+## Accumulated Context
+
+### Decisions
+
+- **Phase 9 closed on Phase 9.1's evidence (2026-07-16).** Phase 9 was held open with
+  "NOT complete — code review reproduced a data-loss defect (CR-01)". 9.1 closed CR-01,
+  and every gap `09-VERIFICATION.md` recorded (MIGR-01, MIGR-06, MIGR-07, MIGR-08,
+  ANCHOR-05) was explicitly deferred to 9.1 by that document's own Gaps Summary and is
+  now verified closed. Its `human_verification` scope question ("is 0009 meant to run on
+  target projects at all?") resolved as **yes** — the goal was right, the implementation
+  was wrong. Closure recorded in that file's Gap Closure Record rather than by re-scoring
+  it in place.
+- **AG-01 accepted-and-disclosed, not fixed (2026-07-16).** UAT found the strip eats
+  `<!-- gitnexus:end -->` when §11 sits at a managed region's tail. Not reachable via
+  0001/0004 (they inject before the FIRST `## `, landing §11 at the region head). Ruled:
+  disclose in 0009's Known limitations; the durable fix (paired §11 start/end markers,
+  retiring the whole inference-based defect class) is ADR-0010's lead open follow-up.
+- **GitNexus generated content removed from AGENTS.md/CLAUDE.md (2026-07-16, `38e3478`).**
+  `analyze --skip-agents-md` is now standing; the one useful instruction (prefer GitNexus
+  MCP over grep) lives once in `~/.codex/AGENTS.md`, whose load path was verified
+  empirically on codex-cli 0.144.4 — ADR-0001's A2 had asserted it without observing it.
+
+### Blockers/Concerns
+
+- ⚠️ [Phase 9, deferred] `09-REVIEW.md` WR-05 + IN-01..IN-04 — consciously scoped out of
+  9.1, carried forward as debt. Review via `/gsd-audit-uat`.
+- ⚠️ [Phase 9, deferred] Migration `0007` carries the same pre-flight defect V-01 named
+  (a project-relative `skills/` path). `0008` deferred it explicitly: "different
+  migration, own scope." Unscheduled.
+- ⚠️ [Phase 9.1] `T-09.1-25`'s mitigation plan credits `0009:405`'s no-temp-files-left
+  check as suite coverage, but it is a human-facing bullet, not an automated assertion.
+  The underlying control (`rm -f` before every exit path) is real and verified in code.
 
 ## Notes
 
