@@ -101,6 +101,25 @@ done
 # Prints the FIRST fenced block following a `**<label>:**` line within
 # `### Step <step_number>`, scoped to end at `### Step <step_number+1>`.
 # <label> is e.g. `Apply` or `Idempotency check`.
+#
+# INLINE-CODE-SPAN FALLBACK (added in 11-02, MIGR-08): 0007/0008's single-line
+# steps (e.g. 0008's Step 4 version record) write the whole command as an
+# INLINE code span on the SAME line as the label --
+# `**Apply:** \`echo "0.6.0" > .codex/workflow-version.txt\`` -- never as a
+# following fenced block. The original fenced-only scan sets `want=1` and then
+# never finds a fence before the label's step ends, so it silently returns
+# EMPTY on this real, immutable document shape -- 11-01-SUMMARY.md flagged
+# this exact gap ("their own version-record steps (Step 4) are inline code
+# spans that no fixture currently extracts via extract_step_block ... flagged
+# for awareness if a future fixture ever tries to extract those steps"). This
+# is that fixture (11-02). When the label line itself carries a single inline
+# `` `...` `` span (nothing else but optional trailing whitespace), that span
+# IS the block -- print it and exit immediately, never falling through to scan
+# for a fence (which could otherwise latch onto an unrelated later fenced
+# block, e.g. `## Post-checks`, since 0008 has no `### Step 5` to bound the
+# scan). When the label line carries nothing inline (0009/0010's style: the
+# label alone on its own line, followed by a fence), behavior is UNCHANGED --
+# falls through to the original want=1 fenced-block scan.
 extract_step_block() {
   local doc="$1" step="$2" label="$3"
   local next_step=$((step + 1))
@@ -109,7 +128,17 @@ extract_step_block() {
       -v lblp="**${label}:**" '
     index($0, stepp) == 1 { in_step=1; next }
     index($0, nextp) == 1 { in_step=0 }
-    in_step && index($0, lblp) == 1 { want=1; next }
+    in_step && index($0, lblp) == 1 {
+      rest = substr($0, length(lblp) + 1)
+      sub(/^[ \t]+/, "", rest)
+      if (rest ~ /^`[^`]+`[ \t]*$/) {
+        sub(/^`/, "", rest)
+        sub(/`[ \t]*$/, "", rest)
+        print rest
+        exit
+      }
+      want=1; next
+    }
     want && /^```/ { inb=1; want=0; next }
     inb && /^```$/ { exit }
     inb { print }
@@ -1851,6 +1880,95 @@ MD
     echo "  ${RED}FAIL${RESET} ADR-0009 missing"
     FAIL=$((FAIL+1))
   fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MIGR-08 — mutation-proven execution coverage for 0008 Step 4's version write
+# (v0.8.0 Enforcement, Not Intention; 11-CONTEXT.md D-05).
+#
+# test_migration_0008 above builds its own `.codex/workflow-version.txt =
+# 0.6.0` sandboxes by hand-writing `echo "0.6.0" > ...` directly into the test
+# (e.g. ~line 1631) -- an assertion that CANNOT fail, exactly the "can't-fail-
+# assertion" class Phase 9.1 existed to close, and 09-VERIFICATION.md flagged
+# this specific gap as the one residual instance still open.
+#
+# This fixture instead:
+#   1. Extracts 0008's REAL Step 4 Apply block via extract_step_block (never a
+#      hand-copied transcription) -- gated by assert_extracted_shape (D-36):
+#      a silently-empty extraction FAILs loudly rather than vacuously passing.
+#   2. Executes the extracted block, cd-isolated, against a sandbox whose
+#      .codex/workflow-version.txt is seeded at 0.5.0 -- the pre-migration
+#      value (D-05) -- with no local skills/ tree (matches a real target
+#      project's shape, not this repo's own scaffolder shape).
+#   3. Asserts EXACT post-execution content equality against `0.6.0` via cmp,
+#      never grep -q -- a substring match would spuriously pass on any file
+#      merely containing "0.6.0" (e.g. "10.6.0" or trailing garbage).
+#
+# Mutation-proven (D-05): 0008's `echo "0.6.0" > .codex/workflow-version.txt`
+# write line was temporarily commented out, this fixture re-run and observed
+# RED (the cmp equality assertion fails -- the file stays at the seeded
+# 0.5.0), then the line was restored and re-run to observe GREEN. See
+# 11-02-SUMMARY.md for the verbatim transcript. 0008 itself is immutable and
+# ships unmodified -- only extract_step_block (above) was extended to also
+# recognize 0008's inline-code-span Apply shape.
+# ─────────────────────────────────────────────────────────────────────────────
+test_migration_0008_step4_write() {
+  echo ""
+  echo "${YELLOW}=== MIGR-08 — 0008 Step 4 write, extracted + executed + exact-asserted ===${RESET}"
+
+  local MIGRATION_0008="$REPO_ROOT/migrations/0008-plan-review-gate.md"
+
+  local step4_apply
+  step4_apply="$(extract_step_block "$MIGRATION_0008" 4 Apply 2>/dev/null)"
+
+  if ! assert_extracted_shape "0008 Step 4 Apply" "$step4_apply" '.codex/workflow-version.txt'; then
+    echo "  ${RED}FAIL${RESET} 0008 Step 4 Apply executes cleanly against the 0.5.0-seeded sandbox — NOT ASSERTED: extraction failed"
+    FAIL=$((FAIL+1))
+    echo "  ${RED}FAIL${RESET} 0008 Step 4: .codex/workflow-version.txt reads exactly 0.6.0 after Apply (cmp) — NOT ASSERTED: extraction failed"
+    FAIL=$((FAIL+1))
+    return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # No-scaffolder-tree shape (D-07 discipline applied here too): a real
+  # target project has no local skills/ tree.
+  mkdir -p "$tmp/.codex"
+  printf '0.5.0\n' > "$tmp/.codex/workflow-version.txt"
+
+  if test ! -e "$tmp/skills"; then
+    echo "  ${GREEN}PASS${RESET} 0008 Step 4 sandbox has no local skills/ directory"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 0008 Step 4 sandbox unexpectedly has a skills/ directory"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Pre-state: the Step 4 idempotency check must be not-applied against the
+  # seeded 0.5.0 value -- proves this is genuinely a pre-migration sandbox,
+  # not one that manufactured the postcondition under test.
+  assert_check "0008 Step 4 idempotency check is not-applied against the 0.5.0-seeded pre-state" \
+    "grep -q '^0.6.0\$' .codex/workflow-version.txt" \
+    "$tmp" "not-applied"
+
+  # Execute the EXTRACTED block -- not a transcription -- cd-isolated inside
+  # the sandbox.
+  ( cd "$tmp" && eval "$step4_apply" ) >/dev/null 2>&1
+
+  # Post-state: EXACT content equality against `0.6.0` via cmp, never grep -q
+  # (D-05).
+  local ref; ref="$(mktemp)"
+  printf '0.6.0\n' > "$ref"
+  if cmp -s "$tmp/.codex/workflow-version.txt" "$ref" 2>/dev/null; then
+    echo "  ${GREEN}PASS${RESET} 0008 Step 4: .codex/workflow-version.txt reads EXACTLY 0.6.0 after the extracted Apply (cmp, not grep -q)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} 0008 Step 4: .codex/workflow-version.txt does NOT read exactly 0.6.0 after the extracted Apply"
+    echo "         got: $(cat "$tmp/.codex/workflow-version.txt" 2>/dev/null || echo '<missing>')"
+    FAIL=$((FAIL+1))
+  fi
+  rm -f "$ref"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -4889,6 +5007,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
   test_migration_0008
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0008-step4" ]; then
+  test_migration_0008_step4_write
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
