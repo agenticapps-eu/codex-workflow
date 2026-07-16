@@ -52,7 +52,7 @@ it is not optional per-item polish.
       Steps 1/2/4 payload (knowledge-capture config block + AGENTS.md ritual-tail
       section + `0.5.0` version record), dropping 0007's Step 3 MIGR-09
       scaffolder-version-bump violation.
-- [ ] **MIGR-11**: `update-codex-agenticapps-workflow/SKILL.md` Stage D documents how
+- [x] **MIGR-11**: `update-codex-agenticapps-workflow/SKILL.md` Stage D documents how
       a permanently-aborting migration-level pre-flight (0007) is handled once a
       superseding migration covers the same `0.4.0→0.5.0` transition — so an
       operator on a stuck 0.4.0 project has a defined, non-looping path forward.
@@ -180,7 +180,7 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 | CI-01 | 10 | Complete |
 | CI-02 | 10 | Complete |
 | MIGR-10 | 11 | Complete |
-| MIGR-11 | 11 | Pending |
+| MIGR-11 | 11 | Complete |
 | MIGR-08 | 11 | Pending |
 | HOOK-01 | 13 | Pending |
 | HOOK-02 | 13 | Pending |
