@@ -104,3 +104,10 @@ None - no external service configuration required. This plan only writes a commi
 ---
 *Phase: 10-ci-that-can-prove-failure*
 *Completed: 2026-07-16*
+
+## Self-Check: PASSED
+
+- FOUND: `.github/workflows/ci.yml`
+- FOUND: `.planning/phases/10-ci-that-can-prove-failure/10-01-SUMMARY.md`
+- FOUND: commit `cda2df5` (Task 1)
+- FOUND: commit `1cf6987` (plan metadata / SUMMARY)
