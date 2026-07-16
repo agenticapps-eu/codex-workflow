@@ -85,6 +85,31 @@ forward. The skill refuses to run on a project that has no
      to the migration's `to_version`. This is the durable
      record.
 
+**Recovery — a migration whose pre-flight always aborts.** If a
+project is stuck because a pending migration's pre-flight exits
+non-zero on every run (for example, migration `0007`'s pre-flight
+greps a scaffolder-relative path no real project has, so it always
+aborts before writing anything), do not keep re-running it — it is a
+known-superseded dead end, not a transient failure.
+
+- **Stuck on `0007`'s abort.** Migration `0007` is superseded by
+  migration `0010` for the same `0.4.0 -> 0.5.0` transition. Re-run
+  `$update-codex-agenticapps-workflow` — the project's recorded
+  version is still `0.4.0`, so `0007` no longer selects and `0010`
+  applies instead, delivering `0007`'s intended payload with a
+  corrected pre-flight. This terminates: once `0010` completes,
+  `.codex/workflow-version.txt` reads `0.5.0` and `0007` is never
+  pending again.
+- **Manually forced to `0.5.0` to escape the abort.** If
+  `.codex/workflow-version.txt` was hand-edited to `0.5.0` to get past
+  `0007`'s abort, the project now reads `0.5.0` but is missing
+  `0007`'s payload (the `knowledge_capture` config block and the
+  AGENTS.md ritual-tail section). Apply `0010` explicitly:
+  `$update-codex-agenticapps-workflow --migration 0010`. `0010`'s
+  version floor accepts a `0.5.0` project for idempotent re-apply and
+  delivers the missing payload without re-touching anything already
+  in place.
+
 ### Stage E — Atomic commit
 
 10. **Per migration, atomic commit.**
