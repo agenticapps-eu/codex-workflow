@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
-status: verifying
-stopped_at: Phase 11 plan 02 (MIGR-08 execution coverage) complete
+status: gaps_found
+stopped_at: Phase 11 verification — gaps_found (SC#3/MIGR-11 recovery runbook); awaiting /gsd-plan-phase 11 --gaps
 last_updated: "2026-07-16T14:25:46.905Z"
 last_activity: 2026-07-16
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 1
   total_plans: 5
   completed_plans: 5
-  percent: 40
+  percent: 20
 ---
 
 # Project State
@@ -39,9 +39,9 @@ Intention".
 
 ## Current Position
 
-Phase: 11 (migration-chain-repair) — EXECUTING
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 11 (migration-chain-repair) — GAPS FOUND (verification 3/4)
+Plan: 3 of 3 executed; gap-closure pending
+Status: Verification gaps_found — SC#3/MIGR-11 recovery runbook fails Stage A selection logic. Run /gsd-plan-phase 11 --gaps.
 Last activity: 2026-07-16
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
