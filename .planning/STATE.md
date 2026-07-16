@@ -4,13 +4,13 @@ milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
 status: executing
 stopped_at: Phase 11 context gathered
-last_updated: "2026-07-16T13:43:29.738Z"
-last_activity: 2026-07-16 -- Phase 11 planning complete
+last_updated: "2026-07-16T14:08:08.344Z"
+last_activity: 2026-07-16
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 5
-  completed_plans: 2
+  completed_plans: 3
   percent: 20
 ---
 
@@ -28,7 +28,7 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** Phase 11 — migration chain repair
+**Current focus:** Phase 11 — migration-chain-repair
 Prove Failure) — first phase, serial, blocking. Every gate this host claims to
 bind actually fires, every migration actually runs, every assertion has been
 observed failing. Roadmap: Phase 10 (CI-01/CI-02) → parallel Phases 11
@@ -39,20 +39,20 @@ Intention".
 
 ## Current Position
 
-Phase: 11
-Plan: Not started
+Phase: 11 (migration-chain-repair) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-16 -- Phase 11 planning complete
+Last activity: 2026-07-16
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
 
-Last session: 2026-07-16T12:43:17.662Z
+Last session: 2026-07-16T14:05:13.645Z
 Stopped at: Phase 11 context gathered
 with success criteria and full REQ-ID mappings; REQUIREMENTS.md Traceability
 table filled; STATE.md progress counters repopulated (milestone-scoped: 5
 phases, plans TBD).
-Resume file: .planning/phases/11-migration-chain-repair/11-CONTEXT.md
+Resume file: None
 
 ## Accumulated Context
 
@@ -69,6 +69,9 @@ decisions for v0.8.0:
 - Phase 14 (paired §11 markers) depends on Phase 10 only, not on 11/12/13 —
   sequenced last deliberately (highest-consequence, most novel), not because
   anything blocks it.
+
+- [Phase ?]: test_drift's leg 1 selects the drift target by semver-max to_version across migrations/*.md, not filename sort — Migration 0010 is a version-backport whose filename sorts last but to_version (0.5.0) is below the real drift target (0.7.0, from 0009); a false mismatch would otherwise trip on every run
+- [Phase ?]: Migration 0010's Step 3 Apply uses a fenced code block, diverging from 0007/0008's inline-code-span style for the equivalent step — extract_step_block only recognizes fenced blocks; the inline form caused the test fixture's extractor to fall through into the wrong fenced block
 
 ### Blockers/Concerns
 

@@ -161,7 +161,7 @@ shut.
      `.codex/workflow-version.txt` content equality — breaking the write line is
      observed RED, restoring it is observed GREEN.
 **Plans**: 3 plans
-- [ ] 11-01-PLAN.md — MIGR-10: forward migration 0010 (0007-fix) re-delivering 0007's Steps 1/2/4 payload with a corrected `.codex/workflow-version.txt`-only pre-flight, plus its RED→GREEN delivery + document-contract fixture and a drift-target fix so 0010's backport `to_version` keeps `test_drift` green
+- [x] 11-01-PLAN.md — MIGR-10: forward migration 0010 (0007-fix) re-delivering 0007's Steps 1/2/4 payload with a corrected `.codex/workflow-version.txt`-only pre-flight, plus its RED→GREEN delivery + document-contract fixture and a drift-target fix so 0010's backport `to_version` keeps `test_drift` green
 - [ ] 11-02-PLAN.md — MIGR-08: mutation-proven fixture extracting 0008's Step 4 Apply block via `extract_step_block`, executing it against a 0.5.0-seeded sandbox, asserting exact `0.6.0` content equality
 - [ ] 11-03-PLAN.md — MIGR-11: update-skill Stage D recovery runbook for the two stuck-at-0.4.0 operator states (superseded 0007 abort; manual-0.5.0 escape)
 **Notes**: The new migration is the next available migration ID — kept
@@ -288,7 +288,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9. Region-Aware §11 Placement                   | v0.7.0    | 5/5             | Complete    | 2026-07-16 |
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
-| 11. Migration Chain Repair                      | v0.8.0    | 0/3             | Not started | -          |
+| 11. Migration Chain Repair                      | v0.8.0    | 1/3 | In Progress|  |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 0/TBD           | Not started | -          |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |

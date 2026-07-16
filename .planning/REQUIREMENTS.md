@@ -45,7 +45,7 @@ it is not optional per-item polish.
 
 ### Migration Chain Repair (MIGR)
 
-- [ ] **MIGR-10**: A new forward migration (next available ID) heals migration
+- [x] **MIGR-10**: A new forward migration (next available ID) heals migration
       0007's chain break for existing installs — its pre-flight reads
       `.codex/workflow-version.txt` exclusively (a direct reuse of 0008's proven
       pattern, never a `skills/**/SKILL.md` grep), and it re-delivers 0007's
@@ -179,7 +179,7 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 |--------|-------|--------|
 | CI-01 | 10 | Complete |
 | CI-02 | 10 | Complete |
-| MIGR-10 | 11 | Pending |
+| MIGR-10 | 11 | Complete |
 | MIGR-11 | 11 | Pending |
 | MIGR-08 | 11 | Pending |
 | HOOK-01 | 13 | Pending |

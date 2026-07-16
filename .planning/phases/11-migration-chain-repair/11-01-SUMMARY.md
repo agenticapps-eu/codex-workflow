@@ -178,6 +178,17 @@ None — no external service configuration required.
 - Phase 11's remaining scope (MIGR-11 Stage D recovery-runbook documentation, MIGR-08 execution-coverage fixture) is **not** covered by this plan — 11-01 was scoped to MIGR-10 only per its frontmatter (`requirements: [MIGR-10]`). Subsequent 11-0N plans pick those up.
 - No blockers for the next plan in this phase.
 
+## Self-Check: PASSED
+
+- FOUND: `migrations/0010-heal-0007-knowledge-capture.md`
+- FOUND: `.planning/phases/11-migration-chain-repair/11-01-SUMMARY.md`
+- FOUND commit `1d2ad7c` (Task 1: test_migration_0010 fixture, RED)
+- FOUND commit `ee48b0e` (Task 2: migration 0010, GREEN)
+- FOUND commit `153c784` (Task 3: test_drift semver-max fix)
+- FOUND commit `6f32296` (docs: plan summary)
+- `bash migrations/run-tests.sh` (unfiltered) exits 0 — 388 PASS / 0 FAIL / 1 SKIP
+- `git diff --stat vendor/agenticapps-shared/` is empty (pinned mechanism untouched)
+
 ---
 *Phase: 11-migration-chain-repair*
 *Completed: 2026-07-16*
