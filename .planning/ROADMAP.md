@@ -284,7 +284,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 8. Plan-Review Gate                             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
 | 9. Region-Aware §11 Placement                   | v0.7.0    | 5/5             | Complete    | 2026-07-16 |
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
-| 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete   | 2026-07-16 |
+| 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 0/TBD           | Not started | -          |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 0/TBD           | Not started | -          |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |

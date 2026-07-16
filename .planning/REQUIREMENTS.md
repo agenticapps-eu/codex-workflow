@@ -32,13 +32,13 @@ it is not optional per-item polish.
 
 ### Continuous Integration (CI)
 
-- [ ] **CI-01**: A GitHub Actions workflow runs on push and pull_request to `main`,
+- [x] **CI-01**: A GitHub Actions workflow runs on push and pull_request to `main`,
       checks out with `submodules: recursive` (the harness hard-fails without
       `vendor/agenticapps-shared`), runs `migrations/run-tests.sh` unfiltered
       (which already exercises `test_drift`), on an ubuntu + macOS matrix, and the
       job's own exit status reflects the suite's — no `|| true`, no informational
       bolt-on.
-- [ ] **CI-02**: CI is proven able to go RED — a scratch PR carrying a deliberately
+- [x] **CI-02**: CI is proven able to go RED — a scratch PR carrying a deliberately
       reverted guard is observed failing in the GitHub Actions UI itself (not just
       a local run), and the new check is registered as a required status check on
       `main`'s branch protection (`gh api .../branches/main/protection`).
@@ -177,8 +177,8 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| CI-01 | 10 | Pending |
-| CI-02 | 10 | Pending |
+| CI-01 | 10 | Complete |
+| CI-02 | 10 | Complete |
 | MIGR-10 | 11 | Pending |
 | MIGR-11 | 11 | Pending |
 | MIGR-08 | 11 | Pending |
