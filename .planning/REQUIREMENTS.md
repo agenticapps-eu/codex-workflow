@@ -177,4 +177,27 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| _pending roadmap_ | | |
+| CI-01 | 10 | Pending |
+| CI-02 | 10 | Pending |
+| MIGR-10 | 11 | Pending |
+| MIGR-11 | 11 | Pending |
+| MIGR-08 | 11 | Pending |
+| HOOK-01 | 13 | Pending |
+| HOOK-02 | 13 | Pending |
+| HOOK-03 | 13 | Pending |
+| MARK-01 | 14 | Pending |
+| MARK-02 | 14 | Pending |
+| MARK-03 | 14 | Pending |
+| MARK-04 | 14 | Pending |
+| WR-03 | 12 | Pending |
+| REV-01 | 12 | Pending |
+| REV-02 | 12 | Pending |
+| REV-03 | 12 | Pending |
+| REV-04 | 12 | Pending |
+| DOC-03 | 13 | Pending |
+| DOC-04 | 14 | Pending |
+| MIGR-FUT-01 | Deferred (Future Requirements) | Not in v0.8.0 |
+
+**Coverage:** 19/19 v0.8.0 requirements mapped to Phases 10-14. `MIGR-FUT-01`
+is Future Requirements scope, not v0.8.0 — listed above for completeness only,
+not counted in the 19.
