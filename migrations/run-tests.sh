@@ -4634,6 +4634,199 @@ test_migration_0009() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0010 — Heal 0007's knowledge-capture chain break (v0.4.0 -> 0.5.0)
+#
+# MIGR-10. 0007's pre-flight greps a scaffolder-relative path
+# (`skills/agentic-apps-workflow/SKILL.md`) no real target project has, so it
+# hard-aborts (exit 3) before writing anything — 0008/0009's own floor checks
+# then never reach a version the fleet ever recorded. 0010 re-delivers 0007's
+# Steps 1/2/4 payload (config.json seed, AGENTS.md ritual-tail, version
+# record — renumbered here to Steps 1/2/3, 0007's Step 3 scaffolder bump
+# dropped per D-03/MIGR-09) behind a corrected pre-flight that reads
+# `.codex/workflow-version.txt` exclusively, verbatim-reusing 0008's proven
+# floor-check pattern (D-01).
+#
+# RED-BEFORE / GREEN-AFTER (success criterion #1): this fixture is authored
+# BEFORE migrations/0010-heal-0007-knowledge-capture.md exists. Every
+# extraction below is gated by assert_extracted_shape (D-36) — with no
+# document to extract from, each gate reports an empty-extraction FAIL and
+# every downstream D-06/D-07 assertion reports via _m0010_fail rather than
+# silently vanishing. `bash migrations/run-tests.sh 0010` is expected to exit
+# NON-ZERO until Task 2 authors the migration. DO NOT stub 0010 to turn this
+# green early — that is Task 2's job (D-36: "non-empty is not the same as
+# correct").
+# ─────────────────────────────────────────────────────────────────────────────
+
+# _m0010_ok <rc> <label> — PASS iff rc is 0. Mirrors _m0009_ok's convention
+# (file-scope, `_m0010_` prefix — shell has no function-local functions).
+_m0010_ok() {
+  if [ "$1" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} $2"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $2"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# _m0010_fail <label> — unconditional FAIL, used when an extraction gate is
+# down so a case reports FAILED rather than silently disappearing.
+_m0010_fail() {
+  echo "  ${RED}FAIL${RESET} $1"
+  FAIL=$((FAIL+1))
+}
+
+# _m0010_apply <sandbox_dir> <codex_home> <block_text>
+# Runs an extracted Apply block against the sandbox with CODEX_HOME resolved
+# to the real repo root (0010's Apply blocks resolve
+# $CODEX_HOME/skills/setup-codex-agenticapps-workflow/templates/... and
+# `git rev-parse --show-toplevel`, so the sandbox is `git init`-ed and
+# CODEX_HOME points at this trusted repo, never at the developer's real
+# ~/.codex). Subshell-wrapped so a block that exits non-zero cannot terminate
+# the whole harness mid-suite (same discipline as _m0009_apply).
+_m0010_apply() {
+  ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
+}
+
+test_migration_0010() {
+  echo ""
+  echo "${YELLOW}=== Migration 0010 — Heal 0007 knowledge-capture chain break ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — config-merge test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local MIGRATION_0010="$REPO_ROOT/migrations/0010-heal-0007-knowledge-capture.md"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # ── Extraction (TEST-01): 0010's own shell, pulled from 0010's own document,
+  # never hand-transcribed. Every extraction is gated by assert_extracted_shape
+  # (D-36) before it is executed or asserted-on.
+  local pf_block applies_to_block step1_apply step2_apply step3_apply
+  pf_block="$(extract_preflight_block "$MIGRATION_0010" 2>/dev/null)"
+  applies_to_block="$(awk '/^applies_to:/{f=1;next} f && /^[^ ]/{exit} f{print}' "$MIGRATION_0010")"
+  step1_apply="$(extract_step_block "$MIGRATION_0010" 1 Apply 2>/dev/null)"
+  step2_apply="$(extract_step_block "$MIGRATION_0010" 2 Apply 2>/dev/null)"
+  step3_apply="$(extract_step_block "$MIGRATION_0010" 3 Apply 2>/dev/null)"
+
+  local pf_ok=1 applies_ok=1 s1_ok=1 s2_ok=1 s3_ok=1
+  assert_extracted_shape "0010 Pre-flight" "$pf_block" '.codex/workflow-version.txt' || pf_ok=0
+  assert_extracted_shape "0010 applies_to" "$applies_to_block" '.planning/config.json' || applies_ok=0
+  assert_extracted_shape "0010 Step 1 Apply" "$step1_apply" '.planning/config.json' || s1_ok=0
+  assert_extracted_shape "0010 Step 2 Apply" "$step2_apply" 'AGENTS.md' || s2_ok=0
+  assert_extracted_shape "0010 Step 3 Apply" "$step3_apply" '.codex/workflow-version.txt' || s3_ok=0
+
+  local all_ok=1
+  [ "$pf_ok" = "1" ] && [ "$applies_ok" = "1" ] && [ "$s1_ok" = "1" ] \
+    && [ "$s2_ok" = "1" ] && [ "$s3_ok" = "1" ] || all_ok=0
+
+  # ── D-07 document contract: no executable surface of 0010 (pre-flight,
+  # applies_to, every Step Apply) names skills/agentic-apps-workflow — proves
+  # the original V-01-class bug is not re-introduced by copy-paste. Matched
+  # against the exact D-07 substring, NOT `skills/` broadly, which would
+  # false-positive on the legitimate
+  # skills/setup-codex-agenticapps-workflow/templates/... references 0010
+  # correctly retains from 0007's Steps 1/2.
+  local surface_bad=0
+  [ "$pf_ok" = "1" ] && { printf '%s' "$pf_block" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
+  [ "$applies_ok" = "1" ] && { printf '%s' "$applies_to_block" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
+  [ "$s1_ok" = "1" ] && { printf '%s' "$step1_apply" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
+  [ "$s2_ok" = "1" ] && { printf '%s' "$step2_apply" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
+  [ "$s3_ok" = "1" ] && { printf '%s' "$step3_apply" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
+  if [ "$all_ok" = "1" ]; then
+    _m0010_ok "$surface_bad" "D-07: no executable surface (pre-flight, applies_to, every Step Apply) names skills/agentic-apps-workflow"
+  else
+    _m0010_fail "D-07: no executable surface names skills/agentic-apps-workflow — NOT ASSERTED: one or more extractions failed"
+  fi
+
+  # ── D-06 delivery fixture: a 0.4.0 sandbox carrying NONE of 0007's
+  # artifacts, shaped like a real target project (D-07's no-local-skills/-tree
+  # shape — mirrors 0008's own no-scaffolder-tree fixture,
+  # `migrations/run-tests.sh:1651-1727`).
+  if [ "$all_ok" = "1" ]; then
+    local sbx="$tmp/sandbox"
+    mkdir -p "$sbx/.planning" "$sbx/.codex"
+    ( cd "$sbx" && git init -q )
+    printf '0.4.0\n' > "$sbx/.codex/workflow-version.txt"
+    cat > "$sbx/AGENTS.md" <<'MD'
+# AGENTS.md — 0010 sandbox fixture
+
+<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
+
+## Session handoff
+
+Existing content.
+
+<!-- END: agentic-apps-workflow sections -->
+MD
+
+    # Self-guard 1 (D-07 shape): the sandbox really has no local skills/ tree.
+    if test ! -e "$sbx/skills"; then
+      _m0010_ok 0 "D-07 sandbox self-guard: no local skills/ directory (no-scaffolder-tree shape)"
+    else
+      _m0010_ok 1 "D-07 sandbox self-guard: no local skills/ directory (no-scaffolder-tree shape)"
+    fi
+
+    # Self-guard 2 (D-06 shape): none of 0007's artifacts are present yet —
+    # the clean pre-migration 0.4.0 state.
+    if ! grep -q '^## Knowledge Capture' "$sbx/AGENTS.md" \
+       && [ ! -f "$sbx/.planning/config.json" ]; then
+      _m0010_ok 0 "D-06 sandbox self-guard: carries none of 0007's artifacts before apply (clean 0.4.0 state)"
+    else
+      _m0010_ok 1 "D-06 sandbox self-guard: carries none of 0007's artifacts before apply (clean 0.4.0 state)"
+    fi
+
+    # Execute the extracted Step 1/2/3 Apply blocks, in order, against the
+    # sandbox. CODEX_HOME points at the real repo root (trusted, T-11-02) so
+    # the blocks' $CODEX_HOME/skills/setup-codex-agenticapps-workflow/templates/...
+    # reads resolve to the real templates.
+    local out rc
+    out="$(_m0010_apply "$sbx" "$REPO_ROOT" "$step1_apply")"; rc=$?
+    _m0010_ok "$rc" "Step 1 Apply executes cleanly against the 0.4.0 sandbox — got exit=$rc"
+    [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
+
+    out="$(_m0010_apply "$sbx" "$REPO_ROOT" "$step2_apply")"; rc=$?
+    _m0010_ok "$rc" "Step 2 Apply executes cleanly against the 0.4.0 sandbox — got exit=$rc"
+    [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
+
+    out="$(_m0010_apply "$sbx" "$REPO_ROOT" "$step3_apply")"; rc=$?
+    _m0010_ok "$rc" "Step 3 Apply executes cleanly against the 0.4.0 sandbox — got exit=$rc"
+    [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
+
+    # D-06 assertions: payload delivered + version healed.
+    if ( cd "$sbx" && jq -e '.knowledge_capture.enabled == true' .planning/config.json >/dev/null 2>&1 ); then
+      _m0010_ok 0 "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3"
+    else
+      _m0010_ok 1 "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3"
+    fi
+
+    if grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' "$sbx/AGENTS.md"; then
+      _m0010_ok 0 "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3"
+    else
+      _m0010_ok 1 "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3"
+    fi
+
+    if [ "$(cat "$sbx/.codex/workflow-version.txt" 2>/dev/null)" = "0.5.0" ]; then
+      _m0010_ok 0 "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3"
+    else
+      _m0010_ok 1 "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3"
+    fi
+  else
+    _m0010_fail "D-07 sandbox self-guard: no local skills/ directory — NOT ASSERTED: one or more extractions failed"
+    _m0010_fail "D-06 sandbox self-guard: carries none of 0007's artifacts before apply — NOT ASSERTED: extraction failed"
+    _m0010_fail "Step 1 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
+    _m0010_fail "Step 2 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
+    _m0010_fail "Step 3 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
+    _m0010_fail "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3 — NOT ASSERTED: extraction failed"
+    _m0010_fail "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3 — NOT ASSERTED: extraction failed"
+    _m0010_fail "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3 — NOT ASSERTED: extraction failed"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -4675,6 +4868,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
   test_migration_0009
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0010" ]; then
+  test_migration_0010
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
