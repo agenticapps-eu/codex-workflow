@@ -125,7 +125,13 @@ dominant failure mode across the last two milestones (merging on a local green).
      RED, not just GREEN.
   3. The new check is registered as a required status check on `main`'s branch
      protection, confirmed via `gh api repos/:owner/:repo/branches/main/protection`.
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 10-01-PLAN.md — Author the real CI workflow: matrix test job (ubuntu +
+  macOS, `fail-fast: false`, `submodules: recursive`, ubuntu-only gawk, unwrapped
+  `run-tests.sh`) + stable `ci-gate` aggregation job (CI-01)
+- [ ] 10-02-PLAN.md — Prove `ci-gate` can go RED (throwaway drift-reverting PR
+  observed red in the Actions UI, closed unmerged) + register `ci-gate` as the
+  sole required status check on `main` with strict/require-PR/include-admins (CI-02)
 
 ### Phase 11: Migration Chain Repair
 **Goal**: Every real install stuck between 0.4.0 and 0.5.0 can reach 0008/0009's
@@ -278,7 +284,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 8. Plan-Review Gate                             | v0.6.0    | 9/9             | Complete    | 2026-07-15 |
 | 9. Region-Aware §11 Placement                   | v0.7.0    | 5/5             | Complete    | 2026-07-16 |
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
-| 10. CI That Can Prove Failure                   | v0.8.0    | 0/TBD           | Not started | -          |
+| 10. CI That Can Prove Failure                   | v0.8.0    | 0/2             | Not started | -          |
 | 11. Migration Chain Repair                      | v0.8.0    | 0/TBD           | Not started | -          |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 0/TBD           | Not started | -          |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
