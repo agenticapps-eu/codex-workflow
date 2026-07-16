@@ -56,7 +56,7 @@ it is not optional per-item polish.
       a permanently-aborting migration-level pre-flight (0007) is handled once a
       superseding migration covers the same `0.4.0→0.5.0` transition — so an
       operator on a stuck 0.4.0 project has a defined, non-looping path forward.
-- [ ] **MIGR-08**: A fixture extracts migration 0008's Step 4 Apply block via
+- [x] **MIGR-08**: A fixture extracts migration 0008's Step 4 Apply block via
       `extract_step_block` (not a hand-copied transcription), executes it against a
       sandbox seeded at the pre-migration value, and asserts exact
       `.codex/workflow-version.txt` content equality — mutation-proven by breaking
@@ -181,7 +181,7 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 | CI-02 | 10 | Complete |
 | MIGR-10 | 11 | Complete |
 | MIGR-11 | 11 | Complete |
-| MIGR-08 | 11 | Pending |
+| MIGR-08 | 11 | Complete |
 | HOOK-01 | 13 | Pending |
 | HOOK-02 | 13 | Pending |
 | HOOK-03 | 13 | Pending |

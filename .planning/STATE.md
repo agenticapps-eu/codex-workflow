@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
-status: executing
-stopped_at: Phase 11 plan 03 (recovery runbook) complete
-last_updated: "2026-07-16T14:14:14.274Z"
+status: verifying
+stopped_at: Phase 11 plan 02 (MIGR-08 execution coverage) complete
+last_updated: "2026-07-16T14:25:46.905Z"
 last_activity: 2026-07-16
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 4
-  percent: 20
+  completed_plans: 5
+  percent: 40
 ---
 
 # Project State
@@ -41,14 +41,14 @@ Intention".
 
 Phase: 11 (migration-chain-repair) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-16
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
 
-Last session: 2026-07-16T14:14:14.267Z
-Stopped at: Phase 11 plan 03 (recovery runbook) complete
+Last session: 2026-07-16T14:25:46.896Z
+Stopped at: Phase 11 plan 02 (MIGR-08 execution coverage) complete
 with success criteria and full REQ-ID mappings; REQUIREMENTS.md Traceability
 table filled; STATE.md progress counters repopulated (milestone-scoped: 5
 phases, plans TBD).
@@ -73,6 +73,7 @@ decisions for v0.8.0:
 - [Phase ?]: test_drift's leg 1 selects the drift target by semver-max to_version across migrations/*.md, not filename sort — Migration 0010 is a version-backport whose filename sorts last but to_version (0.5.0) is below the real drift target (0.7.0, from 0009); a false mismatch would otherwise trip on every run
 - [Phase ?]: Migration 0010's Step 3 Apply uses a fenced code block, diverging from 0007/0008's inline-code-span style for the equivalent step — extract_step_block only recognizes fenced blocks; the inline form caused the test fixture's extractor to fall through into the wrong fenced block
 - [Phase 11]: MIGR-11 Stage D recovery runbook placed as an un-numbered bold-lead-in block inside Stage D — Apply, not a new top-level heading — D-04 requires concise, non-thin recovery prose inside Stage D; matches Failure-modes bullet style
+- [Phase 11]: MIGR-08 fixture extended extract_step_block with an inline-code-span fallback to reach 0008 Step 4's immutable inline Apply format — migrations are immutable; extraction had to be fixed rather than transcribing 0008's write, closing the gap 11-01-SUMMARY.md flagged
 
 ### Blockers/Concerns
 

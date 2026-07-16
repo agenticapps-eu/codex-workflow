@@ -100,7 +100,7 @@ but because it is the highest-consequence, most structurally novel change in the
 milestone and most benefits from a CI-verified baseline.
 
 - [x] **Phase 10: CI That Can Prove Failure** - Replace the Phase-0 placeholder workflow with real, remote CI that runs the full suite and is proven able to go red (completed 2026-07-16)
-- [ ] **Phase 11: Migration Chain Repair** - Heal migration 0007's chain break for real installs and close MIGR-08's residual coverage gap
+- [x] **Phase 11: Migration Chain Repair** - Heal migration 0007's chain break for real installs and close MIGR-08's residual coverage gap (completed 2026-07-16)
 - [ ] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes
 - [ ] **Phase 13: Native Enforcement — Plan-Review Hook** - Bind the plan-review gate to codex-cli's native `PreToolUse` surface, project-scoped, superseding ADR-0009 d.9
 - [ ] **Phase 14: Paired §11 Markers** - Explicit start/end markers bound the managed §11 block, retiring the inference-based defect class AG-01 belongs to
@@ -162,7 +162,7 @@ shut.
      observed RED, restoring it is observed GREEN.
 **Plans**: 3 plans
 - [x] 11-01-PLAN.md — MIGR-10: forward migration 0010 (0007-fix) re-delivering 0007's Steps 1/2/4 payload with a corrected `.codex/workflow-version.txt`-only pre-flight, plus its RED→GREEN delivery + document-contract fixture and a drift-target fix so 0010's backport `to_version` keeps `test_drift` green
-- [ ] 11-02-PLAN.md — MIGR-08: mutation-proven fixture extracting 0008's Step 4 Apply block via `extract_step_block`, executing it against a 0.5.0-seeded sandbox, asserting exact `0.6.0` content equality
+- [x] 11-02-PLAN.md — MIGR-08: mutation-proven fixture extracting 0008's Step 4 Apply block via `extract_step_block`, executing it against a 0.5.0-seeded sandbox, asserting exact `0.6.0` content equality
 - [x] 11-03-PLAN.md — MIGR-11: update-skill Stage D recovery runbook for the two stuck-at-0.4.0 operator states (superseded 0007 abort; manual-0.5.0 escape)
 **Notes**: The new migration is the next available migration ID — kept
 distinct from any ADR number per REV-04's numbering-collision fix (Phase 12);
@@ -288,7 +288,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9. Region-Aware §11 Placement                   | v0.7.0    | 5/5             | Complete    | 2026-07-16 |
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
-| 11. Migration Chain Repair                      | v0.8.0    | 2/3 | In Progress|  |
+| 11. Migration Chain Repair                      | v0.8.0    | 3/3 | Complete   | 2026-07-16 |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 0/TBD           | Not started | -          |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
