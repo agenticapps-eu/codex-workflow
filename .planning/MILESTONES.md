@@ -1,5 +1,92 @@
 # Milestones
 
+## v0.7.0 Region-Aware §11 Placement (Shipped: 2026-07-16)
+
+**Phases completed:** 2 phases (9 + inserted 9.1), 12 plans
+
+**Delivered:** Migration 0009 heals the §11 coding-discipline block's anchor so a
+leading GitNexus region can no longer silently destroy it — with the anchor rule
+validated empirically before it was written, and the adjacent data-loss defects
+its own code review uncovered closed before close.
+
+**Key accomplishments:**
+
+- **Region-aware anchor rule, validated before it was written.** §11 now inserts
+  immediately before the first `## ` heading *or* `<!-- gitnexus:start -->`
+  marker — whichever comes first — with an EOF fallback. The ordering constraint
+  was enforced as wave topology, not intention: `validate-0009-anchor.sh` ran in
+  wave 1 and proved zero-churn re-derivation against real AGENTS.md files
+  (ANCHOR-03/04) before authoring began in wave 3. Counter-cases proved the
+  assertions discriminate rather than passing vacuously.
+- **RED before GREEN, auditable in commit order.** The fixture suite failed
+  against the naive anchor before migration 0009 existed (`a4b137f`/`2315393`/
+  `185abfd` precede `49b2fab`). Ten fixture cases execute the migration's own
+  shell extracted from the document itself — never a transcribed copy (TEST-01),
+  retiring the inlined anchor at `run-tests.sh:119` (TEST-04).
+- **Phase 9.1 closed three reproduced data-loss paths in the shipped 0009.**
+  CR-01 (runaway strip on drifted/orphaned provenance), CR-02 (unanchored
+  provenance regex, `PROV_RE` anchored at all four sites), and CR-03 — each first
+  reproduced as a falsifiable RED fixture against the unfixed migration, then
+  turned GREEN. A phase whose stated purpose was closing a block-destruction
+  defect had shipped a *different* one in the adjacent mechanic; the review
+  caught it.
+- **The migration now actually runs on the projects it targets (V-01).** 0009's
+  pre-flight had grepped a project-relative `skills/` path no real install has,
+  aborting `exit 3` on every scaffolded project — a byte-for-byte replay of
+  migration 0007's known defect. Pre-flight now reads
+  `.codex/workflow-version.txt` per 0008's precedent, proven by UAT counterfactual
+  against a real target-project shape.
+- **Dead assertions killed, not just added to.** Three checks that read as
+  coverage but could not fail were fixed: `state-a` rewritten genuinely off-anchor
+  (V-02), the vendored mirror's unasserted single-`## ` invariant, and
+  `12-idempotent-rerun` — ANCHOR-05's only live coverage of the strip
+  terminator's alternation. Each proven by recorded delete-observe-restore
+  mutation gates.
+- **Decision record and release altitude.** ADR-0010 records the anchor rule, the
+  rejected "anchor before the region if one exists" alternative, and §12's
+  advisory status — including a dated in-place Correction of two load-bearing
+  errors found during review. CHANGELOG.md carries the operator upgrade path.
+
+**Verification at close:** Phase 9 — 21/21 requirements delivered (0
+NOT-DELIVERED; 5 gaps deferred to and closed by 9.1). Phase 9.1 — verification
+11/11; UAT 10 passed / 1 accepted-and-disclosed; security 37/37 threats closed,
+`threats_open: 0`. Full suite 369 PASS / 0 FAIL / 1 SKIP.
+
+**Stats:** 111 commits, 61 files changed (+16,799 / −137), 2026-07-15 → 2026-07-16.
+
+### Known Gaps / Deferred
+
+Consciously scoped out and carried forward as debt — recorded so this milestone's
+close does not silently absorb them (see STATE.md Blockers/Concerns):
+
+- `09-REVIEW.md` **WR-05** — `validate-0009-anchor.sh`'s "deterministic banner"
+  claim contradicted by its own output.
+- `09-REVIEW.md` **IN-01..IN-04** — `extract_step_block` prefix-matching
+  `### Step 1` vs `### Step 10`; CASE 1's unasserted line drop; the ADR/migration
+  numbering collision; predictable temp-file names in CWD.
+- **Migration `0007`'s identical pre-flight defect** — V-01's twin. `0008`
+  deferred it explicitly ("different migration, own scope"). Unscheduled.
+- **AG-01** (UAT, accepted-and-disclosed by user ruling) — the strip eats
+  `<!-- gitnexus:end -->` when §11 sits at a managed region's *tail*. Not
+  reachable via migrations 0001/0004, which land §11 at the region head. Disclosed
+  in 0009's Known limitations; the durable fix (paired §11 start/end markers,
+  retiring the whole inference-based defect class) is ADR-0010's lead open
+  follow-up.
+- **`T-09.1-25`'s no-temp-files-left check** is a human-facing bullet, not an
+  automated assertion. The underlying `rm -f` control is real and verified in code.
+
+**Upstream CR-01 is filed, not outstanding.** The executor's own filing attempt was
+denied (the approval reached it via a coordinator relay, not the user directly) and
+`09.1-07-SUMMARY.md` records criterion 10 as unsatisfied on that basis — but the
+user filed it directly as
+[claude-workflow#90](https://github.com/agenticapps-eu/claude-workflow/issues/90),
+scoped to CR-01 only. `09.1-VERIFICATION.md` scored criterion 10 **VERIFIED**
+against the live issue; the URL is recorded in `09.1-UPSTREAM-CR-01.md:3` and
+`ADR-0010:546`. The SUMMARY's "NOT filed" is the executor's local view, superseded
+by verification. Noted here because the two artifacts read as contradictory.
+
+---
+
 ## v0.6.0 Plan-Review Gate (Shipped: 2026-07-15)
 
 **Phases completed:** 1 phases, 9 plans, 20 tasks

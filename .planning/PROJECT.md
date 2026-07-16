@@ -18,23 +18,34 @@ Projects on the Codex host get the same spec-first gates, in the same shape, as
 every other host — installed by scaffold or carried forward by migration, without
 hand-editing.
 
-## Current Milestone: v0.7.0 Region-Aware §11 Placement
+## Current State
 
-**Goal:** Ship migration 0009 so the spec §11 Coding Discipline block anchors
-above a leading GitNexus region instead of inside it, closing a latent
-block-destruction defect for projects this host scaffolds.
+**Shipped: v0.7.0 Region-Aware §11 Placement** (2026-07-16) — Phases 9 + 9.1,
+12 plans, 21/21 requirements. Migration chain now runs 0000–0009. Local suite:
+369 PASS / 0 FAIL / 1 SKIP. Previous: v0.6.0 Plan-Review Gate (2026-07-15).
 
-**Target features:**
+The §11 placement defect this milestone existed to close is closed, and the
+data-loss defects the work itself surfaced are closed with it. §11 now anchors
+above a leading GitNexus region; migration 0009 heals states A–D and — after 9.1 —
+actually executes on real target projects rather than aborting `exit 3` on every
+install.
 
-- Migration `0009-spec-11-region-aware-placement.md` (`0.6.0` → `0.7.0`) healing
-  all four states: no-op when correctly anchored, move when inside a region,
-  inject when absent, refuse (`exit 3`) on a hand-pasted block with no provenance.
-- The region-aware anchor rule, with its rejected alternative recorded.
-- Empirical validation of the rule against real AGENTS.md files before the
-  migration is written.
-- A TDD fixture suite that extracts the migration's shell from the document
-  rather than inlining a copy of it.
-- An ADR recording the anchor decision.
+**Next milestone: not yet chosen.** Run `/gsd-new-milestone` to scope it. The
+strongest candidates, in rough priority order:
+
+1. **`CI-01` — make CI verify something.** `.github/workflows/ci.yml` is still the
+   Phase 0 placeholder (`echo` + `exit 0`). Two milestones have now shipped on a
+   *local* green, which is exactly the "assertions that cannot fail" class this
+   repo has twice paid for. Needs `submodules: recursive`.
+2. **`HOOK-01` — make the plan-review gate actually block.** Currently
+   agent-mediated: `AGENTS.md` ritual text instructs the verifier's invocation but
+   nothing executes it. Binding `check-plan-review.sh` to the native
+   `~/.codex/hooks.json` `PreToolUse` surface (which is why it already carries
+   `--file`) would let ADR-0009's criterion 1 be restated as an unconditional block.
+3. **Paired §11 start/end markers** — ADR-0010's lead open follow-up. Retires the
+   whole inference-based defect class rather than hardening it case by case, and
+   is the durable fix for AG-01's region-tail hazard.
+4. **Migration `0007`'s pre-flight defect** — V-01's untouched twin.
 
 ## Requirements
 
@@ -64,13 +75,30 @@ block-destruction defect for projects this host scaffolds.
 
 ### Active
 
-<!-- Current scope. Building toward these. See REQUIREMENTS.md for REQ-IDs. -->
+<!-- Not in a milestone yet. Next milestone scoped via /gsd-new-milestone. -->
 
-- [ ] MIGR-08 execution coverage: no fixture runs Step 2's Apply block and
-      asserts the resulting `.codex/workflow-version.txt` content. Correct by
-      inspection and reachable now that V-01 is fixed, but untested — flagged by
-      Phase 9.1's verification as the one residual of the exact class that phase
-      existed to close.
+No milestone is active. Carried debt, unscheduled — see ROADMAP.md "Known
+Follow-ups" for the full record:
+
+- [ ] **MIGR-08 execution coverage** — no fixture runs the Apply block and asserts
+      the resulting `.codex/workflow-version.txt` content. Correct by inspection
+      and reachable now that V-01 is fixed, but untested. Flagged by Phase 9.1's
+      verification as the one residual of the exact class that phase existed to
+      close.
+- [ ] **`CI-01`** — CI is still a placeholder; two milestones shipped on a local
+      green.
+- [ ] **`HOOK-01`** — plan-review gate is agent-mediated, not enforced (ADR-0009
+      d.9).
+- [ ] **`WR-03`** — `--file` symlink-traversal guard is lexical-`..`-only
+      (ADR-0009 d.12, accepted limitation).
+- [ ] **AG-01** — region-*tail* strip hazard; accepted-and-disclosed 2026-07-16,
+      not fixed. Unreachable via 0001/0004, which land §11 at the region head.
+      Durable fix is paired §11 markers.
+- [ ] **Migration `0007`'s pre-flight defect** — V-01's twin; `0008` deferred it
+      as "different migration, own scope."
+- [ ] **`09-REVIEW.md` WR-05 + IN-01..IN-04** — banner determinism; extractor
+      prefix-matching `### Step 1` vs `### Step 10`; unasserted line drop;
+      ADR/migration numbering collision; predictable temp-file names in CWD.
 
 ### Out of Scope
 
@@ -94,35 +122,44 @@ block-destruction defect for projects this host scaffolds.
 
 ## Context
 
-- **This host is currently safe; the defect is latent, not live.** Verified
-  2026-07-15: `AGENTS.md` carries §11 at L18 and the GitNexus region at L271–313,
-  so the region does not lead the file and nothing is being destroyed today. This
-  milestone is a placement fix for projects *scaffolded by* this host, plus
-  self-protection. Unlike claude-workflow, there is no broken repo to repair.
-- **The defect:** the §11 injector anchors before the first `## ` heading. In an
-  AGENTS.md that leads with a GitNexus block, that heading is `## Always Do`,
-  *inside* `<!-- gitnexus:start -->…<!-- gitnexus:end -->`. The next
-  `gitnexus analyze` regenerates the region and silently destroys the block.
-- **Three naive-anchor sites** (`/^## / && !done`), all verified 2026-07-15:
-  `migrations/0001-inject-spec-11-coding-discipline.md:91`,
-  `migrations/0004-revendor-spec-11.md:77`, and — not named in the source prompt —
-  `migrations/run-tests.sh:119`, which inlines its own copy of the injection awk.
-  That third site is the exact drift hazard this milestone must not reproduce.
-- **The setup path has no placement logic of its own** (verified 2026-07-15).
+- **The §11 placement defect is closed (v0.7.0).** It was: the injector anchored
+  before the first `## ` heading; in an AGENTS.md leading with a GitNexus block
+  that heading is `## Always Do`, *inside*
+  `<!-- gitnexus:start -->…<!-- gitnexus:end -->`, so the next `gitnexus analyze`
+  regenerated the region and silently destroyed the block. Migration 0009 heals
+  it. This host was never live-broken — the defect was latent here (§11 at L18,
+  region at L271–313, so the region does not lead the file) and the fix is for
+  projects *scaffolded by* this host, plus self-protection.
+- **Migration 0001/0004's naive anchor sites are immutable and stay as they are.**
+  Migrations are fixed forward, never edited; 0009 heals what they produced. The
+  third site — `migrations/run-tests.sh:119`, which inlined its own copy of the
+  injection awk — was the real drift hazard and is retired (TEST-04): the suite now
+  extracts each migration's shell from the document itself.
+- **Setup has no placement logic of its own — confirmed and recorded (SETUP-01).**
   `0000-baseline.md:102` is a plain `cat templates/agents-md-additions.md >>
-  AGENTS.md` append, and that template contains no §11. §11 reaches a project only
-  via migration 0001's replay. So unlike claude-workflow — which shipped an anchor
-  fix into its migration but not its setup — there is no second anchor to keep in
-  parity here. Open question for the brainstorm: whether setup always replays
-  0000 → latest (`SKILL.md:111` phrases it conditionally), since that determines
-  whether setup inherits 0009's fix for free.
+  AGENTS.md` append and that template carries no §11; §11 reaches a project only
+  via migration 0001's replay. There is no second anchor to keep in parity, unlike
+  claude-workflow (which shipped an anchor fix into its migration but not its
+  setup). The v0.7.0 open question — whether setup always replays 0000 → latest —
+  resolved: setup's end state ≡ full replay, so it inherits 0009's fix for free.
+  The fact is recorded at `setup-codex-agenticapps-workflow/SKILL.md:129-134`
+  pointing at ADR-0010, so a future anchor change knows where to look.
 - **Provenance idiom:** managed AGENTS.md content sits between
   `<!-- BEGIN: agentic-apps-workflow sections -->` and its END marker; the §11
   block additionally carries `<!-- spec-source: agenticapps-workflow-core@0.4.0
-  §11 -->`.
-- **Reference design:** claude-workflow's migration 0029, at
-  `docs/superpowers/specs/2026-07-15-spec-11-region-aware-placement-design.md` in
-  that repo. This is an ADR-0037-pattern propagation of it.
+  §11 -->`. The regexes matching it are anchored at all four sites (CR-02) — an
+  unanchored match let a backticked prose mention trigger the strip.
+- **Upstream relationship.** v0.7.0 was a port of claude-workflow's migration 0029,
+  an ADR-0037-pattern propagation. Two lessons worth carrying: upstream's HEAD is
+  `f9354cc` (PR #89's squash), *not* the `8520f90` PR-branch commit the phase
+  originally pinned — a dead pin cited four times before review caught it; and our
+  port dropped upstream's `.claude/` path prefix, producing V-01. Porting errors
+  here look like upstream defects; check the prefix before filing.
+- **This repo's own GitNexus content is not generated into AGENTS.md/CLAUDE.md**
+  (2026-07-16, `38e3478`). `analyze --skip-agents-md` is standing. The one useful
+  instruction (prefer the GitNexus MCP graph over blind grep) lives once in
+  `~/.codex/AGENTS.md`, whose load path was verified empirically on codex-cli
+  0.144.4 — ADR-0001's A2 had asserted it without observing it.
 
 ## Constraints
 
@@ -130,9 +167,18 @@ block-destruction defect for projects this host scaffolds.
   a defect in a past migration is fixed by a new one, never by an edit.
 - **Tech stack**: POSIX shell + awk inside markdown migration documents; fixtures
   are bash (`migrations/run-tests.sh`). No new runtime dependencies.
-- **Structural invariant**: the injected §11 block must remain followed by a `## `
-  heading or EOF — that boundary is what bounds the managed section for
-  replace/rollback in 0004 and any future revendor.
+- **Structural invariant (widened in v0.7.0 — read this before narrowing any
+  terminator)**: the injected §11 block must remain followed by a `## ` heading,
+  an anchored `<!-- gitnexus:start -->` marker, **or** EOF. That boundary is what
+  bounds the managed section for replace/rollback in 0004 and any future revendor,
+  and **every terminator that bounds it must carry this same three-way
+  alternation**. The pre-v0.7.0 wording ("a `## ` heading or EOF") is false by
+  construction: 0009 anchors the block immediately before a leading
+  `gitnexus:start`, so a healed region-led file is followed by that marker, not a
+  `## `. A terminator matching only `/^## /` runs past the marker and consumes the
+  entire GitNexus region. v0.7.0 did not preserve this invariant — it widened it
+  (ANCHOR-05). `12-idempotent-rerun` is its live guard: narrowing the alternation
+  fails the suite.
 - **Process**: Feature branch + PR to main; never commit to main.
 - **Dependencies**: The harness hard-fails without the
   `vendor/agenticapps-shared` submodule (`submodules: recursive`).
@@ -148,6 +194,11 @@ block-destruction defect for projects this host scaffolds.
 | Region-aware anchor: first `## ` **or** `gitnexus:start`, whichever comes first | One-alternation delta preserves the structural invariant; the region-only alternative violates §12 placement | ✓ Good — held under mutation (Phase 9.1) |
 | A migration records its version in the TARGET project (MIGR-08), never bumps this scaffolder's own files (MIGR-09) | Phase 9 conflated them and shipped a Step that wrote scaffolder files into consumers' repos; 0008 had kept them apart on purpose | ✓ Good — Step deleted in Phase 9.1 |
 | A guard is not shipped until it has been observed failing | Phase 9 shipped 314 PASS / 0 FAIL on a migration that never ran; assertions that cannot fail read as coverage | ✓ Good — mutation gate, Phase 9.1 |
+| The §11 structural invariant is **widened**, not preserved | The original "followed by `## ` or EOF" wording is false by construction once §11 anchors above a leading region; a terminator matching only `/^## /` eats the whole GitNexus region | ✓ Good — corrected mid-planning after research falsified the stated rationale (ANCHOR-05) |
+| Phase 9 closed on Phase 9.1's evidence rather than being re-scored in place | Every gap `09-VERIFICATION.md` recorded was deferred to 9.1 by that document's own Gaps Summary, and 9.1 closed each; closure recorded as a dated Gap Closure Record | ✓ Good — preserves what was true then, disposition is auditable |
+| AG-01 (region-*tail* strip hazard) accepted and disclosed, not fixed | Not reachable via 0001/0004, which land §11 at the region head; the durable fix is paired §11 markers, which retires the class rather than patching this instance | — Pending — ADR-0010's lead open follow-up |
+| Only CR-01 filed upstream; V-01 deliberately withheld | V-01 is a codex-side porting error (we dropped upstream's `.claude/` prefix), not upstream's defect — filing it would misattribute our bug | ✓ Good — [claude-workflow#90](https://github.com/agenticapps-eu/claude-workflow/issues/90) |
+| GitNexus generated content kept out of AGENTS.md / CLAUDE.md | Regenerated regions churn managed files and are the very hazard §11 placement fights; `analyze --skip-agents-md` is standing | ✓ Good — `38e3478`; the one useful instruction lives once in `~/.codex/AGENTS.md`, load path empirically verified |
 
 ## Evolution
 
@@ -170,9 +221,11 @@ This document evolves at phase transitions and milestone boundaries.
 *Created: 2026-07-15 at the start of milestone v0.7.0 — this repo had no
 PROJECT.md through v0.6.0 (see STATE.md); content here is sourced from ROADMAP.md,
 STATE.md, ADR-0007, ADR-0009, and direct verification of the working tree.*
-*Last updated: 2026-07-15 after Phase 9.1 (§11 Strip Runaway) — the last phase of
-milestone v0.7.0. Migration 0009's data-loss paths are closed and the suite is at
-345 PASS / 0 FAIL / 1 SKIP. Upstream CR-01 filed as
-[claude-workflow#90](https://github.com/agenticapps-eu/claude-workflow/issues/90).
-All v0.7.0 phases are complete; the milestone is ready for
-`/gsd-complete-milestone`.*
+*Last updated: 2026-07-16 after v0.7.0 (Region-Aware §11 Placement) shipped and
+was archived. Full evolution review performed at milestone close: the structural
+invariant in Constraints was corrected (it stated the pre-v0.7.0 wording that
+ANCHOR-05 falsified), Context was rewritten from milestone-scoped to current
+state, six v0.7.0 decisions were logged, and Active was re-scoped to carried debt.
+Suite at 369 PASS / 0 FAIL / 1 SKIP. Upstream CR-01 filed as
+[claude-workflow#90](https://github.com/agenticapps-eu/claude-workflow/issues/90)
+(OPEN). No milestone is active — next scoped via `/gsd-new-milestone`.*
