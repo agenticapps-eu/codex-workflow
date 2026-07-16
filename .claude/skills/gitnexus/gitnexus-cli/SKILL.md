@@ -12,13 +12,24 @@ All commands work via `npx` — no global install required.
 ### analyze — Build or refresh the index
 
 ```bash
-npx gitnexus analyze
+npx gitnexus analyze --skip-agents-md
 ```
 
-Run from the project root. This parses all source files, builds the knowledge graph, writes it to `.gitnexus/`, and generates CLAUDE.md / AGENTS.md context files.
+Run from the project root. This parses all source files, builds the knowledge graph, and writes it to `.gitnexus/`.
+
+**Always pass `--skip-agents-md` in this project.** Without it, `analyze` injects a
+generated `<!-- gitnexus:start -->…<!-- gitnexus:end -->` region into `AGENTS.md` and
+`CLAUDE.md`. This project deliberately keeps generated content out of both files: the
+region churned a volatile symbol counter into two tracked files on every re-index, and
+a machine-regenerated region sharing `AGENTS.md` with the §11 block is the collision
+migration `0009` exists to heal. The one thing worth saying — prefer the GitNexus MCP
+tools over `grep` when searching code — lives in `~/.codex/AGENTS.md` instead, once,
+for every repo. See ADR-0010.
 
 | Flag           | Effect                                                           |
 | -------------- | ---------------------------------------------------------------- |
+| `--skip-agents-md` | Skip updating the gitnexus section in AGENTS.md and CLAUDE.md. **Default for this project.** |
+| `--no-stats`   | Omit volatile file/symbol counts from AGENTS.md and CLAUDE.md. Only relevant if you ever re-enable the region. |
 | `--force`      | Force full re-index even if up to date                           |
 | `--embeddings` | Enable embedding generation for semantic search (off by default) |
 | `--drop-embeddings` | Drop existing embeddings on rebuild. By default, an `analyze` without `--embeddings` preserves them. |
