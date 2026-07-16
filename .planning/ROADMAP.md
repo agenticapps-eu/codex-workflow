@@ -67,6 +67,9 @@ gaps deferred to and closed by 9.1 (ANCHOR-05, MIGR-01, MIGR-06, MIGR-07,
 MIGR-08). Phase 9.1: verification 11/11; UAT 10 passed / 1 accepted-and-disclosed
 (AG-01); security 37/37, `threats_open: 0`. Full suite 369 PASS / 0 FAIL / 1 SKIP.
 
+Shipped in PR #18 (`81404e4`), tagged `v0.7.0`. Merged with history rather than
+squashed, so `09-03`'s RED commits still precede `09-04`'s GREEN on `main`.
+
 Full phase detail — both phase goals, all success criteria, the ordering
 constraints, and the wave breakdowns — is preserved verbatim in
 [`milestones/v0.7.0-ROADMAP.md`](milestones/v0.7.0-ROADMAP.md).

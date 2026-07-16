@@ -53,6 +53,10 @@ NOT-DELIVERED; 5 gaps deferred to and closed by 9.1). Phase 9.1 — verification
 `threats_open: 0`. Full suite 369 PASS / 0 FAIL / 1 SKIP.
 
 **Stats:** 111 commits, 61 files changed (+16,799 / −137), 2026-07-15 → 2026-07-16.
+Shipped in PR #18 (merge commit `81404e4`, 64 files / +17,298 / −152 against
+`main`), tagged `v0.7.0`. Merged with history per the `cf51c73`/`b842755`
+precedent — a squash would have erased the RED-before-GREEN commit ordering that
+`09-03`/`09-04` deliberately made auditable.
 
 ### Known Gaps / Deferred
 

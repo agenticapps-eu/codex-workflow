@@ -51,11 +51,13 @@ Last activity: 2026-07-16 — Milestone v0.7.0 completed and archived
 ## Session Continuity
 
 Last session: 2026-07-16
-Stopped at: Milestone v0.7.0 archived (Phase 9 + 9.1). ROADMAP collapsed,
+Stopped at: **v0.7.0 shipped.** Milestone archived (ROADMAP collapsed,
 REQUIREMENTS archived and removed, PROJECT.md evolution review done,
-RETROSPECTIVE updated. **Not tagged** — v0.7.0 is to be tagged on `main` after
-the PR from `feat/spec-11-region-aware-placement` merges (user decision
-2026-07-16; never commit or tag directly on main).
+RETROSPECTIVE updated), merged to `main` via PR #18 as merge commit `81404e4`,
+and tagged `v0.7.0` (annotated, pushed). Merged **with history**, not squashed —
+matching the `cf51c73`/`b842755` precedent and keeping the RED-before-GREEN
+commit ordering (`a4b137f`/`2315393`/`185abfd` → `49b2fab`) auditable from
+`git log` on main.
 Resume file: None
 
 ## Accumulated Context
@@ -119,6 +121,12 @@ each is also an unchecked item in PROJECT.md's Active list.
 
 ## Operator Next Steps
 
-1. Open a PR from `feat/spec-11-region-aware-placement` → `main` and merge it.
-2. Tag `v0.7.0` on the resulting merge commit on `main`, then push the tag.
-3. `/clear`, then `/gsd-new-milestone` to scope the next milestone.
+v0.7.0 is shipped, merged (PR #18 → `81404e4`), and tagged. Remaining:
+
+1. `/clear`, then `/gsd-new-milestone` to scope the next milestone. Top
+   candidate: `CI-01` — see Blockers/Concerns.
+2. Optional: `/gsd-cleanup` to archive `.planning/phases/09*` into
+   `milestones/v0.7.0-phases/` (left in place at close as raw execution history).
+3. Optional: cut a GitHub Release for `v0.7.0` if wanted. Note the repo has
+   tagged every version but only ever published a Release for v0.1.0, so tags —
+   not Releases — appear to be the convention. Not done unilaterally.
