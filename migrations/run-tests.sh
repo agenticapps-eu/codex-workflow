@@ -56,6 +56,124 @@ done
 # fixture-runner.sh) — no local duplication.
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Fence-scoped extraction helpers (TEST-01, D-35/D-36)
+#
+# WHY THESE EXIST: TEST-01 requires a fixture to execute the migration's shell
+# EXTRACTED FROM THE MIGRATION DOCUMENT ITSELF, never a transcribed copy. A
+# transcribed copy is a second source of truth that drifts silently from the
+# document it claims to test — `run-tests.sh:119` was exactly that (an inlined
+# copy of 0001's injection awk), and retiring it is TEST-04.
+#
+# WHY NOT `extract_to()`: the shared lib's `extract_to()` (agenticapps-shared
+# migrations/lib/fixture-runner.sh) is a GIT-SHOW extractor — it pulls a whole
+# FILE at a git ref. It deliberately does NOT solve this problem, which is
+# pulling a named FENCED BLOCK out of a markdown document. Do not mistake one
+# for the other.
+#
+# PORTED FROM (pinned, D-48): claude-workflow @ 8520f90d235e0c50b0484b170d595ab6f2cd1173
+#   migrations/test-fixtures/0029/common-verify.sh
+# Diff against that path at that SHA to see what was adapted and why. Upstream
+# HEAD has already moved past this pin; any later upstream change is a
+# deliberate follow-up diff, not an invisible mid-execution scope change.
+#
+# TWO DELIBERATE ADAPTATIONS from upstream:
+#   1. Scope/label matching is by LITERAL PREFIX (`index($0, p) == 1`), not by
+#      an interpolated regex. Upstream hardcodes `/^### Step 1/` and
+#      `/^\*\*Apply:\*\*/` because its step and label are fixed; these helpers
+#      take both as parameters, so interpolating them raw into an awk regex
+#      would let a metacharacter in a label change the match. A literal prefix
+#      compare has nothing to escape and cannot be injected. It matches the
+#      same lines upstream's anchored regexes do:
+#        - `^### Step N` prefix matches BOTH this repo's `### Step 1: <title>`
+#          (colon) and upstream's `### Step 1 — <title>` (dash).
+#        - `**Apply:**` prefix matches BOTH `0001:83` (marker alone on its line)
+#          and `0004:64` (`**Apply:** <prose>` on the same line).
+#   2. On failure these report through the harness PASS/FAIL counters rather
+#      than `exit 1` — upstream is a per-fixture subshell that may die; this is
+#      a 278-assertion in-process suite that must not.
+#
+# LOAD-BEARING: `want=0` on fence open is preserved verbatim from upstream. It
+# is why a ```bash → ```sh change cannot make the scan skip past the Apply
+# fence and latch onto the Rollback fence below it. Do not "simplify" it away.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# extract_step_block <doc_path> <step_number> <label>
+# Prints the FIRST fenced block following a `**<label>:**` line within
+# `### Step <step_number>`, scoped to end at `### Step <step_number+1>`.
+# <label> is e.g. `Apply` or `Idempotency check`.
+extract_step_block() {
+  local doc="$1" step="$2" label="$3"
+  local next_step=$((step + 1))
+  awk -v stepp="### Step ${step}" \
+      -v nextp="### Step ${next_step}" \
+      -v lblp="**${label}:**" '
+    index($0, stepp) == 1 { in_step=1; next }
+    index($0, nextp) == 1 { in_step=0 }
+    in_step && index($0, lblp) == 1 { want=1; next }
+    want && /^```/ { inb=1; want=0; next }
+    inb && /^```$/ { exit }
+    inb { print }
+  ' "$doc"
+}
+
+# extract_preflight_block <doc_path>
+# Prints the first fenced block under this repo's `## Pre-flight` heading
+# (`0001:44`, `0004:38`), scoped to end at the next `## ` heading. Unlike a
+# step block there is no `**Label:**` marker — the heading is followed directly
+# by the fence.
+extract_preflight_block() {
+  local doc="$1"
+  awk '
+    index($0, "## Pre-flight") == 1 { want=1; next }
+    want && /^## / { exit }
+    want && /^```/ { inb=1; want=0; next }
+    inb && /^```$/ { exit }
+    inb { print }
+  ' "$doc"
+}
+
+# assert_extracted_shape <label> <text> <required_substring>
+# D-36's antidote, ported from upstream's `case` shape guards: NON-EMPTY IS NOT
+# THE SAME AS CORRECT. An extractor that drifted onto the wrong fence returns
+# plenty of text. Asserts both that <text> is non-empty AND that it contains
+# <required_substring>, reporting each through the harness counters (always two
+# assertions per call). Prints the extracted text indented on failure.
+# Returns 0 if both hold, 1 otherwise — callers MUST gate execution on this.
+assert_extracted_shape() {
+  local label="$1" text="$2" want="$3"
+
+  if [ -n "$text" ]; then
+    echo "  ${GREEN}PASS${RESET} $label: extraction from the real document is non-empty"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $label: extraction is EMPTY — heading/fence shape drift"
+    FAIL=$((FAIL+1))
+    # An empty extraction cannot contain the required substring either. Report
+    # both so the assertion count stays stable whichever way the guard trips.
+    echo "  ${RED}FAIL${RESET} $label: extraction does not contain '$want' (extraction was empty)"
+    FAIL=$((FAIL+1))
+    return 1
+  fi
+
+  case "$text" in
+    *"$want"*)
+      echo "  ${GREEN}PASS${RESET} $label: extraction contains '$want'"
+      PASS=$((PASS+1))
+      ;;
+    *)
+      echo "  ${RED}FAIL${RESET} $label: extraction does NOT contain '$want' — the"
+      echo "         document's shape moved and the extractor followed it somewhere"
+      echo "         wrong. Fix the extractor rather than trusting this block."
+      echo "         Extracted:"
+      printf '%s\n' "$text" | sed 's/^/       /'
+      FAIL=$((FAIL+1))
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Migration 0000 — Baseline
 # Interactive only — placeholder substitution requires user input.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -113,23 +231,62 @@ test_migration_0001() {
     FAIL=$((FAIL+1))
   fi
 
-  # Injection byte-identity: applying Step 1's awk to fixture A must produce a
-  # §11 block byte-identical to the mirror.
-  awk -v mirror="$mirror" '
-    /^## / && !done {
-      print "<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->"
-      while ((getline line < mirror) > 0) print line
-      close(mirror); print ""; done=1
-    }
-    { print }
-  ' "$tmp/a-AGENTS.md" > "$tmp/a-injected.md"
-  awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
-    "$tmp/a-injected.md" > "$tmp/a-block.md"
-  if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
-    echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
-    PASS=$((PASS+1))
+  # Injection byte-identity: executing 0001's OWN Step 1 Apply block against
+  # fixture A must produce a §11 block byte-identical to the mirror.
+  #
+  # This closes TEST-04 / Success Criterion 5. Until now this assertion ran an
+  # INLINED COPY of 0001's injection awk transcribed into this harness — a
+  # second source of truth that could drift from the document it claimed to
+  # test. It is now extracted from 0001's document itself (TEST-01).
+  #
+  # 0001 IS IMMUTABLE (fix-forward). Its anchor is the naive `/^## / && !done`,
+  # which is exactly the defect migration 0009 exists to heal. Asserting it here
+  # FAITHFULLY is deliberate: this test documents what 0001 actually does, not
+  # what we wish it did. That is a fidelity improvement, not a behavior change,
+  # and it does not conflict with 0009's fixtures going RED.
+  #
+  # KNOWN, DEFERRED (D-37): 0008's Step-3 insert-awk copy near :985 is a real
+  # instance of this same drift class. It is scoped OUT of this phase — reaching
+  # into another migration's tests widens a placement fix into harness
+  # refactoring across a 278-assertion suite. It was not missed; it is tracked.
+  local step1_apply
+  step1_apply="$(extract_step_block \
+    "$REPO_ROOT/migrations/0001-inject-spec-11-coding-discipline.md" 1 Apply)"
+
+  # Extraction from the REAL document must be non-empty AND identifiably the
+  # mirror-streaming injection block BEFORE the injection is asserted — a
+  # heading-regex drift must report as "extraction empty/wrong" rather than as a
+  # confusing downstream injection failure (T-08-23 precedent at :967-977, here
+  # generalized from template content to the migration's own shell).
+  if assert_extracted_shape "0001 Step 1 Apply" "$step1_apply" 'getline line < mirror'; then
+    # Scratch project root + fake Codex home. 0001's Apply block is
+    # self-contained: it re-declares MIRROR from ${CODEX_HOME:-$HOME/.codex} and
+    # operates on AGENTS.md in the current directory — which is what makes it
+    # eval-able here without modification.
+    local proj="$tmp/proj0001"
+    local fakehome="$tmp/codexhome"
+    local fakemirrors="$fakehome/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors"
+    mkdir -p "$proj" "$fakemirrors"
+    cp "$mirror" "$fakemirrors/11-coding-discipline-0.4.0.md"
+    printf '# Title\n\n## Some Section\n\nbody\n' > "$proj/AGENTS.md"
+
+    # SUBSHELL IS MANDATORY: an extracted block that takes an `exit` path would
+    # otherwise terminate the whole suite mid-run, hiding every later assertion.
+    ( cd "$proj" && export CODEX_HOME="$fakehome" && eval "$step1_apply" ) \
+      >/dev/null 2>&1
+
+    awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' \
+      "$proj/AGENTS.md" > "$tmp/a-block.md"
+    if diff -q "$tmp/a-block.md" "$mirror" >/dev/null 2>&1; then
+      echo "  ${GREEN}PASS${RESET} injected §11 block is byte-identical to the mirror"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} injected §11 block differs from the mirror"
+      FAIL=$((FAIL+1))
+    fi
   else
-    echo "  ${RED}FAIL${RESET} injected §11 block differs from the mirror"
+    echo "  ${RED}FAIL${RESET} injected §11 block byte-identity NOT asserted — 0001's"
+    echo "         Step 1 Apply block could not be extracted from its document."
     FAIL=$((FAIL+1))
   fi
 
@@ -351,6 +508,25 @@ test_migration_0004() {
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} mirror is the stale shape ($n lines; expected ≥79)"
+    FAIL=$((FAIL+1))
+  fi
+
+  # WR-01/Q2 — the mirror's single-`## ` invariant. 0009 Step 1's strip pass
+  # explicitly swallows the block's OWN `## ` heading first, then terminates
+  # at the NEXT `## ` line. That is only correct because the canonical mirror
+  # carries exactly ONE `## ` line, on line 1 — 09.1-05's refuse gate rests on
+  # the same invariant. It was unasserted, and it lives in a file this repo
+  # vendors rather than authors: if the mirror ever gains a second `## `, the
+  # strip terminates early and leaves body behind. Asserted at `== 1`, not
+  # `>= 1` — a count of 1 today and 2 tomorrow must fail.
+  local n_h2 first_h2
+  n_h2=$(grep -c '^## ' "$mirror" | tr -d ' ')
+  first_h2=$(grep -n '^## ' "$mirror" | head -1 | cut -d: -f1)
+  if [ "$n_h2" = "1" ] && [ "$first_h2" = "1" ]; then
+    echo "  ${GREEN}PASS${RESET} mirror carries exactly ONE '## ' line, on line 1 (the strip's single-heading swallow invariant, WR-01/Q2)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} mirror carries $n_h2 '## ' line(s), first at line ${first_h2:-ABSENT} (expected exactly 1, on line 1 — the strip's single-heading swallow would terminate early and leave body behind)"
     FAIL=$((FAIL+1))
   fi
 }
@@ -3050,6 +3226,26 @@ test_drift() {
     echo "  ${RED}FAIL${RESET} drift mismatch (see message above)"
     FAIL=$((FAIL+1))
   fi
+
+  # ── Consumer-side third leg (V-03) ──────────────────────────────────────────
+  # The MECHANISM (run_drift_test above) is a pinned submodule and is NOT edited
+  # here. The POLICY below is consumer-owned per ADR-0035: this repo self-applies
+  # its own workflow, so its own version record (.codex/workflow-version.txt)
+  # must agree with the scaffolder it ships (SKILL.md's `version:`). V-03 slipped
+  # through precisely because nothing compared these two files — the leg above
+  # only checks SKILL.md against the latest migration's to_version, never against
+  # this repo's own record. 0008's `98c06f5` bumped both in one commit; this leg
+  # is what makes that precedent enforceable going forward.
+  local skill_v proj_v
+  skill_v=$(grep -m1 '^version:' "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md" | awk '{print $2}')
+  proj_v=$(cat "$REPO_ROOT/.codex/workflow-version.txt" 2>/dev/null)
+  if [ "$skill_v" = "$proj_v" ]; then
+    echo "  ${GREEN}PASS${RESET} this repo's .codex/workflow-version.txt ($proj_v) agrees with its scaffolder SKILL.md"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} version split: SKILL.md=$skill_v but .codex/workflow-version.txt=$proj_v (V-03)"
+    FAIL=$((FAIL+1))
+  fi
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3139,6 +3335,1305 @@ test_repo_layout() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Migration 0009 — Region-aware §11 placement  (TEST-02 / TEST-03)
+#
+# ⚠⚠ THIS SUITE IS **EXPECTED TO BE RED** UNTIL PLAN 09-04 SHIPS
+#     migrations/0009-spec-11-region-aware-placement.md. THAT IS THE POINT.
+#
+# ROADMAP hard ordering 2 ("RED before GREEN"). Every assertion below is written
+# against a migration document that does not exist yet, so the three extraction
+# gates report empty-extraction failures and every case reports "not asserted".
+#
+#   DO NOT create or stub 0009 to make this pass — that is 09-04's job.
+#   DO NOT weaken these assertions.
+#   DO NOT add a "skip if the document is missing" guard. A conditional skip is
+#   PRECISELY how a suite that never fails ships as coverage — the Phase 8
+#   defect class this phase exists to close (D-36: "non-empty is not the same
+#   as correct"; 08-05 shipped two assertions that could never match and read
+#   as coverage). When 0009 lands, this function turns GREEN on its own.
+#
+# FIXTURE IDIOM IS LOCKED (D-34): ten case labels inside ONE function, each
+# synthesized at test time via `printf` into `$tmp`. This is this repo's native
+# idiom (`test_migration_0001`) and the documented fallback in
+# migrations/test-fixtures/README.md § "Limits" (fixtures cannot capture state
+# outside the repo, e.g. ~/.codex/skills/). Do NOT port claude-workflow's
+# per-fixture directory layout (test-fixtures/0029/01-.../{setup,verify}.sh) —
+# README.md § "Why no static fixture files" rejects exactly that, and porting it
+# would introduce a second, competing fixture idiom.
+#
+# UPSTREAM REFERENCE IS PINNED (D-48): claude-workflow @
+#   8520f90d235e0c50b0484b170d595ab6f2cd1173
+# Fixture INTENT and content-generation logic are adopted from
+# migrations/test-fixtures/0029/{common-setup.sh,common-verify.sh,NN-*/setup.sh}
+# at that SHA; the layout is rejected. Read with `git -C ../claude-workflow show
+# 8520f90:<path>`. Upstream HEAD has already moved past this pin (it moved twice
+# during phase 9's planning alone); any later upstream change is a deliberate
+# follow-up diff, not an invisible mid-execution scope change.
+#
+# SUBSHELL WRAPPING IS MANDATORY (T-09-07): two extracted paths deliberately
+# `exit 3` (State D conflict; corrupt mirror). An un-subshelled eval would
+# terminate the whole harness mid-suite and hide every later assertion.
+# CODEX_HOME + cwd are always redirected into $tmp (T-09-10 / T-09-11): the
+# fixtures perform real file surgery and deliberately build corrupt mirrors, so
+# pointing them at the real repo or the real ~/.codex would rewrite the
+# developer's own AGENTS.md / corrupt their installed scaffolder.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Helpers for test_migration_0009. File-scope with a `_m0009_` prefix, following
+# this harness's established convention for per-test helpers (`_cpr_case`,
+# `_cpr_check_resolved`, `_table_data_rows`, …) — shell has no function-local
+# functions, and the prefix keeps them out of the shared namespace.
+
+# _m0009_mk_fake_home <tmp> <name> <mirror_src>
+# Builds a fake ${CODEX_HOME} carrying the spec mirror at the installed path, so
+# an extracted block's `${CODEX_HOME:-$HOME/.codex}`-derived MIRROR/SPEC_BLOCK
+# resolves to a controlled file under $tmp instead of the developer's real
+# ~/.codex (T-09-10). Prints the fake home's path.
+_m0009_mk_fake_home() {
+  local h="$1/$2/codexhome"
+  local m="$h/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors"
+  mkdir -p "$m"
+  cp "$3" "$m/11-coding-discipline-0.4.0.md"
+  printf '%s\n' "$h"
+}
+
+# _m0009_mk_project <tmp> <name>
+# Builds a scratch project root shaped like a REAL target project: a `.git`
+# directory (`test -d .git`) plus `.codex/workflow-version.txt` at `0.6.0`
+# (the durable per-project version record the update skill itself reads) —
+# and DELIBERATELY NO local scaffolder-skill tree of any kind, because no
+# target project this host scaffolds has one (`run-tests.sh:917-918`: "no
+# 0008 sandbox here manufactures a synthetic SKILL.md" — the same rule
+# applied here). See 0008's T-08-38 note (`0008:470-487`): the setup skill's
+# project-side surface is `AGENTS.md`, `.planning/`, `.codex/`, and
+# `docs/decisions/` only; a locally installed scaffolder SKILL.md never
+# exists on a real install. Prints the project root's path.
+_m0009_mk_project() {
+  local p="$1/$2/proj"
+  mkdir -p "$p/.git" "$p/.codex"
+  printf '0.6.0\n' > "$p/.codex/workflow-version.txt"
+  printf '%s\n' "$p"
+}
+
+# _m0009_apply <proj> <fake_home> <apply_text>
+# Runs an extracted block against a scratch project. Prints its combined
+# output; returns its exit status.
+#
+# THE SUBSHELL IS MANDATORY, NOT STYLE (T-09-07): cases 05 and 10 exercise
+# blocks that deliberately `exit 3`. Un-subshelled, that would terminate the
+# whole harness mid-suite and silently hide every later assertion — the suite
+# would report a truncated PASS count and exit 0.
+# CODEX_HOME and cwd are BOTH redirected under $tmp (T-09-10 / T-09-11): these
+# blocks perform real file surgery and resolve their mirror from
+# ${CODEX_HOME:-$HOME/.codex}. Run at the real repo root against the real Codex
+# home, they would rewrite the developer's own AGENTS.md.
+_m0009_apply() {
+  ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
+}
+
+# _m0009_ok <rc> <label> — PASS iff rc is 0.
+_m0009_ok() {
+  if [ "$1" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} $2"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $2"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# _m0009_fail <label> — unconditional FAIL. Used when an extraction gate is down
+# so a case reports FAILED rather than silently vanishing. A case that quietly
+# disappears when its input is missing is the dead-assertion defect itself.
+_m0009_fail() {
+  echo "  ${RED}FAIL${RESET} $1"
+  FAIL=$((FAIL+1))
+}
+
+test_migration_0009() {
+  echo ""
+  echo "${YELLOW}=== Migration 0009 — Region-aware §11 placement ===${RESET}"
+
+  local mirror="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  if [ ! -f "$mirror" ]; then
+    echo "  ${RED}FAIL${RESET} mirror missing: skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local MIGRATION_0009="$REPO_ROOT/migrations/0009-spec-11-region-aware-placement.md"
+  local PROV_LIT='<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->'
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Extract 0009's own shell from 0009's own document (TEST-01), and gate every
+  # consumer on a shape assertion first (D-36). Ported from the pin's
+  # common-verify.sh, which sequences all three extractions + guards BEFORE any
+  # fixture runs, so a document-shape drift reports as "extraction wrong" rather
+  # than as a confusing downstream surgery failure.
+  # ───────────────────────────────────────────────────────────────────────────
+  local pf_block idem_block apply_block
+  pf_block="$(extract_preflight_block "$MIGRATION_0009" 2>/dev/null)"
+  idem_block="$(extract_step_block "$MIGRATION_0009" 1 "Idempotency check" 2>/dev/null)"
+  apply_block="$(extract_step_block "$MIGRATION_0009" 1 Apply 2>/dev/null)"
+
+  local pf_ok=1 idem_ok=1 apply_ok=1
+
+  # Pre-flight shape guard.
+  #
+  # ANCHORED ON THE MIRROR PATH, deliberately — NOT on `test -s`, and NOT on a
+  # variable name. Two reasons, both load-bearing:
+  #
+  #  1. The pin's common-verify.sh states the rule explicitly: anchor the shape
+  #     check on what identifies the block STRUCTURALLY, "NOT on the specific
+  #     guard operators (`test -s`, the tail-sentinel grep) that fixture 10
+  #     exists to mutation-test. Coupling this shape check to the guard text
+  #     itself would make reverting a guard trip the loader for EVERY fixture
+  #     that sources this file, not just fixture 10 — masking the real signal
+  #     behind a loader error instead." Case 10 below mutation-tests exactly
+  #     those two operators, so gating the loader on one of them would hide the
+  #     signal case 10 exists to produce.
+  #  2. Upstream names this variable SPEC_BLOCK; this repo's 0004 precedent
+  #     names it MIRROR, and 09-04 may legitimately pick either. The mirror
+  #     PATH is invariant under that choice; a variable name is not.
+  #
+  # `test -s` and the tail-sentinel are still asserted — as explicit D-28.1
+  # document-contract assertions immediately below, where a missing guard names
+  # itself instead of masquerading as an extractor failure.
+  assert_extracted_shape "0009 Pre-flight" "$pf_block" \
+    'spec-mirrors/11-coding-discipline-0.4.0.md' || pf_ok=0
+
+  # CR-03 fix: derive a COMMENT-STRIPPED view of the pre-flight before matching
+  # either D-28.1 `case` below. A bare substring `case "$pf_block" in *'test -s'*`
+  # matches the pre-flight's OWN COMMENTS at 0009:108/:120 ("`test -s` catches
+  # that...") just as readily as the executable guard at :111 — so the guard can
+  # be deleted entirely and this check stays green, satisfied by prose describing
+  # a guard that no longer exists. A header that documents a guard is not the
+  # guard. Match against $pf_code, never $pf_block, below.
+  local pf_code
+  pf_code="$(printf '%s\n' "$pf_block" | grep -v '^[[:space:]]*#')"
+
+  # D-28.1 contract, layer 1 (zero-byte): `test -f` alone passes a zero-byte
+  # mirror, and D-27 makes the mirror the SOLE re-injection source — so a
+  # zero-byte mirror would strip §11 and inject nothing, silently committing a
+  # maimed AGENTS.md on every heal. Asserted behaviorally by case 10(a).
+  # Pattern tightened from the bare `*'test -s'*` to the executable shape
+  # `*'test -s "$MIRROR"'*` — a check that only works by accident of comment
+  # wording is one prose edit from being dead.
+  case "$pf_code" in
+    *'test -s "$MIRROR"'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+    *)                     _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 1 (test -s — zero-byte mirror guard)" ;;
+  esac
+
+  # D-28.1 contract, layer 2 (truncation): the mirror's heading is on L1, so a
+  # tail-truncated mirror satisfies `test -s` AND Apply's pre-`mv` heading grep.
+  # Only a tail sentinel closes that gap. Verified present at
+  # 11-coding-discipline-0.4.0.md:57 (last of four `### ` sections, 79 lines).
+  # This is NOT D-25's rejected content sentinel: that coupled a STRIP
+  # TERMINATOR to §11's last prose line (runaway-strip hazard). This is a
+  # read-only integrity check on a different file, anchored to a structural
+  # heading; it bounds nothing and cannot run away. Asserted by case 10(b).
+  # Also matched against $pf_code (CR-03): it does not collide with a comment
+  # today, but a check that only works by accident of comment wording is one
+  # prose edit from being dead, same as layer 1 above.
+  case "$pf_code" in
+    *'Goal-Driven Execution'*) _m0009_ok 0 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
+    *)                         _m0009_ok 1 "0009 Pre-flight carries D-28.1 layer 2 (tail sentinel — truncated mirror guard)" ;;
+  esac
+
+  # Idempotency-check shape guard: it must be identifiably the provenance-aware
+  # region check.
+  assert_extracted_shape "0009 Step 1 Idempotency check" "$idem_block" \
+    'spec-source: agenticapps-workflow-core' || idem_ok=0
+
+  # Apply shape guard: `gitnexus:start` is D-36's exact antidote here. A block
+  # that carries no marker alternation is NOT Step 1's region-aware apply,
+  # whatever else it is — 0001's and 0004's naive `/^## / && !done` apply blocks
+  # both extract cleanly and both fail this guard, which is the point.
+  assert_extracted_shape "0009 Step 1 Apply" "$apply_block" \
+    'gitnexus:start' || apply_ok=0
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # The four-state DOUBLE-SIDED idempotency table (D-38 / 09-VALIDATION.md).
+  #
+  # A check asserted in only one direction catches nothing: a too-permissive
+  # check skips unapplied work, a too-strict one re-applies applied work. Each
+  # state gets its own directory because the extracted check hardcodes
+  # `AGENTS.md`, and assert_check cd's into the fixture dir.
+  # ───────────────────────────────────────────────────────────────────────────
+
+  # State A — genuinely OFF-ANCHOR but healthy: correct provenance, placed
+  # BELOW a real project heading (not at the anchor this migration would
+  # pick), and NO region anywhere in the file — position is the ONLY
+  # variable. (V-02: the PRIOR version of this fixture put the block BEFORE
+  # the first heading — i.e. exactly ON the anchor — while ALSO carrying a
+  # trailing region, so it varied two things at once and its "off-anchor"
+  # label read as coverage it did not provide. This rewrite isolates position
+  # as the sole variable, per RESEARCH's off-anchor shape.)
+  local sa="$tmp/state-a"; mkdir -p "$sa"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '## Project Overview\nStuff.\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Deployment\nMore stuff.\n'
+  } > "$sa/AGENTS.md"
+  # Belt-and-braces self-guard, immune to the comment-matching hazard entirely
+  # (CR-03's class): the GENERATED file has no comments to collide with, so
+  # asserting on it directly cannot mistake a rewritten source comment for a
+  # region. Checked unconditionally, not gated on idem_ok — a structural
+  # property of the fixture itself, not a consumer of the extraction.
+  [ "$(grep -c 'gitnexus' "$sa/AGENTS.md" 2>/dev/null)" = "0" ]
+  _m0009_ok $? "state A self-guard: generated AGENTS.md carries no 'gitnexus' string anywhere (no region — position is the only variable)"
+
+  # State B — provenance present BUT the block sits INSIDE the region.
+  local sb="$tmp/state-b"; mkdir -p "$sb"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Always Do\n- MUST run impact analysis.\n<!-- gitnexus:end -->\n\n'
+    printf '## Workflow\nProject stuff.\n'
+  } > "$sb/AGENTS.md"
+
+  # State C — no provenance at all.
+  local sc="$tmp/state-c"; mkdir -p "$sc"
+  printf '# Title\n\n## Some Section\n\nbody\n' > "$sc/AGENTS.md"
+
+  # D-32 variant — UNTERMINATED `<!-- gitnexus:start -->` (no matching end) with
+  # provenance after it. No separate branch and no extra predicate: it rides on
+  # State B's region predicate, which is exactly why D-32 chose the fail-closed
+  # shape. Rejected alternatives: fail-open (leaves the block inside something
+  # gitnexus may still regenerate — the very defect this closes) and exit 3
+  # (adds a fifth state and blocks the version bump on a possibly benign shape).
+  local sbu="$tmp/state-b-unterminated"; mkdir -p "$sbu"
+  {
+    printf '# Title\n\nGuidance.\n\n'
+    printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+    printf '%s\n' "$PROV_LIT"
+    cat "$mirror"
+    printf '\n## Always Do\n- MUST run impact analysis.\n'
+  } > "$sbu/AGENTS.md"
+
+  if [ "$idem_ok" = "1" ]; then
+    # State A ⇒ applied (exit 0 → skip). This is ALSO MIGR-07's guard: a
+    # healthy-but-off-anchor block must be left alone, and per D-31 that falls
+    # out of THIS predicate rather than a special case — do not add code to
+    # detect "off-anchor but healthy", and do not move it.
+    assert_check "state A: anchored + current provenance + region later → skip (D-31/MIGR-07)" \
+      "$idem_block" "$sa" "applied"
+
+    # State B ⇒ not-applied (exit NON-ZERO **despite provenance being present**).
+    #
+    # ⚠ THIS ROW IS THE WHOLE POINT (D-38). The design calls this conjunction
+    # exactly that: provenance alone must NOT short-circuit the heal. The check
+    # must be `provenance present AND NOT in-region`, not `provenance present`.
+    # A check that returns `applied` here IS THE DEFECT — it would skip a block
+    # sitting inside a region that `gitnexus analyze` will later regenerate and
+    # destroy. Expected argument is `not-applied`; if a future edit "fixes" this
+    # to `applied` to make something pass, it has reintroduced the bug.
+    assert_check "state B: provenance present BUT block in region → heal, not skip (D-38 — the whole point)" \
+      "$idem_block" "$sb" "not-applied"
+
+    # State C ⇒ not-applied. Plain absent case.
+    assert_check "state C: no provenance at all → inject" \
+      "$idem_block" "$sc" "not-applied"
+
+    # D-32 fail-closed ⇒ not-applied, via State B's predicate.
+    assert_check "state B (D-32 variant): unterminated gitnexus:start → fails closed, treated as in-region" \
+      "$idem_block" "$sbu" "not-applied"
+  else
+    _m0009_fail "state A: anchored + current provenance + region later → skip (D-31/MIGR-07) — NOT ASSERTED: 0009's Step 1 Idempotency check could not be extracted"
+    _m0009_fail "state B: provenance present BUT block in region → heal, not skip (D-38 — the whole point) — NOT ASSERTED: extraction failed"
+    _m0009_fail "state C: no provenance at all → inject — NOT ASSERTED: extraction failed"
+    _m0009_fail "state B (D-32 variant): unterminated gitnexus:start → fails closed — NOT ASSERTED: extraction failed"
+  fi
+
+  # State D — a `## Coding Discipline (NON-NEGOTIABLE)` heading with NO
+  # provenance — is deliberately NOT asserted here. Per D-30 branch 1 and
+  # 09-VALIDATION.md's table it is gated by the APPLY's conflict branch
+  # (`exit 3`, file untouched), not by the idempotency check. It is asserted by
+  # case `05-unmanaged-conflict` below. The four-state table is therefore
+  # complete across this function: A/B/C (+ D-32) here, D at case 05.
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # TEST-03's ten cases. Each synthesizes its BEFORE state with `printf` into
+  # $tmp (D-34), runs the extracted Step 1 Apply against that scratch root, and
+  # asserts the AFTER state. Case labels are carried in the assertion text so a
+  # failure names itself.
+  # ───────────────────────────────────────────────────────────────────────────
+  local p h out rc prov_line start_line nstart nend nprov
+
+  if [ "$apply_ok" = "1" ]; then
+
+    # ── 01-gitnexus-led-inject (MIGR-04 — inject at the region-led anchor) ──
+    # BEFORE: a gitnexus-LED file with no §11 anywhere (State C).
+    # The first `## ` in this file is `## Always Do`, which is INSIDE the region
+    # — that is what makes this case discriminating. The naive `/^## / && !done`
+    # anchor (0001:91, 0004:77) lands on it and injects §11 inside a region that
+    # `gitnexus analyze` later regenerates, destroying the block. D-21's rule
+    # anchors on whichever comes FIRST — here the marker — so it lands above.
+    # `## Some Section` sits AFTER the region deliberately: that ordering is what
+    # discriminates D-21 from D-22.1's rejected "the region is always the anchor"
+    # (which would drop §11 hundreds of lines down when the region comes late).
+    p="$(_m0009_mk_project "$tmp" 01)"; h="$(_m0009_mk_fake_home "$tmp" 01 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "01-gitnexus-led-inject: provenance (line ${prov_line:-ABSENT}) is ABOVE gitnexus:start (line ${start_line:-ABSENT})"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ]
+    _m0009_ok $? "01-gitnexus-led-inject: region markers still paired exactly once (start=$nstart end=$nend)"
+
+    grep -q 'MUST run impact analysis before editing any symbol' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "01-gitnexus-led-inject: the region's own body content survived"
+
+    # ── 02-inside-region-move (MIGR-03 — State B strip+reinject) ──
+    # BEFORE: provenance + full mirror already sit INSIDE the region. This is
+    # what the naive anchor produces on a gitnexus-led file. Not yet eaten; 0009
+    # must move it out before the next `gitnexus analyze` does.
+    #
+    # THIS IS THE CASE THAT PROVES THE STRIP TERMINATOR'S ALTERNATION (D-24).
+    # 09-01's counter-case B observed the narrow `/^## /`-only terminator EATING
+    # the region here: it runs past `<!-- gitnexus:start -->` hunting a `## `,
+    # consuming the marker and the region's real content, halting only at the
+    # region's own `## Always Do` — leaving start=0/end=1, an orphaned unpaired
+    # region. The marker-count assertion below is what catches that.
+    p="$(_m0009_mk_project "$tmp" 02)"; h="$(_m0009_mk_fake_home "$tmp" 02 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Always Do\n- MUST run impact analysis.\n<!-- gitnexus:end -->\n\n'
+      printf '## Workflow\nProject stuff.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "02-inside-region-move: exactly ONE provenance line remains (found $nprov) — moved, not duplicated"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "02-inside-region-move: provenance (line ${prov_line:-ABSENT}) moved ABOVE gitnexus:start (line ${start_line:-ABSENT})"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ] && grep -q 'MUST run impact analysis' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "02-inside-region-move: region survived intact and paired (start=$nstart end=$nend) — the D-24 terminator assertion"
+
+    # ── 03-healthy-noop (MIGR-02, MIGR-07 — zero churn) ──
+    # BEFORE: this repo's own real AGENTS.md shape — §11 correctly anchored at
+    # the first `## `, region LATER in the file (State A).
+    #
+    # WHY APPLY IS RUN HERE EVEN THOUGH THE RUNTIME WOULD SKIP IT: in real
+    # operation State A's idempotency check returns `applied`, so the runtime
+    # skips Step 1 entirely — that skip is already asserted by the State A row
+    # above. If this case ALSO merely skipped Apply, `cmp -s` would compare a
+    # file nothing had touched and pass unconditionally: a dead assertion, and
+    # exactly the defect class this phase exists to close. The plan's stated
+    # purpose for this case is to "catch an over-eager anchor", and an over-eager
+    # anchor can only manifest if Apply RUNS. So Apply is run deliberately, and
+    # byte-identity is asserted against a pristine copy — the fixture-level twin
+    # of 09-01's CASE 1 (ANCHOR-03), which observed strip+insert re-deriving
+    # §11's position byte-identically on the real AGENTS.md.
+    #
+    # NOT VACUOUS: the strip genuinely removes 81 lines (provenance + 79 mirror
+    # lines + the trailing blank) and the insert genuinely re-adds them; a strip
+    # that silently did nothing would make the insert add a SECOND block and fail
+    # this cmp. `grep`-based "block still present" would pass for an over-eager
+    # anchor that MOVED the block — byte-identity is the assertion that does not.
+    p="$(_m0009_mk_project "$tmp" 03)"; h="$(_m0009_mk_fake_home "$tmp" 03 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus\n\n## Always Do\n- x\n<!-- gitnexus:end -->\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/03-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    cmp -s "$p/AGENTS.md" "$tmp/03-pristine.md"
+    _m0009_ok $? "03-healthy-noop: AGENTS.md is BYTE-IDENTICAL after Apply (zero churn — catches an over-eager anchor)"
+
+    # ── 04-no-agentsmd (D-33 — informational skip, NOT an abort) ──
+    # BEFORE: a project with no AGENTS.md at all.
+    #
+    # WHY A SKIP AND NOT 0004's PRE-FLIGHT ABORT (0004:44): the update engine
+    # marks a migration pending iff `installed >= from && installed < to`. An
+    # abort here leaves the project at 0.6.0 forever — Step 2 never records
+    # 0.7.0, so 0009 stays pending AND 0010+ never become pending either. The
+    # project is stranded below to_version PERMANENTLY. A skip costs nothing;
+    # an abort is unrecoverable without manual intervention.
+    p="$(_m0009_mk_project "$tmp" 04)"; h="$(_m0009_mk_fake_home "$tmp" 04 "$mirror")"
+    rm -f "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "04-no-agentsmd: Apply exits ZERO (informational skip, so Step 2's version bump still runs) — got exit=$rc"
+
+    case "$out" in
+      *update-codex-agenticapps-workflow*) _m0009_ok 0 "04-no-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), not claude-workflow's slug" ;;
+      *)                                   _m0009_ok 1 "04-no-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), not claude-workflow's slug" ;;
+    esac
+
+    [ ! -f "$p/AGENTS.md" ]
+    _m0009_ok $? "04-no-agentsmd: Apply created no AGENTS.md out of thin air"
+
+    # ── 16-zero-byte-agentsmd (09.1-REVIEW.md WR-01 — the "nothing to heal"
+    #    twin of 04-no-agentsmd) ──
+    # BEFORE: AGENTS.md is PRESENT but zero bytes (e.g. `touch AGENTS.md`, an
+    # interrupted write, or a prior tool crash). `test -f` PASSES on an empty
+    # file — that is precisely the gap: the pre-fix Apply routes this past the
+    # `[ ! -f AGENTS.md ]` skip branch, into the strip, which runs on zero
+    # input, produces zero-byte output, and hard-ABORTS (exit 3) at the
+    # strip-output guard with a diagnostic that says "possibly-truncated
+    # result" — misleading, since nothing was truncated; the input was already
+    # empty. Per WR-01's fix and the user's binding ruling: a zero-byte
+    # AGENTS.md is materially identical to a missing one — "nothing to heal" —
+    # and must route through the SAME informational-skip branch as
+    # 04-no-agentsmd, not an abort. An abort here is UNRECOVERABLE by this
+    # migration's own stated design principle (Step 2 never records 0.7.0, so
+    # 0009 stays pending forever and 0010+ never become pending either).
+    p="$(_m0009_mk_project "$tmp" 16)"; h="$(_m0009_mk_fake_home "$tmp" 16 "$mirror")"
+    : > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "16-zero-byte-agentsmd: Apply exits ZERO on a zero-byte AGENTS.md (informational skip, not the unrecoverable abort) — got exit=$rc"
+
+    case "$out" in
+      *'possibly-truncated'*) _m0009_ok 1 "16-zero-byte-agentsmd: diagnostic is NOT the misleading 'possibly-truncated result' message (input was already empty, nothing was truncated)" ;;
+      *)                      _m0009_ok 0 "16-zero-byte-agentsmd: diagnostic is NOT the misleading 'possibly-truncated result' message (input was already empty, nothing was truncated)" ;;
+    esac
+
+    case "$out" in
+      *update-codex-agenticapps-workflow*) _m0009_ok 0 "16-zero-byte-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), matching 04's skip path" ;;
+      *)                                   _m0009_ok 1 "16-zero-byte-agentsmd: skip message names THIS host's skill (update-codex-agenticapps-workflow), matching 04's skip path" ;;
+    esac
+
+    [ -f "$p/AGENTS.md" ] && [ ! -s "$p/AGENTS.md" ]
+    _m0009_ok $? "16-zero-byte-agentsmd: AGENTS.md still exists and is still zero bytes after the skip (untouched, not deleted or rewritten)"
+
+    # ── 05-unmanaged-conflict (MIGR-05, State D — D-30 branch 1) ──
+    # BEFORE: a §11 heading with hand-written prose and NO provenance. The
+    # operator pasted it outside this migration's management. 0009 must refuse
+    # rather than clobber it (inherits 0001's conflict rule).
+    #
+    # BOTH HALVES ARE REQUIRED: an `exit 3` that already mangled the file is
+    # still a destroyed hand-authored §11. Asserting only the exit code would
+    # pass for a block that rewrote AGENTS.md and then errored.
+    p="$(_m0009_mk_project "$tmp" 05)"; h="$(_m0009_mk_fake_home "$tmp" 05 "$mirror")"
+    {
+      printf '# AGENTS.md\n\n## Coding Discipline (NON-NEGOTIABLE)\n\n'
+      printf 'Hand-pasted content the operator wrote themselves. Must not be clobbered.\n\n'
+      printf '## Workflow\nStuff.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/05-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "05-unmanaged-conflict: Apply exits exactly 3 on an unmanaged §11 heading (State D) — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/05-pristine.md"
+    _m0009_ok $? "05-unmanaged-conflict: hand-written §11 is BYTE-IDENTICAL after the refusal (refused AND untouched)"
+
+    # ── 06-no-heading-eof (ANCHOR-02 — the END fallback) ──
+    # BEFORE: no `## ` heading and no marker anywhere. The anchor scan finds
+    # nothing, so awk's END branch must APPEND rather than silently drop the
+    # block. Without the END branch the insert is a no-op and §11 vanishes.
+    p="$(_m0009_mk_project "$tmp" 06)"; h="$(_m0009_mk_fake_home "$tmp" 06 "$mirror")"
+    printf '# AGENTS.md\n\nJust prose. No level-2 headings anywhere in this file.\n' > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    grep -q -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "06-no-heading-eof: provenance is present after Apply (END fallback fired, block not dropped)"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ "$prov_line" -gt 3 ]
+    _m0009_ok $? "06-no-heading-eof: block was APPENDED at EOF (provenance at line ${prov_line:-ABSENT}, below the 3 lines of pre-existing prose)"
+
+    # ── 09-two-provenance-heal (D-46.3 — the `swallowed_own_h2` stale-state guard) ──
+    # BEFORE: TWO provenance+block pairs, each properly terminated by a real
+    # project `## ` heading (not back-to-back). Must heal down to exactly one.
+    #
+    # THE MECHANISM THIS GUARDS, PRECISELY: the strip pass must swallow each
+    # block's OWN `## Coding Discipline (NON-NEGOTIABLE)` heading before it starts
+    # hunting for that block's terminator — otherwise the block's own heading
+    # terminates its own strip immediately. That is what `swallowed_own_h2` is for.
+    # But it MUST RESET at the terminator. If it is stale-true when the SECOND
+    # provenance line arrives, the second block's own `## Coding Discipline`
+    # heading is mistaken for ITS terminator, so the strip stops there and the
+    # second block's body is left orphaned in the output — two blocks in, two
+    # blocks out, healed nothing. Upstream hit this and fixed it; without this
+    # fixture we would not catch the regression.
+    #
+    # The surviving-headings assertion is the other half: a terminator that
+    # over-runs would eat `## Workflow` / `## Deployment` along with the block.
+    p="$(_m0009_mk_project "$tmp" 09)"; h="$(_m0009_mk_fake_home "$tmp" 09 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n'
+      printf '## Workflow\nFirst project section.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n'
+      printf '## Deployment\nSecond project section.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "09-two-provenance-heal: healed down to exactly ONE provenance line (found $nprov) — swallowed_own_h2 reset at the terminator"
+
+    grep -q -x -- '## Workflow' "$p/AGENTS.md" 2>/dev/null \
+      && grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "09-two-provenance-heal: both terminating '## ' headings survived (## Workflow, ## Deployment) — the strip did not over-run"
+
+    # ── 12-idempotent-rerun (ANCHOR-05 / MIGR-06 — the highest-value gap this
+    #    phase produced, per 09-REVIEW.md) ──
+    # BEFORE state is NOT hand-written: it is case 01-gitnexus-led-inject's
+    # BEFORE fixture (a region-LED file, no §11 anywhere), run through Apply
+    # ONCE to produce a genuinely healed region-led AGENTS.md, then Apply is
+    # run a SECOND time against that same output. Building the BEFORE this way
+    # means the fixture cannot drift from what 0009 actually emits — a
+    # hand-authored "healed" file would silently stop testing the re-run path
+    # the moment the insert's exact output shape changed.
+    #
+    # WHY THIS SHAPE SPECIFICALLY: 0009's own prose (Step 1 Apply, near the
+    # strip terminator) calls a `/^## /`-only terminator "the highest-severity
+    # mechanic in this migration" because it "skips straight past
+    # `<!-- gitnexus:start -->` on a file this migration has already healed."
+    # A re-run against an OFF-ANCHOR-BUT-HEALTHY file (state A) never reaches
+    # the strip's terminator at all — the idempotency check short-circuits
+    # Apply entirely — so state A cannot exercise this. Only a REGION-LED
+    # healed file (healed block immediately followed by
+    # `<!-- gitnexus:start -->`, not by a `## `) puts the terminator's
+    # alternation on the critical path of an ordinary second run. This is
+    # ANCHOR-05's ONLY live suite coverage: the anchor and the terminator are
+    # one decision, not two, and this fixture is what proves they still move
+    # together.
+    p="$(_m0009_mk_project "$tmp" 12)"; h="$(_m0009_mk_fake_home "$tmp" 12 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+    cp "$p/AGENTS.md" "$tmp/12-first-run.md"
+
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "12-idempotent-rerun: second Apply against an already-healed region-led file exits 0 — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/12-first-run.md"
+    _m0009_ok $? "12-idempotent-rerun: second run leaves AGENTS.md BYTE-IDENTICAL to the first run's output (true idempotency, MIGR-06)"
+
+    nstart="$(grep -c -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null)"
+    nend="$(grep -c -x -- '<!-- gitnexus:end -->' "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nstart" = "1" ] && [ "$nend" = "1" ]
+    _m0009_ok $? "12-idempotent-rerun: region markers still paired exactly once each (start=$nstart end=$nend) — ANCHOR-05's only live suite coverage"
+
+    grep -q 'MUST run impact analysis before editing any symbol' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "12-idempotent-rerun: the region's own body content survived the second run"
+
+    nprov="$(grep -c -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "12-idempotent-rerun: exactly ONE provenance line remains after the second run (found $nprov)"
+
+    # ── 17-crlf-region-led (09.1-REVIEW.md CR-01 — D-38 double-sided) ──
+    # Same region-led BEFORE shape as 01-gitnexus-led-inject (no §11 yet, the
+    # first `## ` is INSIDE the region), built twice: (a) with CRLF line
+    # endings, (b) with ordinary LF line endings. This is the ONLY structural
+    # variable between the two sub-cases.
+    #
+    # WHY (a) MUST REFUSE: every `$`-anchored regex this migration depends on
+    # (the strip terminator's `/^<!-- gitnexus:start -->$/` alternative, the
+    # insert anchor's twin) does NOT match a `\r`-terminated line — the `\r`
+    # sits between the matched text and the record's true end, in standard
+    # POSIX awk (gawk/mawk/BWK awk all agree). The unanchored `/^## /`
+    # alternative is unaffected. On THIS fixture that asymmetry lands the §11
+    # block INSIDE `<!-- gitnexus:start -->` while Apply reports success —
+    # reproducing the exact defect this migration exists to fix, silently.
+    # Per the user's binding ruling: fail closed. Refuse, do not normalize.
+    #
+    # WHY (b) MUST ACCEPT (D-38's other half — a guard never observed
+    # accepting is a brick wall, not a guard): an ordinary LF file with the
+    # identical byte content must heal exactly as 01-gitnexus-led-inject does.
+    # If the CRLF guard fired on (b) too, it would be a brick wall, not a
+    # guard — this is what actually proves the guard is CRLF-specific.
+    local s17
+    {
+      printf '# AGENTS.md\n\nThis file provides guidance to Codex.\n\n'
+      printf '<!-- gitnexus:start -->\n# GitNexus — Code Intelligence\n\n'
+      printf 'This project is indexed by GitNexus as **demo** (100 symbols).\n\n'
+      printf '## Always Do\n- MUST run impact analysis before editing any symbol.\n\n'
+      printf '## Never Do\n- NEVER rename symbols with find-and-replace.\n<!-- gitnexus:end -->\n\n'
+      printf '## Some Section\nProject-specific stuff here.\n'
+    } > "$tmp/17-source.md"
+
+    # (a) CRLF variant.
+    p="$(_m0009_mk_project "$tmp" 17a)"; h="$(_m0009_mk_fake_home "$tmp" 17a "$mirror")"
+    awk '{ printf "%s\r\n", $0 }' "$tmp/17-source.md" > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/17a-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "17-crlf-region-led (a) CRLF: Apply refuses with exit 3 rather than mis-anchor inside the region — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/17a-pristine.md"
+    _m0009_ok $? "17-crlf-region-led (a) CRLF: AGENTS.md is BYTE-IDENTICAL after the refusal (fail-closed, not normalized/rewritten)"
+
+    case "$out" in
+      *'CRLF'*) _m0009_ok 0 "17-crlf-region-led (a) CRLF: diagnostic names CRLF as the cause" ;;
+      *)        _m0009_ok 1 "17-crlf-region-led (a) CRLF: diagnostic names CRLF as the cause" ;;
+    esac
+
+    case "$out" in
+      *'perl -pi -e'*) _m0009_ok 0 "17-crlf-region-led (a) CRLF: diagnostic states a concrete, actionable remedy command (the user's binding ruling — a refusal without a stated remedy is not acceptable)" ;;
+      *)               _m0009_ok 1 "17-crlf-region-led (a) CRLF: diagnostic states a concrete, actionable remedy command" ;;
+    esac
+
+    case "$out" in
+      *update-codex-agenticapps-workflow*) _m0009_ok 0 "17-crlf-region-led (a) CRLF: diagnostic names the re-run command after the remedy" ;;
+      *)                                   _m0009_ok 1 "17-crlf-region-led (a) CRLF: diagnostic names the re-run command after the remedy" ;;
+    esac
+
+    # (b) LF variant — the D-38 accept direction. Same content, ordinary line
+    # endings; must heal exactly like 01-gitnexus-led-inject.
+    p="$(_m0009_mk_project "$tmp" 17b)"; h="$(_m0009_mk_fake_home "$tmp" 17b "$mirror")"
+    cp "$tmp/17-source.md" "$p/AGENTS.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "17-crlf-region-led (b) LF (accept direction): Apply exits 0 on an ordinary LF file — the CRLF guard must NOT fire here — got exit=$rc"
+
+    prov_line="$(grep -n -F -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    start_line="$(grep -n -x -- '<!-- gitnexus:start -->' "$p/AGENTS.md" 2>/dev/null | head -1 | cut -d: -f1)"
+    [ -n "$prov_line" ] && [ -n "$start_line" ] && [ "$prov_line" -lt "$start_line" ]
+    _m0009_ok $? "17-crlf-region-led (b) LF (accept direction): provenance (line ${prov_line:-ABSENT}) lands ABOVE gitnexus:start (line ${start_line:-ABSENT}), same as 01-gitnexus-led-inject"
+
+    case "$out" in
+      *'CRLF'*) _m0009_ok 1 "17-crlf-region-led (b) LF (accept direction): diagnostic does NOT mention CRLF (guard is CRLF-specific, not a brick wall)" ;;
+      *)        _m0009_ok 0 "17-crlf-region-led (b) LF (accept direction): diagnostic does NOT mention CRLF (guard is CRLF-specific, not a brick wall)" ;;
+    esac
+
+  else
+    # The Apply extraction gate is DOWN. Report every case as FAILED rather than
+    # skipping it. A case that silently vanishes when its input is missing is the
+    # dead-assertion defect wearing a different hat: the suite would exit 0 and
+    # read as coverage.
+    _m0009_fail "01-gitnexus-led-inject — NOT ASSERTED: 0009's Step 1 Apply could not be extracted (the 0009 document does not exist yet)"
+    _m0009_fail "02-inside-region-move — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "03-healthy-noop — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "04-no-agentsmd — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: Apply exits ZERO on a zero-byte AGENTS.md — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: diagnostic is NOT the misleading 'possibly-truncated result' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: skip message names THIS host's skill — NOT ASSERTED: extraction failed"
+    _m0009_fail "16-zero-byte-agentsmd: AGENTS.md still exists and is still zero bytes after the skip — NOT ASSERTED: extraction failed"
+    _m0009_fail "05-unmanaged-conflict — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "06-no-heading-eof — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "09-two-provenance-heal — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "12-idempotent-rerun — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: Apply refuses with exit 3 — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: AGENTS.md is BYTE-IDENTICAL after the refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: diagnostic names CRLF as the cause — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: diagnostic states a concrete, actionable remedy command — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (a) CRLF: diagnostic names the re-run command after the remedy — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (b) LF (accept direction): Apply exits 0 — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (b) LF (accept direction): provenance lands ABOVE gitnexus:start — NOT ASSERTED: extraction failed"
+    _m0009_fail "17-crlf-region-led (b) LF (accept direction): diagnostic does NOT mention CRLF — NOT ASSERTED: extraction failed"
+  fi
+
+  # ── 07-prose-mention-not-a-region (D-46.1 — forces D-21's ANCHORED regex) ──
+  # BEFORE: an HTML comment near the top MENTIONS the marker inside backticks, so
+  # the line is NOT exactly `<!-- gitnexus:start -->`; the §11 block is correctly
+  # anchored right after that comment; there is NO real region anywhere.
+  #
+  # THIS CASE IS A DEAD-ASSERTION DETECTOR BY DESIGN (09-VALIDATION.md Dimension 8
+  # item 4). A SUBSTRING marker match passes every OTHER fixture in this suite and
+  # fails ONLY here: it would see the prose mention, judge the file in-region, and
+  # return `not-applied` — proposing to "heal" a perfectly healthy file by moving
+  # §11 above a region that does not exist. The anchored `/^...$/` regex returns
+  # `applied` (skip). If this case ever passes with a substring match, the fixture
+  # is wrong and must be rewritten, not the assertion relaxed.
+  if [ "$idem_ok" = "1" ]; then
+    local s07="$tmp/state-07"; mkdir -p "$s07"
+    {
+      printf '<!--\n'
+      printf '  This block MUST stay ABOVE the `<!-- gitnexus:start -->` region below.\n'
+      printf '  This is prose ONLY — this fixture file has no real region.\n'
+      printf -- '-->\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff. No GitNexus region anywhere in this file.\n'
+    } > "$s07/AGENTS.md"
+    assert_check "07-prose-mention-not-a-region: a prose mention of the marker is NOT a region → skip (D-21 anchored regex)" \
+      "$idem_block" "$s07" "applied"
+  else
+    _m0009_fail "07-prose-mention-not-a-region — NOT ASSERTED: Step 1 Idempotency check extraction failed"
+  fi
+
+  # ── 11-prose-mention-provenance (CR-02 — 07's PROVENANCE twin) ──
+  # PORTED, not re-derived, from `claude-workflow f9354cc`
+  # (migrations/test-fixtures/0029/11-prose-mention-provenance/{setup,verify}.sh,
+  # PR #89), which fixed CR-02 upstream before we did. Verified before reading:
+  # `git -C ../claude-workflow fetch && git log --oneline -1 origin/main` is
+  # STILL `f9354cc` as of this port. Re-deriving would risk prose divergence
+  # from the exact fixture this repo's 0009 is a port of; validated across six
+  # repos upstream.
+  #
+  # 07 above proves the REGION marker (`gitnexus:start`) is anchored (`^...$`);
+  # this is the PROVENANCE marker's twin — it proves `PROV_RE` must be too.
+  # BEFORE: a guard comment near the top MENTIONS the provenance marker in
+  # prose (indented inside an HTML comment, not a whole-line match), followed
+  # by real project content ("IMPORTANT PROJECT RULE...") an unanchored
+  # PROV_RE would destroy, THEN the real, correctly-placed §11 block with NO
+  # GitNexus region anywhere in the file. Translated: upstream's CLAUDE.md →
+  # this repo's AGENTS.md; upstream's per-directory setup.sh/verify.sh harness
+  # → this repo's inline _m0009_mk_project + _m0009_mk_fake_home + _m0009_apply
+  # idiom.
+  #
+  # THIS IS ALSO A DEAD-ASSERTION DETECTOR, mirroring 07's design (09-VALIDATION.md
+  # Dimension 8 item 4): the real block is already healthy and un-regioned, so
+  # this MUST be a legitimate heal/no-op — rc 0, NOT a refusal. An unanchored
+  # PROV_RE substring-matches the prose line, enters `in_block` there instead
+  # of at the real marker, and (per fixture 13/14's mechanism above) destroys
+  # everything between the prose mention and the block's own heading — upstream
+  # measured this turning their 91-line fixture into 85 lines.
+  if [ "$apply_ok" = "1" ]; then
+    p="$(_m0009_mk_project "$tmp" 11)"; h="$(_m0009_mk_fake_home "$tmp" 11 "$mirror")"
+    {
+      printf '<!--\n'
+      printf '  The §11 block is anchored behind\n'
+      printf '  %s below.\n' "$PROV_LIT"
+      printf '  This is prose ONLY — the real marker is further down.\n'
+      printf -- '-->\n'
+      printf '\n'
+      printf 'IMPORTANT PROJECT RULE: never deploy on Friday.\n'
+      printf '\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Project Overview\nStuff. No GitNexus region anywhere in this file.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "11-prose-mention-provenance: rc is 0 — a legitimate heal/no-op, NOT a refusal (the anchored regex must not turn a prose mention into a refuse-gate trigger either) — got exit=$rc, before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines"
+
+    grep -q 'IMPORTANT PROJECT RULE' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "11-prose-mention-provenance: content between the prose mention and the next heading survives ('IMPORTANT PROJECT RULE') — the content-survival assertion (CR-02's independent second reproduction)"
+
+    nprov="$(grep -c -x -- "$PROV_LIT" "$p/AGENTS.md" 2>/dev/null)"
+    [ "$nprov" = "1" ]
+    _m0009_ok $? "11-prose-mention-provenance: exactly ONE real (whole-line) provenance line remains after Apply (found $nprov)"
+
+    grep -q -F -- '  The §11 block is anchored behind' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "11-prose-mention-provenance: the prose-mention guard-comment line survives verbatim in the after-state"
+  else
+    _m0009_fail "11-prose-mention-provenance: rc is 0 — a legitimate heal/no-op — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "11-prose-mention-provenance: content between the prose mention and the next heading survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "11-prose-mention-provenance: exactly ONE real provenance line remains after Apply — NOT ASSERTED: extraction failed"
+    _m0009_fail "11-prose-mention-provenance: the prose-mention guard-comment line survives verbatim — NOT ASSERTED: extraction failed"
+  fi
+
+  # ── 08-rollback-region-led (D-46.2, kept even under D-47) ──
+  # 0009's Rollback is `git checkout AGENTS.md` (D-47), so the region-eating-
+  # rollback bug class is STRUCTURALLY UNREACHABLE here — there is no terminator
+  # to get wrong. This case is therefore a REGRESSION GUARD ON THAT CHOICE, and it
+  # is asserted against the migration DOCUMENT rather than by executing awk.
+  #
+  # Its purpose is to fail loudly if a future author "improves" Rollback into the
+  # custom awk that upstream's fixture 08 exists to catch a file-destroying bug in
+  # (running that awk on a healed region-led file eats the start marker and the
+  # region's real content, leaving an orphaned, unpaired `<!-- gitnexus:end -->` —
+  # verified empirically upstream, and replayed as 09-01's counter-case B).
+  #
+  # Scoped from Step 1's `**Rollback:**` line to `### Step 2` deliberately, rather
+  # than via extract_step_block: with no fence inside Step 1's Rollback, that
+  # helper's `want` flag would stay armed past `### Step 2` and latch onto Step 2's
+  # Apply fence, so a "no awk here" assertion would pass by inspecting the WRONG
+  # block. (Harmless for 0009's real consumers — Apply and Idempotency check both
+  # have fences inside their own step — and assert_extracted_shape would catch it
+  # regardless. Noted, not fixed: 09-02's helper is out of this plan's scope.)
+  local rb_scope
+  rb_scope="$(awk '
+    index($0, "### Step 1") == 1 { in1=1; next }
+    index($0, "### Step 2") == 1 { exit }
+    in1 && index($0, "**Rollback:**") == 1 { r=1 }
+    r { print }
+  ' "$MIGRATION_0009" 2>/dev/null)"
+
+  case "$rb_scope" in
+    *'git checkout AGENTS.md'*) _m0009_ok 0 "08-rollback-region-led: Step 1 Rollback is 'git checkout AGENTS.md' (D-47 — structurally immune, no terminator to get wrong)" ;;
+    *)                          _m0009_ok 1 "08-rollback-region-led: Step 1 Rollback is 'git checkout AGENTS.md' (D-47 — structurally immune, no terminator to get wrong)" ;;
+  esac
+
+  # Both halves required: the literal alone would still pass if someone ADDED an
+  # awk block alongside it.
+  if [ -n "$rb_scope" ] && ! printf '%s' "$rb_scope" | grep -q 'awk'; then
+    _m0009_ok 0 "08-rollback-region-led: Step 1 Rollback carries NO fenced awk block — the region-eating bug class stays unreachable"
+  else
+    _m0009_ok 1 "08-rollback-region-led: Step 1 Rollback carries NO fenced awk block — the region-eating bug class stays unreachable"
+  fi
+
+  # ── 10-corrupt-mirror-refused (D-46.4 — binds BOTH D-28.1 guard layers) ──
+  # Exercises the PRE-FLIGHT, not Step 1, because the mirror guards live there.
+  # D-27 makes the mirror the SOLE re-injection source, so a mirror that exists
+  # but is corrupt makes 0009 strip §11 and inject garbage — destroying §11 on
+  # every heal. Each mode gets its OWN fake home so the modes are independent and
+  # cannot depend on execution order. mk_project supplies `.git` +
+  # `.codex/workflow-version.txt` at 0.6.0 (no local `skills/` tree — see
+  # `_m0009_mk_project`'s own header comment, 09.1-01), so the pre-flight's
+  # other guards pass and THE MIRROR IS THE ONLY VARIABLE — otherwise a
+  # refusal could come from the version gate instead and the assertion would
+  # pass for the wrong reason.
+  if [ "$pf_ok" = "1" ]; then
+    local h10a h10b h10c p10
+    p10="$(_m0009_mk_project "$tmp" 10)"
+
+    # (a) ZERO-BYTE mirror → the `test -s` layer. `test -f` alone PASSES here —
+    #     that is the exact gap upstream closed (an interrupted `git pull` in the
+    #     scaffolder clone leaves precisely this).
+    h10a="$(_m0009_mk_fake_home "$tmp" 10a "$mirror")"
+    : > "$h10a/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    out="$(_m0009_apply "$p10" "$h10a" "$pf_block")"; rc=$?
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (a) zero-byte mirror: pre-flight refuses with exit 3 (D-28.1 layer 1, test -s) — got exit=$rc"
+
+    # WR-04: `rc -eq 3` above CANNOT discriminate layer 1 (test -s) from layer 2
+    # (the tail sentinel) — guard 4 also fails a zero-byte mirror with the same
+    # exit 3 BY CONSTRUCTION (a zero-byte file has no `### 4. Goal-Driven
+    # Execution` line either), so guard 4 subsumes guard 3 on this exact
+    # fixture. The diagnostic TEXT is the only thing that differs: guard 3's is
+    # "missing or empty" (0009:115), guard 4's is "missing its final section...
+    # truncated or corrupt" (0009:140) and does NOT contain "missing or empty"
+    # (re-confirmed by A4 in this plan's acceptance criteria). This mirrors how
+    # the harness already isolates the version gate from the mirror guards 12
+    # lines earlier by construction (mk_project supplies a passing version).
+    case "$out" in
+      *'missing or empty'*) _m0009_ok 0 "10-corrupt-mirror-refused (a) zero-byte mirror refused BY THE test -s layer" ;;
+      *)                    _m0009_ok 1 "10-corrupt-mirror-refused (a) zero-byte mirror refused, but not by test -s (wrong layer)" ;;
+    esac
+
+    # (b) TRUNCATED mirror (head -20: keeps the L1 `## ` heading, drops
+    #     `### 4. Goal-Driven Execution` at L57) → the tail-sentinel layer.
+    #     WHY TRUNCATION DEFEATS BOTH `test -s` AND Apply's pre-`mv` shape
+    #     assertion: the mirror's heading is on LINE 1, and both of those guards
+    #     only look at the HEAD of a file that is truncated at the TAIL. A
+    #     head-preserving truncation is non-empty and still produces the §11
+    #     heading in the insert, so both pass it. Only a tail sentinel closes the
+    #     gap between "has a heading" and "is the whole block".
+    h10b="$(_m0009_mk_fake_home "$tmp" 10b "$mirror")"
+    head -20 "$mirror" > "$h10b/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+    out="$(_m0009_apply "$p10" "$h10b" "$pf_block")"; rc=$?
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (b) truncated mirror: pre-flight refuses with exit 3 (D-28.1 layer 2, tail sentinel) — got exit=$rc"
+
+    # (c) HEALTHY mirror → MUST pass. WITHOUT THIS DIRECTION A PRE-FLIGHT THAT
+    #     REFUSED EVERYTHING WOULD PASS (a) AND (b) AND READ AS A WORKING GUARD.
+    #     This is D-38's double-sided contract applied to the mirror guards: a
+    #     guard never observed ACCEPTING is not a guard, it is a brick wall.
+    h10c="$(_m0009_mk_fake_home "$tmp" 10c "$mirror")"
+    out="$(_m0009_apply "$p10" "$h10c" "$pf_block")"; rc=$?
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "10-corrupt-mirror-refused (c) healthy mirror: pre-flight PASSES with exit 0 (the direction that proves it is not refusing everything) — got exit=$rc"
+  else
+    _m0009_fail "10-corrupt-mirror-refused (a) zero-byte mirror — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "10-corrupt-mirror-refused (b) truncated mirror — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "10-corrupt-mirror-refused (c) healthy mirror — NOT ASSERTED: Pre-flight extraction failed"
+  fi
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # 09.1-04 Task 1 — the three reproduced runaway-strip fixtures (CR-01/ANCHOR-05).
+  #
+  # Each is a fixture that has NOT YET been observed RED against the current,
+  # unfixed 0009 the moment it is written is an assertion, not evidence. All
+  # three MUST fail against this plan's unmodified `migrations/0009-*.md`:
+  # the strip's exit condition (`in_block && swallowed_own_h2 && (...)`) is
+  # gated behind `swallowed_own_h2`, which ONLY the EXACT
+  # `## Coding Discipline (NON-NEGOTIABLE)` heading ever sets. When that exact
+  # heading never appears after a provenance line, the exit rule can never
+  # fire, `in_block` latches at 1 forever, and `in_block { next }` consumes
+  # every remaining line to EOF — silently, with exit 0. Fixed by 09.1-05.
+  #
+  # All three assert the SAME four-part contract (Q1 ruling — REFUSE, not
+  # heal): exit 3, AGENTS.md byte-identical, a diagnostic naming the offending
+  # provenance line, and NOT the misleading "produced no output" message that
+  # `0009:332` would emit for an unrelated failure class (disk full / awk
+  # error) — that message is false for this failure and would misdirect an
+  # operator. Gated on `[ "$apply_ok" = "1" ]`, mirroring every case above: a
+  # down extraction gate reports FAILED via `_m0009_fail`, never silence.
+  # ═════════════════════════════════════════════════════════════════════════
+  if [ "$apply_ok" = "1" ]; then
+
+    # ── 13-runaway-drifted-h2 (CR-01 — the exact 09-CR-01-REPRO.md shape) ──
+    # BEFORE: provenance present, H2 drifted to
+    # "## Coding Discipline (RENAMED — drifted)", followed by two real project
+    # headings ("## Critical Project Rules", "## Deployment"). 16 lines in.
+    # Reproduces 09-CR-01-REPRO.md verbatim, not an approximation: that repro
+    # recorded 16 → 4 lines, with everything from the provenance line to EOF
+    # destroyed while all three of 0009's own post-strip guards report success.
+    p="$(_m0009_mk_project "$tmp" 13)"; h="$(_m0009_mk_fake_home "$tmp" 13 "$mirror")"
+    {
+      printf '# My Project\n\nIntro prose.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      printf '## Coding Discipline (RENAMED — drifted)\n'
+      printf 'Some body text describing the drifted heading.\n\n'
+      printf '## Critical Project Rules\n'
+      printf 'Critical rules body text that must not be destroyed.\n\n'
+      printf '## Deployment\n'
+      printf 'Deployment body text line 1.\n'
+      printf 'Deployment body text line 2.\n'
+      printf 'Deployment body text line 3.\n\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "13-runaway-drifted-h2: Apply refuses with exit 3 on a drifted H2 (CR-01) — before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines, got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "13-runaway-drifted-h2: AGENTS.md is BYTE-IDENTICAL after refusal — the assertion that actually catches CR-01 (current 0009 truncates the file)"
+
+    case "$out" in
+      *"$PROV_LIT"*) _m0009_ok 0 "13-runaway-drifted-h2: diagnostic names the offending provenance line" ;;
+      *)              _m0009_ok 1 "13-runaway-drifted-h2: diagnostic names the offending provenance line" ;;
+    esac
+
+    case "$out" in
+      *'produced no output'*) _m0009_ok 1 "13-runaway-drifted-h2: diagnostic is NOT the misleading 'produced no output' message (0009:332 is the wrong branch for this failure class)" ;;
+      *)                       _m0009_ok 0 "13-runaway-drifted-h2: diagnostic is NOT the misleading 'produced no output' message (0009:332 is the wrong branch for this failure class)" ;;
+    esac
+
+    grep -q -x -- '## Critical Project Rules' "$p/AGENTS.md" 2>/dev/null && grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "13-runaway-drifted-h2: surviving-content check — '## Critical Project Rules' and '## Deployment' both present (names the harm as data loss, redundant with cmp but reads as content destruction)"
+
+    # ── 14-runaway-orphan-provenance (0009:282's own acknowledged state) ──
+    # BEFORE: provenance present, NO §11 heading at all, and NO following
+    # `## ` anywhere — the tail runs straight to EOF. 0009's own insert-pass
+    # comment (`:282-285`) documents that the migration itself can PRODUCE
+    # this exact state ("the rest of the file, plus an orphaned provenance
+    # line") when the mirror is empty; 09-REVIEW.md lists it as reachable.
+    # RESEARCH reproduced 8 lines in → 4 lines out.
+    p="$(_m0009_mk_project "$tmp" 14)"; h="$(_m0009_mk_fake_home "$tmp" 14 "$mirror")"
+    {
+      printf '# My Project\n\nIntro prose.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      printf 'Some content that follows the orphaned provenance line.\n'
+      printf 'More content that would be silently destroyed.\n'
+      printf 'Final line of content — no heading anywhere below this point.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "14-runaway-orphan-provenance: Apply refuses with exit 3 on an orphaned provenance line — before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines, got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "14-runaway-orphan-provenance: AGENTS.md is BYTE-IDENTICAL after refusal"
+
+    case "$out" in
+      *"$PROV_LIT"*) _m0009_ok 0 "14-runaway-orphan-provenance: diagnostic names the offending provenance line" ;;
+      *)              _m0009_ok 1 "14-runaway-orphan-provenance: diagnostic names the offending provenance line" ;;
+    esac
+
+    case "$out" in
+      *'produced no output'*) _m0009_ok 1 "14-runaway-orphan-provenance: diagnostic is NOT the misleading 'produced no output' message" ;;
+      *)                       _m0009_ok 0 "14-runaway-orphan-provenance: diagnostic is NOT the misleading 'produced no output' message" ;;
+    esac
+
+    # ── 15-mixed-provenance-unresolved (the END guard's ONLY falsifiability proof) ──
+    # BEFORE: provenance #1 + a HEALTHY block (exact H2 + full mirror body) +
+    # a real terminating heading (`## Workflow`) + provenance #2 + a DRIFTED
+    # H2 ("## Coding Discipline (RENAMED — drifted)") + body + `## Deployment`
+    # + EOF.
+    #
+    # WHY THIS FIXTURE EXISTS: the file-global refuse gate at the top of
+    # Apply (`grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' AGENTS.md &&
+    # ! grep -qE "$PROV_RE" AGENTS.md`) checks the WHOLE FILE, not per-block.
+    # In this shape the exact H2 IS present — block 1 has it — so
+    # `! grep -qE "$PROV_RE"` is false and the conjunction never fires. The
+    # refuse gate is BLIND to this shape. It falls through to the strip,
+    # which heals block 1 correctly but then latches on block 2's drifted H2
+    # exactly as in fixture 13, this time consuming `## Deployment` and
+    # everything after it. Only the END guard
+    # (`END { if (unresolved || (in_block && !swallowed_own_h2)) exit 4 }`,
+    # 09.1-05's fix) can catch this shape — without this fixture that guard
+    # is defense-in-depth theater, never observed catching anything.
+    p="$(_m0009_mk_project "$tmp" 15)"; h="$(_m0009_mk_fake_home "$tmp" 15 "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Workflow\nFirst project section — must survive.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      printf '## Coding Discipline (RENAMED — drifted)\n'
+      printf 'Body content under the drifted heading in the second block.\n\n'
+      printf '## Deployment\n'
+      printf 'Deployment body text — the harm the END guard exists to prevent.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "15-mixed-provenance-unresolved: Apply refuses with exit 3 on a shape the file-global refuse gate cannot see — before=$(wc -l < "$p/AGENTS.md.before" | tr -d ' ') after=$(wc -l < "$p/AGENTS.md" | tr -d ' ') lines, got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "15-mixed-provenance-unresolved: AGENTS.md is BYTE-IDENTICAL after refusal"
+
+    case "$out" in
+      *"$PROV_LIT"*) _m0009_ok 0 "15-mixed-provenance-unresolved: diagnostic names the offending provenance line" ;;
+      *)              _m0009_ok 1 "15-mixed-provenance-unresolved: diagnostic names the offending provenance line" ;;
+    esac
+
+    case "$out" in
+      *'produced no output'*) _m0009_ok 1 "15-mixed-provenance-unresolved: diagnostic is NOT the misleading 'produced no output' message" ;;
+      *)                       _m0009_ok 0 "15-mixed-provenance-unresolved: diagnostic is NOT the misleading 'produced no output' message" ;;
+    esac
+
+    grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "15-mixed-provenance-unresolved: '## Deployment' survives — its absence is the harm the END guard (09.1-05) exists to prevent"
+
+    # ── 18-fenced-quoted-marker (09.1-REVIEW.md CR-02 — D-38 double-sided) ──
+    # An exact, whole-line quotation of the provenance marker AND the §11
+    # heading — together, adjacent, inside a markdown code fence documenting
+    # "what a healthy block looks like" — is not a "mention" in the CR-01/
+    # 07/11 sense (those are unanchored SUBSTRING mentions). It is a real
+    # ANCHORED match on both regexes simultaneously. The strip latches
+    # `in_block` at the fenced provenance line, swallows the fenced example's
+    # own heading (exactly like a real block), and then — because neither
+    # refuse-gate `elif` is file-global-blind here too (heading present +
+    # provenance present, both true in aggregate) — keeps consuming
+    # everything that is not itself a `## ` line or a region marker: the
+    # closing code fence, an unrelated prose sentence, and a blank line —
+    # real, unrelated user content — until it reaches the next real `## `
+    # heading. Per the user's binding ruling: do not attempt fence-parsing in
+    # the strip to make it "smart" about skipping fenced content and
+    # continuing to heal (upstream calls that not-fixable-by-design). Instead
+    # detect the ambiguity — a bare \`\`\`/~~~ fence-delimiter line appearing
+    # inside the span the strip is about to silently discard is ALWAYS
+    # suspicious, since the real vendored mirror carries zero such lines in
+    # its own body — and refuse rather than guess.
+    #
+    # (a) REFUSE: the review's own concrete repro, verbatim.
+    p="$(_m0009_mk_project "$tmp" 18a)"; h="$(_m0009_mk_fake_home "$tmp" 18a "$mirror")"
+    {
+      printf '# My Project\n\n'
+      printf '## Troubleshooting\n\n'
+      printf 'If your AGENTS.md ever needs the §11 marker restored by hand, it looks\n'
+      printf 'exactly like this:\n\n'
+      printf '```\n'
+      printf '%s\n' "$PROV_LIT"
+      printf '## Coding Discipline (NON-NEGOTIABLE)\n'
+      printf '```\n\n'
+      printf 'Do not delete this troubleshooting note.\n\n'
+      printf '## Deployment\n'
+      printf 'Real deployment content that must survive.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$p/AGENTS.md.before"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 3 ]
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: Apply refuses with exit 3 on a fenced whole-line quotation of provenance+heading — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$p/AGENTS.md.before"
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: AGENTS.md is BYTE-IDENTICAL after refusal — the assertion that actually catches CR-02 (unfixed 0009 silently deletes the troubleshooting note)"
+
+    case "$out" in
+      *'fence'*|*'Fence'*) _m0009_ok 0 "18-fenced-quoted-marker (a) REFUSE: diagnostic names the fence/ambiguity as the cause" ;;
+      *)                   _m0009_ok 1 "18-fenced-quoted-marker (a) REFUSE: diagnostic names the fence/ambiguity as the cause" ;;
+    esac
+
+    grep -q -F -- 'Do not delete this troubleshooting note.' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: the troubleshooting prose survives (the exact content CR-02 found silently deleted)"
+
+    grep -q -x -- '## Deployment' "$p/AGENTS.md" 2>/dev/null
+    _m0009_ok $? "18-fenced-quoted-marker (a) REFUSE: '## Deployment' survives"
+
+    # (b) ACCEPT (D-38's other half) — a REAL, un-fenced, correctly-placed §11
+    # block that genuinely gets stripped-and-reinserted (so the strip's
+    # in_block span is actually exercised, not skipped like 03's zero-churn
+    # case would leave untested), PLUS a totally unrelated fenced code
+    # example living OUTSIDE that span (after the real terminator). The
+    # guard must NOT fire just because a fence exists SOMEWHERE in the file —
+    # only when one falls inside content the strip is about to discard.
+    p="$(_m0009_mk_project "$tmp" 18b)"; h="$(_m0009_mk_fake_home "$tmp" 18b "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Examples\nHere is an example:\n\n'
+      printf '```\necho hello\n```\n\n'
+      printf '## Deployment\nMore stuff.\n'
+    } > "$p/AGENTS.md"
+    cp "$p/AGENTS.md" "$tmp/18b-pristine.md"
+    out="$(_m0009_apply "$p" "$h" "$apply_block")"; rc=$?
+
+    [ "$rc" -eq 0 ]
+    _m0009_ok $? "18-fenced-quoted-marker (b) ACCEPT: Apply exits 0 when the fence is OUTSIDE the strip's span — the guard must not be a brick wall — got exit=$rc"
+
+    cmp -s "$p/AGENTS.md" "$tmp/18b-pristine.md"
+    _m0009_ok $? "18-fenced-quoted-marker (b) ACCEPT: AGENTS.md is BYTE-IDENTICAL (zero-churn heal, unrelated fence content untouched)"
+
+  else
+    _m0009_fail "13-runaway-drifted-h2: Apply refuses with exit 3 on a drifted H2 (CR-01) — NOT ASSERTED: Step 1 Apply extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: diagnostic names the offending provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: diagnostic is NOT the misleading 'produced no output' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "13-runaway-drifted-h2: surviving-content check — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: Apply refuses with exit 3 on an orphaned provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: diagnostic names the offending provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "14-runaway-orphan-provenance: diagnostic is NOT the misleading 'produced no output' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: Apply refuses with exit 3 on a shape the file-global refuse gate cannot see — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: diagnostic names the offending provenance line — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: diagnostic is NOT the misleading 'produced no output' message — NOT ASSERTED: extraction failed"
+    _m0009_fail "15-mixed-provenance-unresolved: '## Deployment' survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: Apply refuses with exit 3 — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: AGENTS.md is BYTE-IDENTICAL after refusal — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: diagnostic names the fence/ambiguity as the cause — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: the troubleshooting prose survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (a) REFUSE: '## Deployment' survives — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (b) ACCEPT: Apply exits 0 — NOT ASSERTED: extraction failed"
+    _m0009_fail "18-fenced-quoted-marker (b) ACCEPT: AGENTS.md is BYTE-IDENTICAL — NOT ASSERTED: extraction failed"
+  fi
+
+  # ── no-scaffolder-tree (T-08-38 port — the criterion-0 regression guard) ──
+  # Ports 0008's OWN `no-scaffolder-tree` fixture (`run-tests.sh:1638-1707`,
+  # named without a number to match 0008's own naming — numbered fixtures
+  # 11-15 are reserved, per Q4) to 0009. V-01 shipped 314 PASS / 0 FAIL
+  # because the OLD `_m0009_mk_project` manufactured a synthetic
+  # `skills/agentic-apps-workflow/SKILL.md` in every 0009 sandbox — the exact
+  # practice 0008's own sandbox refuses (`run-tests.sh:917-918`). Task 1 of
+  # this plan already made `_m0009_mk_project` realistic (no `skills/` tree
+  # at all); this fixture is the falsifiable proof that removal sticks, and
+  # — until 09.1-02 lands — the RECORDED RED that criterion 0 requires.
+  #
+  # Sandbox: `_m0009_mk_project` (now realistic) + `_m0009_mk_fake_home` with
+  # the healthy `$mirror`, plus an AGENTS.md carrying a healthy ON-anchor §11
+  # block ($PROV_LIT + the mirror's own bytes + a following `## Deployment`
+  # heading) — the same shape `03-healthy-noop` above uses for its pristine
+  # fixture. Gated on `[ "$pf_ok" = "1" ]`, mirroring every other case above:
+  # a down extraction gate reports FAILED via `_m0009_fail`, not silence.
+  if [ "$pf_ok" = "1" ]; then
+    local pns hns applies_to_block step2_apply_block sep_bad
+    pns="$(_m0009_mk_project "$tmp" nst)"
+    hns="$(_m0009_mk_fake_home "$tmp" nst "$mirror")"
+    {
+      printf '# AGENTS.md\n\nGuidance.\n\n'
+      printf '%s\n' "$PROV_LIT"
+      cat "$mirror"
+      printf '\n## Deployment\nStuff.\n'
+    } > "$pns/AGENTS.md"
+
+    # 1. The fixture guards itself — it really has no local `skills/` tree.
+    #    Without this, the fixture can silently stop testing its own premise,
+    #    which is exactly how V-01 shipped green.
+    if test ! -e "$pns/skills"; then
+      _m0009_ok 0 "no-scaffolder-tree: fixture has no local skills/ directory (self-guard — proves Task 1 landed)"
+    else
+      _m0009_ok 1 "no-scaffolder-tree: fixture has no local skills/ directory (self-guard — proves Task 1 landed)"
+    fi
+
+    # 2. Pre-flight passes with no skills/ tree present. THE CRITERION-0
+    #    ASSERTION. Run the EXTRACTED pre-flight through _m0009_apply, not an
+    #    inline copy — TEST-01's rule, so a document edit is what this
+    #    observes, not a hand-maintained duplicate.
+    out="$(_m0009_apply "$pns" "$hns" "$pf_block")"; rc=$?
+    _m0009_ok "$rc" "no-scaffolder-tree: pre-flight PASSES with no skills/ tree present (criterion 0) — got exit=$rc"
+
+    # 3. Step 1's idempotency check runs cleanly (exit <= 1, i.e. no *errors*,
+    #    per 0008's own assertion 3) in this sandbox.
+    out="$(_m0009_apply "$pns" "$hns" "$idem_block")"; rc=$?
+    [ "$rc" -le 1 ]
+    _m0009_ok $? "no-scaffolder-tree: Step 1's idempotency check runs cleanly (exit <= 1) with no skills/ tree — got exit=$rc"
+
+    # 4. The MIGR-08 / MIGR-09 separation holds as a DOCUMENT CONTRACT: no
+    #    EXECUTABLE surface of 0009 names skills/agentic-apps-workflow/SKILL.md.
+    #    Checked on three surfaces, not the raw file — 0009's own PROSE
+    #    legitimately discusses the path when it records the divergence
+    #    (0008:470-487), so a bare whole-document grep would self-invalidate
+    #    the moment 09.1-02 writes that prose.
+    applies_to_block="$(awk '/^applies_to:/{f=1;next} f && /^[^ ]/{exit} f{print}' "$MIGRATION_0009")"
+    step2_apply_block="$(extract_step_block "$MIGRATION_0009" 2 Apply 2>/dev/null)"
+    sep_bad=0
+    printf '%s' "$applies_to_block" | grep -q 'skills/' && sep_bad=1
+    printf '%s' "$pf_block" | grep -q 'skills/agentic-apps-workflow' && sep_bad=1
+    printf '%s' "$apply_block" | grep -q 'skills/agentic-apps-workflow' && sep_bad=1
+    printf '%s' "$step2_apply_block" | grep -q 'skills/agentic-apps-workflow' && sep_bad=1
+    _m0009_ok "$sep_bad" "no-scaffolder-tree: MIGR-08/MIGR-09 separation — no executable surface (applies_to frontmatter, pre-flight, every Step Apply) names skills/agentic-apps-workflow/SKILL.md"
+  else
+    _m0009_fail "no-scaffolder-tree: fixture has no local skills/ directory (self-guard) — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "no-scaffolder-tree: pre-flight PASSES with no skills/ tree present (criterion 0) — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "no-scaffolder-tree: Step 1's idempotency check runs cleanly (exit <= 1) with no skills/ tree — NOT ASSERTED: Pre-flight extraction failed"
+    _m0009_fail "no-scaffolder-tree: MIGR-08/MIGR-09 separation — NOT ASSERTED: Pre-flight extraction failed"
+  fi
+
+  # ── Known-limitations document contract (09.1-REVIEW.md WR-02) ──
+  # Asserted against the RAW DOCUMENT, not execution — mirrors
+  # 08-rollback-region-led's own style just above, for the same reason: this
+  # is a document-shape/disclosure contract, not behavior. Checks that 0009
+  # carries its own "Known limitations" section naming both hazards CR-01/
+  # CR-02 closed (rather than leaving the reader to assume the anchoring note
+  # at :640 means the whole marker-matching hazard class is resolved), states
+  # the concrete CRLF remedy command, and records the deliberate divergence
+  # from upstream's own still-accepting 0029.
+  local known_lim
+  known_lim="$(awk '/^## Known limitations/{f=1} f{print} /^## Notes/{exit}' "$MIGRATION_0009")"
+
+  case "$known_lim" in
+    *'## Known limitations'*) _m0009_ok 0 "WR-02: 0009 carries its own '## Known limitations' section" ;;
+    *)                        _m0009_ok 1 "WR-02: 0009 carries its own '## Known limitations' section" ;;
+  esac
+
+  case "$known_lim" in
+    *'CRLF'*) _m0009_ok 0 "WR-02: Known limitations names CRLF as a refused (not silently mis-healed) hazard" ;;
+    *)        _m0009_ok 1 "WR-02: Known limitations names CRLF as a refused (not silently mis-healed) hazard" ;;
+  esac
+
+  case "$known_lim" in
+    *'code fence'*) _m0009_ok 0 "WR-02: Known limitations names the fenced/quoted-marker hazard" ;;
+    *)              _m0009_ok 1 "WR-02: Known limitations names the fenced/quoted-marker hazard" ;;
+  esac
+
+  case "$known_lim" in
+    *'perl -pi -e'*) _m0009_ok 0 "WR-02: Known limitations states the concrete CRLF remedy command" ;;
+    *)               _m0009_ok 1 "WR-02: Known limitations states the concrete CRLF remedy command" ;;
+  esac
+
+  case "$known_lim" in
+    *'0029'*) _m0009_ok 0 "WR-02: Known limitations records the deliberate divergence from upstream's 0029" ;;
+    *)        _m0009_ok 1 "WR-02: Known limitations records the deliberate divergence from upstream's 0029" ;;
+  esac
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -3176,6 +4671,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0008" ]; then
   test_migration_0008
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
+  test_migration_0009
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then

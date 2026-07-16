@@ -22,6 +22,30 @@ in every shipped artifact's frontmatter.
 - Real CI: `.github/workflows/ci.yml` is still the Phase 0 placeholder and
   verifies nothing; `migrations/run-tests.sh` runs only locally.
 
+## [0.7.0] — 2026-07-15
+
+### Fixed
+- **The §11 Coding Discipline block now anchors above a leading GitNexus
+  region instead of inside it** (migration `0009`;
+  [ADR-0010](docs/decisions/0010-region-aware-spec-11-placement.md)). In a
+  project whose `AGENTS.md` opens with a GitNexus-managed region, the §11
+  block was placed *inside* that region — where the next `gitnexus analyze`
+  regenerated the region and destroyed the block silently, with no error and
+  no diagnostic. The block now lands above the region when the region leads
+  the file, and stays exactly where it is when it does not, honoring spec
+  §12's advice that behavior-critical prose live near the top of the file
+  where a model reliably reads it. The defect was **latent on this host** —
+  no repo here was ever broken, because this repo's own region does not lead
+  its `AGENTS.md` — so this closes the defect for every project this host
+  scaffolds rather than repairing anything in place.
+- **Existing installs pick the fix up by running
+  `/update-codex-agenticapps-workflow`**, which applies migration `0009`
+  (`0.6.0` → `0.7.0`). The migration is idempotent and deliberately
+  conservative: it heals a block that sits inside a region, injects one that
+  is missing entirely, leaves a correctly anchored block byte-identical
+  (healthy repos see no churn), and refuses with an error rather than
+  overwriting a §11 section you wrote by hand.
+
 ## [0.6.0] — 2026-07-15
 
 ### Added
