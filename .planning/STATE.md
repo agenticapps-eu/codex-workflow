@@ -4,8 +4,8 @@ milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
 status: executing
 stopped_at: Phase 10 context gathered
-last_updated: "2026-07-16T10:48:30.943Z"
-last_activity: 2026-07-16 -- Phase 10 planning complete
+last_updated: "2026-07-16T11:03:15.856Z"
+last_activity: 2026-07-16 -- Phase 10 execution started
 progress:
   total_phases: 5
   completed_phases: 0
@@ -28,7 +28,7 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** **v0.8.0 Enforcement, Not Intention**, Phase 10 (CI That Can
+**Current focus:** Phase 10 — ci-that-can-prove-failure
 Prove Failure) — first phase, serial, blocking. Every gate this host claims to
 bind actually fires, every migration actually runs, every assertion has been
 observed failing. Roadmap: Phase 10 (CI-01/CI-02) → parallel Phases 11
@@ -39,10 +39,10 @@ Intention".
 
 ## Current Position
 
-Phase: 10 of 14 (CI That Can Prove Failure) — ready to plan
-Plan: — (not yet planned)
-Status: Ready to execute
-Last activity: 2026-07-16 -- Phase 10 planning complete
+Phase: 10 (ci-that-can-prove-failure) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 10
+Last activity: 2026-07-16 -- Phase 10 execution started
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
