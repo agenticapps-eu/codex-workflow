@@ -3217,13 +3217,38 @@ test_check_plan_review_contract() {
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
-  # Mechanism from the shared lib (run_drift_test); the POLICY (a mismatch is a
-  # hard fail) is this consumer's, per ADR-0035.
-  if run_drift_test "$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md" "$REPO_ROOT/migrations"; then
-    echo "  ${GREEN}PASS${RESET} SKILL.md version matches latest migration to_version"
+
+  # ── Leg 1: drift-target selection by semver-max to_version, NOT filename
+  # sort (Phase 11, MIGR-10). The shared run_drift_test() MECHANISM (vendor/
+  # agenticapps-shared/migrations/lib/drift-test.sh, pinned per ADR-0035)
+  # selects the "latest" migration via `ls ... | sort | tail -1` — a FILENAME
+  # sort. Migration 0010 is a version-BACKPORT into the 0.4.0->0.5.0 slot
+  # migration 0007 occupies: 0010's filename sorts last (numerically highest
+  # ID), but its to_version (0.5.0) is BELOW the real drift target (0.7.0,
+  # from 0009's to_version). Feeding run_drift_test the migrations dir
+  # directly would compare SKILL.md's 0.7.0 against 0010's 0.5.0 and report a
+  # false mismatch. The drift target is therefore selected HERE, by this
+  # consumer, as the semver-max `to_version` across every `migrations/*.md`
+  # file — never by filename sort. This is consumer-owned POLICY (ADR-0035);
+  # the pinned MECHANISM in vendor/agenticapps-shared is not edited to
+  # implement it. Portable numeric-field sort — the GNU-only version-sort
+  # flag is deliberately avoided (BSD sort on the macOS leg of the CI matrix
+  # does not support it).
+  local skill_md="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
+  local mig_dir="$REPO_ROOT/migrations"
+  local drift_target skill_v_leg1
+  drift_target="$(
+    for f in "$mig_dir"/[0-9][0-9][0-9][0-9]-*.md; do
+      grep -m1 '^to_version:' "$f" 2>/dev/null | awk '{print $2}'
+    done | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
+  )"
+  skill_v_leg1="$(grep -m1 '^version:' "$skill_md" 2>/dev/null | awk '{print $2}')"
+
+  if [ -n "$drift_target" ] && [ "$skill_v_leg1" = "$drift_target" ]; then
+    echo "  ${GREEN}PASS${RESET} SKILL.md version ($skill_v_leg1) matches the semver-max migration to_version ($drift_target)"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} drift mismatch (see message above)"
+    echo "  ${RED}FAIL${RESET} drift mismatch: SKILL.md version=$skill_v_leg1, semver-max migration to_version=$drift_target"
     FAIL=$((FAIL+1))
   fi
 
