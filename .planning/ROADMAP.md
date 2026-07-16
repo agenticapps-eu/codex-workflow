@@ -160,10 +160,12 @@ shut.
      against a sandbox seeded at the pre-migration value, and asserts exact
      `.codex/workflow-version.txt` content equality — breaking the write line is
      observed RED, restoring it is observed GREEN.
-**Plans**: 3 plans
+**Plans**: 5 plans (11-04, 11-05 added for gap closure 2026-07-16)
 - [x] 11-01-PLAN.md — MIGR-10: forward migration 0010 (0007-fix) re-delivering 0007's Steps 1/2/4 payload with a corrected `.codex/workflow-version.txt`-only pre-flight, plus its RED→GREEN delivery + document-contract fixture and a drift-target fix so 0010's backport `to_version` keeps `test_drift` green
 - [x] 11-02-PLAN.md — MIGR-08: mutation-proven fixture extracting 0008's Step 4 Apply block via `extract_step_block`, executing it against a 0.5.0-seeded sandbox, asserting exact `0.6.0` content equality
 - [x] 11-03-PLAN.md — MIGR-11: update-skill Stage D recovery runbook for the two stuck-at-0.4.0 operator states (superseded 0007 abort; manual-0.5.0 escape)
+- [ ] 11-04-PLAN.md — MIGR-11 GAP CLOSURE (SC#3): rewrite Stage D's recovery runbook to be TRUE against Stage A's real selection algorithm — both operator states route through `--migration 0010`, and amend the Flags table so `--migration NNNN` overrides the `to_version > project_version` boundary (option ii: make the runbook honest, no fictional supersession rule)
+- [ ] 11-05-PLAN.md — WR-02/WR-03 test-hardening: `test_migration_0010` executes its extracted pre-flight against seeded-version sandboxes (mutation-proven floor) and asserts 0010's `<repo-name>` placeholder resolution — parity with 0007's coverage
 **Notes**: The new migration is the next available migration ID — kept
 distinct from any ADR number per REV-04's numbering-collision fix (Phase 12);
 this phase does not itself claim a specific number, that is a plan-time
