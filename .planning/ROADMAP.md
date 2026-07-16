@@ -129,7 +129,10 @@ full reproduction records and closure evidence live in
 
 ### Carried out of v0.6.0 — not yet scheduled
 
-Tracked as Future Requirements in `REQUIREMENTS.md`:
+Tracked as Future Requirements in
+[`milestones/v0.7.0-REQUIREMENTS.md`](milestones/v0.7.0-REQUIREMENTS.md) (that
+milestone's archive holds the last Future Requirements list; `/gsd-new-milestone`
+carries them into the next `REQUIREMENTS.md`):
 
 - **The plan-review gate is agent-mediated, not enforced.** Per D-02 / ADR-0009
   decision 9, `AGENTS.md` ritual text instructs the verifier's invocation but
