@@ -516,6 +516,34 @@ suite turned GREEN by shipping the document, with no assertion edited.
 
 Recorded, not implemented in this phase.
 
+- **Delimit §11 with paired start/end markers — the durable retirement of this
+  whole defect class.** §11 today has an *opening* marker (the `spec-source`
+  provenance line) and no closing one, so the strip must infer where the block
+  ends by scanning for the next `## ` heading. That single fact is the common
+  root of every defect this phase fought: drift the heading and the inference
+  misfires (CR-01's runaway); remove the heading entirely and it runs to EOF
+  (orphan provenance); place the block at a managed region's tail and the
+  inference runs past `<!-- gitnexus:end -->` and eats it (below). GitNexus
+  solves this correctly *in the same file* — paired markers, extent as data, not
+  inference. With paired markers the strip becomes "delete between markers": no
+  terminator, no alternation to remember, no heading coupling, and each of the
+  above stops being expressible rather than needing its own guard. The migration
+  already re-vendors the block, so it can emit the closing marker during the
+  re-vendor it performs anyway. This is the recommended successor to 0009's
+  guard-stacking, not an enhancement to it.
+- **§11 at the tail of a managed region — reproduced, disclosed, undefended**
+  (`0009`'s "NOT refused" limitation). The strip terminator carries the region's
+  START marker but not its END marker, so a §11 block sitting after a region's own
+  `## ` headings makes the strip consume `<!-- gitnexus:end -->`; Step 1 exits 0
+  reporting success and leaves an unterminated region. Reproduced in phase 9.1's
+  UAT by A/B on §11's position alone (HEAD → `start=1 end=1`; TAIL →
+  `start=1 end=0`). Not reachable via `0001:91`/`0004:77`, which inject before the
+  *first* `## ` and therefore always land at the region HEAD — it needs a hand-edit
+  or third-party placement, which is why it is disclosed rather than given a fifth
+  guard. Subsumed by the paired-markers item above. This is the prophecy in
+  decision 2 landing: *"Every future terminator over this managed section inherits
+  decision 2's obligation: it must carry the anchor's full alternation, or it eats
+  the region."*
 - **`11-idempotent-rerun` fixture** (see Verification): re-apply Step 1 to an
   already-healed region-led file and assert the region survives paired. This is the
   fixture that would make decision 2's hazard fail the suite rather than only the

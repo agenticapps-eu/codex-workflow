@@ -631,6 +631,52 @@ cannot safely determine the file's real structure, it refuses rather than
 guesses, and always states the concrete remedy rather than leaving the
 project stranded with no path forward.
 
+### NOT refused — §11 at the tail of a managed region (open)
+
+One shape reaches the same decoupled entry/exit defect class and this migration
+does **not** catch it. It is recorded here as an open, undefended hazard rather
+than listed above, because unlike CRLF and fenced markers it does not refuse —
+it silently mis-heals and reports success.
+
+**The shape.** A §11 block inside a GitNexus-managed region, positioned *after*
+the region's own `## ` headings, with no `## ` heading between the block and the
+region's end marker. The strip's terminator (Step 1's Apply, the rule guarded by
+`in_block && swallowed_own_h2`) fires on any `## ` heading or on the region's
+START marker — but **not** on the region's END marker. So on this shape it runs
+past the end marker hunting a `## ` and consumes it, halting only at the next
+heading outside the region. Step 1 exits 0 and reports success, leaving an
+**unterminated region** that a later `gitnexus analyze` can expand over real
+project content. The h2-count strip-integrity guard does not see it either:
+region markers are not `## ` lines, so `h2_out == h2_in - h2_own` still holds and
+the guard passes.
+
+(The terminator's alternation is deliberately described here rather than quoted:
+this document's own mutation demos use a `grep -c` of that literal as
+landed-proof, and a prose copy would inflate the count — the same reason
+`_m0009_mk_project`'s doc comment avoids the `skills/` path literal.)
+
+**Reproduced** (UAT, phase 9.1): identical content, varying ONLY §11's position
+inside the region — HEAD gives `start=1 end=1` after Apply (correct); TAIL gives
+`start=1 end=0`, `exit=0`.
+
+**Why disclosed rather than fixed.** The shape is not reachable through this
+workflow's own chain. `0001:91` and `0004:77` both inject §11 *immediately before
+the first `## ` heading*, which on a region-led file places the block at the
+region's HEAD — where the following heading terminates the strip and the end
+marker is safe (fixture `02-inside-region-move` is exactly that shape). Reaching
+the tail requires a hand-edit or third-party placement. Adding a fifth guard to
+an inference-based strip would buy a narrow shape at the cost of more mechanism
+on the wrong foundation: the durable fix is to give §11 **paired start/end
+markers**, so its extent is data rather than inferred from unrelated headings,
+which retires this entire defect class (CR-01's runaway, the orphan-provenance
+run-to-EOF, and this) instead of guarding each instance. Recorded in ADR-0010's
+open follow-ups.
+
+This is the concrete instance of the obligation this document already states
+above: *"Every future terminator over this managed section inherits decision 2's
+obligation: it must carry the anchor's full alternation, or it eats the region."*
+It does not, and it does.
+
 ## Notes
 
 - **`PROV_RE` anchoring, ported from upstream `f9354cc` (not re-derived).** All
