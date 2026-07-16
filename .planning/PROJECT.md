@@ -30,22 +30,67 @@ above a leading GitNexus region; migration 0009 heals states A–D and — after
 actually executes on real target projects rather than aborting `exit 3` on every
 install.
 
-**Next milestone: not yet chosen.** Run `/gsd-new-milestone` to scope it. The
-strongest candidates, in rough priority order:
+**Active: v0.8.0 Enforcement, Not Intention** (started 2026-07-16) — see Current
+Milestone below. Scope is the full carried-debt set: every gate this host claims
+to bind, but does not enforce.
 
-1. **`CI-01` — make CI verify something.** `.github/workflows/ci.yml` is still the
-   Phase 0 placeholder (`echo` + `exit 0`). Two milestones have now shipped on a
-   *local* green, which is exactly the "assertions that cannot fail" class this
-   repo has twice paid for. Needs `submodules: recursive`.
-2. **`HOOK-01` — make the plan-review gate actually block.** Currently
-   agent-mediated: `AGENTS.md` ritual text instructs the verifier's invocation but
-   nothing executes it. Binding `check-plan-review.sh` to the native
-   `~/.codex/hooks.json` `PreToolUse` surface (which is why it already carries
-   `--file`) would let ADR-0009's criterion 1 be restated as an unconditional block.
-3. **Paired §11 start/end markers** — ADR-0010's lead open follow-up. Retires the
-   whole inference-based defect class rather than hardening it case by case, and
-   is the durable fix for AG-01's region-tail hazard.
-4. **Migration `0007`'s pre-flight defect** — V-01's untouched twin.
+## Current Milestone: v0.8.0 Enforcement, Not Intention
+
+**Goal:** Every gate this host claims to bind actually fires, every migration
+actually runs, and every assertion has been observed failing — closing the
+"nominal enforcement" debt class the last two milestones shipped on top of.
+
+**Target features:**
+
+- **`CI-01` — CI that can fail.** `.github/workflows/ci.yml` is still the Phase 0
+  placeholder (`echo` + `exit 0`), under a comment promising "real checks land in
+  Phase 7" — Phase 7 shipped and they never did. Replace it with a workflow
+  running `migrations/run-tests.sh` (369 assertions) plus the drift check, on
+  `submodules: recursive`. Two milestones have now merged on a *local* green;
+  the retrospective names this as the enabling condition behind v0.7.0's dominant
+  failure mode. **Lands first** — it is the prerequisite for trusting every other
+  fix in this milestone.
+- **Migration `0007`'s chain break.** Its pre-flight greps
+  `skills/agentic-apps-workflow/SKILL.md`, a scaffolder-relative path no target
+  project has; `0008:67` states outright that it "aborts with exit 3 on every real
+  install." Hypothesis for research to settle: this may sever the chain rather
+  than stall one migration — 0007 aborts → never writes `0.5.0` to
+  `.codex/workflow-version.txt` → 0008's floor (`^0\.(5|6)\.0$`) aborts → 0009's
+  floor (`^0\.(6|7)\.0$`) aborts, so every migration since 0007 is dead for
+  existing installs upgrading from 0.4.0, and spec §15 knowledge capture never
+  reached them. Fresh scaffolds are likely unaffected (born at current version).
+  Fix is a new forward migration per 0008's `.codex/workflow-version.txt`
+  precedent, which also drops 0007's MIGR-09 scaffolder-version bump.
+- **`HOOK-01` — the plan-review gate blocks.** Bind `check-plan-review.sh` to the
+  native `~/.codex/hooks.json` `PreToolUse` surface — it already carries `--file`
+  for exactly this. Restates ADR-0009 criterion 1 as an unconditional block;
+  supersedes d.9's "agent-mediated" acceptance.
+- **Paired §11 start/end markers** — ADR-0010's lead open follow-up. Bound the
+  managed block explicitly instead of inferring its extent, retiring the
+  inference-based defect class rather than hardening instances. Durable fix for
+  AG-01's region-tail hazard.
+- **`MIGR-08` execution coverage** — a fixture that runs the Apply block and
+  asserts the written `.codex/workflow-version.txt`. The one residual of the exact
+  class Phase 9.1 existed to close.
+- **`WR-03` — acceptance reversed.** A real symlink-resolution guard replacing the
+  lexical-`..`-only check. ADR-0009 d.12 amended to record the reversal.
+- **`09-REVIEW.md` debt** — WR-05 (banner determinism), IN-01 (`extract_step_block`
+  prefix-matching `### Step 1` vs `### Step 10`), IN-02 (unasserted line drop),
+  IN-03 (ADR/migration numbering collision), IN-04 (predictable temp-file names
+  in CWD).
+
+**Milestone constraints:**
+
+- **Phase numbering continues from 9.1 → starts at Phase 10.** No reset.
+- **Migration immutability holds.** 0007 is never edited; every fix is a new
+  forward migration. Same for 0001/0004.
+- **Paired markers must respect the widened three-way terminator invariant**
+  during transition (see Constraints). `12-idempotent-rerun` is the live guard.
+- **This repo's own standard applies to this milestone's work:** a guard is not
+  shipped until it has been observed failing. With CI-01 landing first, later
+  phases gate on real CI rather than a local green.
+- Two ADRs get **amended, not superseded**: ADR-0009 (d.9 → HOOK-01, d.12 → WR-03)
+  and ADR-0010 (AG-01 closure).
 
 ## Requirements
 
@@ -75,27 +120,32 @@ strongest candidates, in rough priority order:
 
 ### Active
 
-<!-- Not in a milestone yet. Next milestone scoped via /gsd-new-milestone. -->
+<!-- All scoped into v0.8.0 Enforcement, Not Intention. REQ-IDs assigned in
+     REQUIREMENTS.md; phase mapping in ROADMAP.md. -->
 
-No milestone is active. Carried debt, unscheduled — see ROADMAP.md "Known
-Follow-ups" for the full record:
+**Every item below is in v0.8.0's scope** — the milestone deliberately takes the
+whole carried-debt set rather than a slice, because these are one defect class
+(enforcement that is nominal rather than real), not seven unrelated chores:
 
+- [ ] **`CI-01`** — CI is still a placeholder; two milestones shipped on a local
+      green. Lands first in the milestone.
+- [ ] **Migration `0007`'s pre-flight defect** — scaffolder-relative path aborts
+      `exit 3` on every real install (`0008:67`). Possibly a chain break rather
+      than V-01's twin; research settles the blast radius.
+- [ ] **`HOOK-01`** — plan-review gate is agent-mediated, not enforced (ADR-0009
+      d.9). Bind to native `~/.codex/hooks.json` `PreToolUse`.
+- [ ] **AG-01 / paired §11 markers** — region-*tail* strip hazard, accepted and
+      disclosed 2026-07-16. Unreachable via 0001/0004, which land §11 at the
+      region head. **The acceptance is now reversed:** paired start/end markers
+      are the durable fix and are in scope.
 - [ ] **MIGR-08 execution coverage** — no fixture runs the Apply block and asserts
       the resulting `.codex/workflow-version.txt` content. Correct by inspection
       and reachable now that V-01 is fixed, but untested. Flagged by Phase 9.1's
       verification as the one residual of the exact class that phase existed to
       close.
-- [ ] **`CI-01`** — CI is still a placeholder; two milestones shipped on a local
-      green.
-- [ ] **`HOOK-01`** — plan-review gate is agent-mediated, not enforced (ADR-0009
-      d.9).
-- [ ] **`WR-03`** — `--file` symlink-traversal guard is lexical-`..`-only
-      (ADR-0009 d.12, accepted limitation).
-- [ ] **AG-01** — region-*tail* strip hazard; accepted-and-disclosed 2026-07-16,
-      not fixed. Unreachable via 0001/0004, which land §11 at the region head.
-      Durable fix is paired §11 markers.
-- [ ] **Migration `0007`'s pre-flight defect** — V-01's twin; `0008` deferred it
-      as "different migration, own scope."
+- [ ] **`WR-03`** — `--file` symlink-traversal guard is lexical-`..`-only.
+      **Acceptance reversed** (was ADR-0009 d.12): gets a real resolution guard,
+      and d.12 is amended to record the reversal.
 - [ ] **`09-REVIEW.md` WR-05 + IN-01..IN-04** — banner determinism; extractor
       prefix-matching `### Step 1` vs `### Step 10`; unasserted line drop;
       ADR/migration numbering collision; predictable temp-file names in CWD.
@@ -221,11 +271,21 @@ This document evolves at phase transitions and milestone boundaries.
 *Created: 2026-07-15 at the start of milestone v0.7.0 — this repo had no
 PROJECT.md through v0.6.0 (see STATE.md); content here is sourced from ROADMAP.md,
 STATE.md, ADR-0007, ADR-0009, and direct verification of the working tree.*
-*Last updated: 2026-07-16 after v0.7.0 (Region-Aware §11 Placement) shipped and
+*Last updated: 2026-07-16 at the start of milestone v0.8.0 (Enforcement, Not
+Intention). Current State now carries the milestone's goal, scope, and
+constraints; Active was re-scoped from "carried debt, unscheduled" to "all of it,
+in v0.8.0". Two acceptances are deliberately reversed by this milestone — WR-03
+(ADR-0009 d.12) and AG-01 (ADR-0010's disclosed region-tail hazard) — and
+ADR-0009 d.9's "agent-mediated" plan-review binding is superseded by HOOK-01.
+Migration 0007's pre-flight defect was re-characterized during scoping: `0008:67`
+states it aborts on every real install, which may sever the chain at 0007 rather
+than stall one migration; flagged as a research question, not a finding.*
+
+*Prior update: 2026-07-16 after v0.7.0 (Region-Aware §11 Placement) shipped and
 was archived. Full evolution review performed at milestone close: the structural
 invariant in Constraints was corrected (it stated the pre-v0.7.0 wording that
 ANCHOR-05 falsified), Context was rewritten from milestone-scoped to current
 state, six v0.7.0 decisions were logged, and Active was re-scoped to carried debt.
 Suite at 369 PASS / 0 FAIL / 1 SKIP. Upstream CR-01 filed as
 [claude-workflow#90](https://github.com/agenticapps-eu/claude-workflow/issues/90)
-(OPEN). No milestone is active — next scoped via `/gsd-new-milestone`.*
+(OPEN).*
