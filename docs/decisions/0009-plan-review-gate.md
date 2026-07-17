@@ -397,6 +397,25 @@ problems.
     walking and `[ -L ]`-testing each existing prefix directory without
     requiring the leaf to exist — is carried in Open follow-ups below.
 
+    **Reversed (Phase 12, WR-03):** 2026-07-17. The guard now canonicalizes
+    the `--file` value's parent directory (`_canon_dir`, the `cd ... && pwd
+    -P` idiom) and rejects a symlink-resolved escape via `_is_contained`
+    against `$REPO_ROOT/.planning` — reusing, not reinventing, the same
+    helpers the current-phase resolver already used (this decision's own
+    text above named that reuse as unavailable; it is now the shipped
+    mechanism). This is NOT the walk-each-prefix-component fix speculated
+    in the Open follow-up below (which is now superseded/resolved, not
+    merely satisfied) — parent-directory canonicalization resolves
+    symlinks anywhere in the parent chain in one shot without walking each
+    component individually. The lexical `..` check (`:84-118` pre-Phase-12
+    numbering) is retained as a defensive floor for the not-yet-created-
+    parent case, not removed. NOTE: this also tightens the
+    `*/.planning/*` bypass arm to `$REPO_ROOT/.planning` only — a
+    nested/vendored `vendor/foo/.planning/X-PLAN.md` no longer bypasses
+    (disclosed behavior change, not a silent regression). The dated
+    Correction section covering d.9 superseded + this reversal + the
+    global-vs-per-project fix lands in Phase 13 (DOC-03).
+
 ## Consequences
 
 Phases 00-07 stay legacy and grandfathered. Phase 08 is grandfathered
@@ -440,6 +459,11 @@ reconstructed by hand.
   decision 12 records why: the gate is agent-mediated, so this guard is
   hygiene against an accidental over-broad bypass, not a boundary against a
   hostile caller.
+
+  **Resolved (Phase 12):** shipped as parent-directory canonicalization
+  (`_canon_dir`/`_is_contained` against `$REPO_ROOT/.planning`), not the
+  walk-each-prefix-component approach speculated above — see decision 12's
+  Reversed marker.
 
 - **D-02's native `PreToolUse` surface** (decision 9) as the documented
   upgrade path to real enforcement, pointing at the same verifier — note
