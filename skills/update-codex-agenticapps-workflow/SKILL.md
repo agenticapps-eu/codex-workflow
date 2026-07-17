@@ -85,6 +85,41 @@ forward. The skill refuses to run on a project that has no
      to the migration's `to_version`. This is the durable
      record.
 
+**Recovery — a migration whose pre-flight always aborts.** If a
+project is stuck because a pending migration's pre-flight exits
+non-zero on every run (for example, migration `0007`'s pre-flight
+greps a scaffolder-relative path no real project has, so it always
+aborts before writing anything), do not keep re-running it — a plain
+re-run does not route around it. `0010` is the corrected replacement
+that re-delivers `0007`'s payload; reaching it requires the
+`--migration 0010` flag, not a bare re-run (see the `--migration
+NNNN` row in the Flags table below for the mechanism this depends
+on).
+
+- **Stuck on `0007`'s abort (project still records `0.4.0`).**
+  Migration `0007` and migration `0010` both target the `0.4.0 ->
+  0.5.0` transition, so Stage A step 4 computes BOTH as pending and,
+  sorting by `id` ascending, tries `0007` FIRST — its pre-flight
+  aborts (exit 3) before writing, every time. A plain re-run of
+  `$update-codex-agenticapps-workflow` hits the same abort again; it
+  does not skip to `0010`. Recovery: run
+  `$update-codex-agenticapps-workflow --migration 0010` to apply ONLY
+  `0010`, skipping `0007`'s dead-end pre-flight entirely. This
+  terminates: once `0010` completes, `.codex/workflow-version.txt`
+  reads `0.5.0` and the `0.4.0 -> 0.5.0` slot is satisfied.
+- **Manually forced to `0.5.0` to escape the abort.** If
+  `.codex/workflow-version.txt` was hand-edited to `0.5.0`, Stage A's
+  pending formula never selects `0010` at this version — its
+  `to_version` (`0.5.0`) is not `>` the project's recorded `0.5.0` —
+  so a plain update reports "project is up-to-date" and silently
+  delivers nothing. Recovery is the SAME command:
+  `$update-codex-agenticapps-workflow --migration 0010`, which — per
+  the `--migration NNNN` flag's boundary-override behavior (see Flags
+  table) — bypasses that boundary and re-applies `0010` idempotently,
+  delivering the missing `knowledge_capture` config block and the
+  AGENTS.md ritual-tail section without re-touching anything already
+  in place.
+
 ### Stage E — Atomic commit
 
 10. **Per migration, atomic commit.**
@@ -107,7 +142,7 @@ forward. The skill refuses to run on a project that has no
 | Flag | Effect |
 |---|---|
 | `--dry-run` | Run Stage C (dry-run) and exit; do not write or commit. |
-| `--migration NNNN` | Apply only the named migration (skip other pending). Useful for testing one migration in isolation. |
+| `--migration NNNN` | Apply only the named migration, skipping every other migration whether or not it is in Stage A's pending set. This overrides Stage A step 4's `from_version <= project_version AND to_version > project_version` computation — it bypasses the `to_version > project_version` boundary, so it also matches a migration whose `to_version == project_version` (an idempotent re-apply to a project already recorded at that version). Use it to apply a corrected replacement for a migration whose pre-flight permanently aborts, or to re-deliver a migration's payload to a project already at its `to_version`. |
 | `--from VERSION` | Override the project version detection (read from `.codex/workflow-version.txt` by default). Useful when the file was lost and the user wants to re-derive. |
 
 ## Required evidence (per spec/06)

@@ -7,10 +7,40 @@ on:
     branches: [main]
 
 jobs:
-  phase-0:
-    runs-on: ubuntu-latest
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Phase 0 — bootstrap-only
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+          # No token/ssh-key needed: vendor/agenticapps-shared is PUBLIC
+          # (gh api repos/agenticapps-eu/agenticapps-shared -> "private": false).
+
+      # GNU awk on ubuntu ONLY — macOS keeps its BSD awk deliberately, so the
+      # BSD/GNU divergence the matrix exists to surface is actually exercised.
+      - name: Ensure GNU awk (ubuntu only)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y gawk
+
+      - name: Run migration test harness (includes drift check)
+        run: bash migrations/run-tests.sh
+        # This step is deliberately unwrapped and unmasked: the suite's own
+        # exit code IS this step's (and therefore this job's) pass/fail
+        # signal. test_drift() is already dispatched inside run-tests.sh
+        # whenever it runs unfiltered — no separate step needed.
+
+  ci-gate:
+    needs: [test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Require all matrix legs green
         run: |
-          echo "phase-0: trivial CI placeholder; real checks land in Phase 7"
-          exit 0
+          if [ "${{ needs.test.result }}" != "success" ]; then
+            echo "test matrix did not fully succeed: ${{ needs.test.result }}" >&2
+            exit 1
+          fi

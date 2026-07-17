@@ -1,25 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: Awaiting next milestone
-status: Awaiting next milestone
-stopped_at: Milestone v0.7.0 archived; no milestone active
-last_updated: "2026-07-16T06:47:27.331Z"
-last_activity: 2026-07-16 — Milestone v0.7.0 completed and archived
+milestone: v0.8.0
+milestone_name: Enforcement, Not Intention
+status: completed
+stopped_at: Phase 11 plan 02 (MIGR-08 execution coverage) complete
+last_updated: "2026-07-17T10:22:14.399Z"
+last_activity: 2026-07-17 -- Phase 11 marked complete
 progress:
-  total_phases: 0
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
-  scope_note: >
-    Zeroed at v0.7.0's close — these counts are MILESTONE-scoped and no milestone
-    is active. `/gsd-new-milestone` repopulates them.
-    Do NOT paste `gsd-sdk query progress.bar` here: it is PROJECT-scoped
-    (includes the pre-GSD legacy phases 00-07) and mixing the two scopes is what
-    previously produced `completed_plans: 21` against `total_plans: 12` — more
-    plans complete than exist. Shipped history: v0.6.0 = Phase 8 (9 plans);
-    v0.7.0 = Phase 9 (5) + Phase 9.1 (7) = 12.
+  total_phases: 5
+  completed_phases: 2
+  total_plans: 7
+  completed_plans: 7
+  percent: 40
 ---
 
 # Project State
@@ -27,7 +19,8 @@ progress:
 ## Project Reference
 
 See: `.planning/PROJECT.md` and `.planning/ROADMAP.md` (both updated 2026-07-16
-at v0.7.0's close). Shipped milestones are archived under `.planning/milestones/`.
+at v0.8.0 roadmap creation). Shipped milestones are archived under
+`.planning/milestones/`.
 
 This repo adopted GSD's project scaffold at Phase 8; Phases 00–07 are pre-GSD
 legacy recorded in `.planning/phases/<NN>/` and `CHANGELOG.md`. See ROADMAP.md
@@ -35,98 +28,94 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** None — v0.7.0 shipped. Scope the next milestone with
-`/gsd-new-milestone`. Candidates, in PROJECT.md's priority order: `CI-01` (CI
-verifies nothing — implicated in v0.7.0's dominant failure mode), `HOOK-01`
-(make the plan-review gate actually block), paired §11 markers (ADR-0010's lead
-follow-up; the durable fix for AG-01), migration 0007's pre-flight defect.
+**Current focus:** Phase 11 — migration-chain-repair
+Prove Failure) — first phase, serial, blocking. Every gate this host claims to
+bind actually fires, every migration actually runs, every assertion has been
+observed failing. Roadmap: Phase 10 (CI-01/CI-02) → parallel Phases 11
+(migration chain repair), 12 (path safety + review debt), 13 (native
+plan-review hook, spike-needed) → Phase 14 (paired §11 markers, last). See
+PROJECT.md "Current Milestone" and ROADMAP.md "v0.8.0 Enforcement, Not
+Intention".
 
 ## Current Position
 
-Phase: — (no milestone active)
-Plan: —
-Status: v0.7.0 archived; awaiting next milestone
-Last activity: 2026-07-16 — Milestone v0.7.0 completed and archived
+Phase: 11 — COMPLETE
+Plan: 1 of 5
+Status: Phase 11 complete
+Last activity: 2026-07-17 -- Phase 11 marked complete
+19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
 
-Last session: 2026-07-16
-Stopped at: **v0.7.0 shipped.** Milestone archived (ROADMAP collapsed,
-REQUIREMENTS archived and removed, PROJECT.md evolution review done,
-RETROSPECTIVE updated), merged to `main` via PR #18 as merge commit `81404e4`,
-and tagged `v0.7.0` (annotated, pushed). Merged **with history**, not squashed —
-matching the `cf51c73`/`b842755` precedent and keeping the RED-before-GREEN
-commit ordering (`a4b137f`/`2315393`/`185abfd` → `49b2fab`) auditable from
-`git log` on main.
+Last session: 2026-07-16T14:25:46.896Z
+Stopped at: Phase 11 plan 02 (MIGR-08 execution coverage) complete
+with success criteria and full REQ-ID mappings; REQUIREMENTS.md Traceability
+table filled; STATE.md progress counters repopulated (milestone-scoped: 5
+phases, plans TBD).
 Resume file: None
 
 ## Accumulated Context
 
 ### Decisions
 
-Full decision log lives in `.planning/PROJECT.md` (Key Decisions) — six v0.7.0
-decisions were added there at close. Per-milestone lessons are in
-`.planning/RETROSPECTIVE.md`.
+Full decision log lives in `.planning/PROJECT.md` (Key Decisions). Roadmap-time
+decisions for v0.8.0:
+
+- DOC-03 (ADR-0009 Correction section) mapped to Phase 13 only, not split
+  across Phases 12/13 — Phase 13 is where ADR-0009 lands last (Phase 12's
+  d.12-reversal touch is sequenced first, per research guidance, to avoid two
+  PRs racing the same file region).
+
+- Phase 14 (paired §11 markers) depends on Phase 10 only, not on 11/12/13 —
+  sequenced last deliberately (highest-consequence, most novel), not because
+  anything blocks it.
+
+- [Phase ?]: test_drift's leg 1 selects the drift target by semver-max to_version across migrations/*.md, not filename sort — Migration 0010 is a version-backport whose filename sorts last but to_version (0.5.0) is below the real drift target (0.7.0, from 0009); a false mismatch would otherwise trip on every run
+- [Phase ?]: Migration 0010's Step 3 Apply uses a fenced code block, diverging from 0007/0008's inline-code-span style for the equivalent step — extract_step_block only recognizes fenced blocks; the inline form caused the test fixture's extractor to fall through into the wrong fenced block
+- [Phase 11]: MIGR-11 Stage D recovery runbook placed as an un-numbered bold-lead-in block inside Stage D — Apply, not a new top-level heading — D-04 requires concise, non-thin recovery prose inside Stage D; matches Failure-modes bullet style
+- [Phase 11]: MIGR-08 fixture extended extract_step_block with an inline-code-span fallback to reach 0008 Step 4's immutable inline Apply format — migrations are immutable; extraction had to be fixed rather than transcribing 0008's write, closing the gap 11-01-SUMMARY.md flagged
 
 ### Blockers/Concerns
 
-Open debt carried past v0.7.0. Full record in ROADMAP.md "Known Follow-ups";
-each is also an unchecked item in PROJECT.md's Active list.
+- ⚠️ **[Phase 13] Two HOOK-01 trust-ledger gaps need a spike before design
+  finalizes** — sha256 `trusted_hash` pre-seeding mechanics, and whether
+  project-layer trust and per-hook trust are one gate or two. Research flags
+  this as MEDIUM confidence; Phase 13's first success criterion is the spike
+  itself. See `research/SUMMARY.md` Gaps to Address.
 
-- ⚠️ **[v0.6.0 debt] `CI-01` — CI verifies nothing.** `.github/workflows/ci.yml`
-  is still the Phase 0 placeholder (`echo` + `exit 0`). Two milestones have now
-  merged on a *local* green. The retrospective names this as the enabling
-  condition behind v0.7.0's dominant failure mode (a suite fully green against a
-  migration that never ran). Needs `submodules: recursive`.
-- ⚠️ **[Phase 9.1] MIGR-08 execution coverage.** No fixture runs the Apply block
-  and asserts the resulting `.codex/workflow-version.txt` content. Correct by
-  inspection and reachable now that V-01 is fixed, but untested — the one residual
-  of the exact class Phase 9.1 existed to close.
-- ⚠️ **[Phase 9, deferred] `09-REVIEW.md` WR-05 + IN-01..IN-04** — consciously
-  scoped out of 9.1, carried forward as debt. Review via `/gsd-audit-uat`.
-- ⚠️ **[Phase 9, deferred] Migration `0007` carries V-01's identical pre-flight
-  defect** (a project-relative `skills/` path). `0008` deferred it explicitly:
-  "different migration, own scope." Unscheduled.
-- ⚠️ **[Phase 9.1] AG-01 — region-*tail* strip hazard.** Accepted-and-disclosed by
-  user ruling 2026-07-16, not fixed. The strip eats `<!-- gitnexus:end -->` when
-  §11 sits at a managed region's tail; not reachable via 0001/0004, which land §11
-  at the region head. Disclosed in 0009's Known limitations. Durable fix (paired
-  §11 start/end markers, retiring the inference-based defect class) is ADR-0010's
-  lead open follow-up.
-- ⚠️ **[Phase 9.1] `T-09.1-25`'s mitigation plan** credits `0009:405`'s
-  no-temp-files-left check as suite coverage, but it is a human-facing bullet, not
-  an automated assertion. The underlying control (`rm -f` before every exit path)
-  is real and verified in code.
-- ⚠️ **[Upstream] CR-01 filed, awaiting upstream** —
-  [claude-workflow#90](https://github.com/agenticapps-eu/claude-workflow/issues/90),
-  OPEN. Still live upstream at `f9354cc:0029:222-241`. Note the artifact conflict:
-  `09.1-07-SUMMARY.md` records criterion 10 as unsatisfied because the *executor's*
-  filing attempt was denied (agent-relayed approval); the user filed it directly
-  and `09.1-VERIFICATION.md` scored it VERIFIED against the live issue.
-  Verification is authoritative.
+- ⚠️ **[Phase 14] Terminator-alternation narrowing is the milestone's highest-
+  consequence pitfall.** The new end marker must be strictly additive (a
+  fourth alternative alongside `## ` heading | anchored `gitnexus:start` |
+  EOF), never a replacement — narrowing it breaks every already-migrated
+  project in the fleet. `12-idempotent-rerun` is the live guard.
+
+- ⚠️ **[Phase 11] Migration numbering** — the new forward migration (0007
+  chain-break heal) must be assigned the next available migration ID, kept
+  distinct from any ADR number (REV-04, Phase 12, closes the numbering-
+  collision defect this milestone must not repeat while assigning MIGR-10 /
+  HOOK-03 / MARK-01's own new IDs).
 
 ## Notes
 
 - Legacy `.planning/phases/<NN>/` (bare-number) layout predates ADR-0007 point 4,
   which mandates GSD-native `<NN>-<slug>/`. Phase 08 is the first GSD-native
   phase. Migrating 00–07 is deliberately out of scope.
-- Phase directories for v0.7.0 were **not** archived into
-  `milestones/v0.7.0-phases/` at close — they remain in `.planning/phases/` as raw
-  execution history. Use `/gsd-cleanup` to archive retroactively.
+
 - **The structural §11 invariant was widened in v0.7.0, not preserved.** Any
   terminator bounding the managed §11 section must carry the full three-way
-  alternation (`## ` heading | anchored `gitnexus:start` | EOF). Narrowing it to
-  `/^## /` consumes the entire GitNexus region. `12-idempotent-rerun` is the live
-  guard. See PROJECT.md Constraints before touching any terminator.
+  alternation (`## ` heading | anchored `gitnexus:start` | EOF); Phase 14 adds a
+  fourth (end marker), strictly additive. Narrowing to `/^## /` alone consumes
+  the entire GitNexus region. `12-idempotent-rerun` is the live guard. See
+  PROJECT.md Constraints before touching any terminator.
 
 ## Operator Next Steps
 
-v0.7.0 is shipped, merged (PR #18 → `81404e4`), and tagged. Remaining:
+v0.8.0's roadmap is written. Remaining:
 
-1. `/clear`, then `/gsd-new-milestone` to scope the next milestone. Top
-   candidate: `CI-01` — see Blockers/Concerns.
-2. Optional: `/gsd-cleanup` to archive `.planning/phases/09*` into
-   `milestones/v0.7.0-phases/` (left in place at close as raw execution history).
-3. Optional: cut a GitHub Release for `v0.7.0` if wanted. Note the repo has
-   tagged every version but only ever published a Release for v0.1.0, so tags —
-   not Releases — appear to be the convention. Not done unilaterally.
+1. `/gsd-plan-phase 10` — CI That Can Prove Failure. Serial, blocking; nothing
+   else in this milestone is "verified" until it ships.
+
+2. After Phase 10 ships, Phases 11/12/13 can plan and execute in parallel (no
+   shared file surface). Phase 13 needs its trust-ledger spike run first.
+
+3. Phase 14 (paired §11 markers) plans last, deliberately.
