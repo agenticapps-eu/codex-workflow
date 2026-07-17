@@ -407,14 +407,42 @@ problems.
     in the Open follow-up below (which is now superseded/resolved, not
     merely satisfied) — parent-directory canonicalization resolves
     symlinks anywhere in the parent chain in one shot without walking each
-    component individually. The lexical `..` check (`:84-118` pre-Phase-12
-    numbering) is retained as a defensive floor for the not-yet-created-
-    parent case, not removed. NOTE: this also tightens the
-    `*/.planning/*` bypass arm to `$REPO_ROOT/.planning` only — a
+    component individually. The lexical `..` check (pre-Phase-12
+    numbering, now `:166-176`) is retained as a defensive floor for
+    the not-yet-created-parent case, not removed. NOTE: this also tightens
+    the `*/.planning/*` bypass arm to `$REPO_ROOT/.planning` only — a
     nested/vendored `vendor/foo/.planning/X-PLAN.md` no longer bypasses
     (disclosed behavior change, not a silent regression). The dated
     Correction section covering d.9 superseded + this reversal + the
     global-vs-per-project fix lands in Phase 13 (DOC-03).
+
+    **Extended (Phase 12 gap-closure, 12-04):** 2026-07-17. Independent
+    verification (12-VERIFICATION.md, Priority Concern / WR-01) constructed
+    the exact case this reversal had not yet covered and found it still
+    exit-2-blocked: a `--file` value naming a plan artifact whose parent
+    directory does not exist yet (so `_canon_dir` returns empty and the
+    resolve-then-contain branch above never fires) fell through to
+    `resolve_phase`, which could resolve an UNRELATED active phase (a
+    phase dir with a `*-PLAN.md` but no `*-REVIEWS.md`) and block a
+    legitimate not-yet-created in-tree plan file — a regression from the
+    pre-Phase-12 script, which returned exit 0 for the identical input.
+    The guard now adds a lexical `$REPO_ROOT/.planning`-rooted fallback
+    that fires ONLY in that empty-`_canon_dir` branch: it accepts (exit 0)
+    when the un-canonicalized, lexical parent is contained under
+    `$REPO_ROOT/.planning`, restoring the pre-Phase-12 fail-safe-accept
+    (never exit-2-block a legitimate not-yet-created path). The invariant
+    from the first Reversed marker above is preserved, not reopened: this
+    fallback fires only when the parent does NOT exist, so an EXISTING
+    symlinked parent that resolves outside `.planning` still has a
+    non-empty `_canon_dir` and is still rejected by the resolve-then-
+    contain path (the WR-03 hole stays closed); and the fallback is rooted
+    at `$REPO_ROOT/.planning` specifically (the same D-05 root, not a bare
+    `*/.planning/*` glob), so a vendored `vendor/foo/.planning/...` whose
+    parent does not exist still does not bypass. Mutation-proven
+    RED (exit 2 with the fallback disabled) → GREEN (exit 0 restored) —
+    see `migrations/run-tests.sh`'s not-yet-created-dir fixture and
+    12-04-SUMMARY.md. No dated Correction section is opened here; that
+    still lands in Phase 13 (DOC-03).
 
 ## Consequences
 
