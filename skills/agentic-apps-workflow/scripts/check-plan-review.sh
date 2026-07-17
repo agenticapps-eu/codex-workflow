@@ -215,16 +215,53 @@ if [ -n "$CPR_FILE" ]; then
             # regression (see phase SUMMARY / ADR-0009 decision 12).
             #
             # D-02: when _canon_dir returns empty (parent does not exist /
-            # cannot be canonicalized), this gate simply does not pass --
-            # the bypass FALLS THROUGH to normal resolution below, exactly
-            # like the '..' check above. Never exit 2 here, never
-            # bypass-approve on an unresolvable parent -- failing open is
-            # the milestone's nemesis (T-12-02).
+            # cannot be canonicalized), this resolve-then-contain gate
+            # simply does not pass. Control does NOT fall all the way
+            # through to normal resolution unconditionally any more --
+            # 12-04's lexical fallback below (empty-_cpr_canon_parent
+            # branch) accepts an in-tree not-yet-created path first; only
+            # a value that ALSO fails the lexical check falls through to
+            # normal resolution. Never exit 2 here, never bypass-approve
+            # on a path outside $REPO_ROOT/.planning -- failing open on an
+            # escape is the milestone's nemesis (T-12-02).
             _cpr_file_parent="$(dirname "$CPR_FILE")"
             _cpr_canon_parent="$(_canon_dir "$_cpr_file_parent")"
             _cpr_canon_planning_root="$(_canon_dir "$REPO_ROOT/.planning")"
             if [ -n "$_cpr_canon_parent" ] && _is_contained "$_cpr_canon_parent" "$_cpr_canon_planning_root"; then
               exit 0
+            elif [ -z "$_cpr_canon_parent" ]; then
+              # 12-04 (gap-closure, 12-VERIFICATION.md WR-01 / 12-01 truth
+              # #4): the parent directory does not exist yet, so
+              # _canon_dir returned empty and the resolve-then-contain
+              # branch above never fired. Without this fallback, control
+              # falls through to resolve_phase below, which can resolve an
+              # UNRELATED active phase (current-phase -> a phase dir with
+              # a PLAN.md and no REVIEWS.md) and exit-2-block a legitimate
+              # not-yet-created in-tree plan file -- the pre-Phase-12
+              # script returned exit 0 for this exact input.
+              #
+              # Safety argument (do not weaken):
+              #   1. This branch is nested inside the '..'-clear guard
+              #      above (the same one gating this whole case arm), which
+              #      already ran and found no traversal component, so a
+              #      purely LEXICAL containment check here cannot be
+              #      tricked by '..'.
+              #   2. This branch fires ONLY when _cpr_canon_parent is empty
+              #      -- an EXISTING symlinked parent that escapes
+              #      .planning has a non-empty _cpr_canon_parent and takes
+              #      the resolve-then-contain branch above instead, where
+              #      it is still rejected (the WR-03 hole stays closed).
+              #   3. The lexical root is $REPO_ROOT/.planning (D-05, reused
+              #      verbatim, not a bare '*/.planning/*' glob), so a
+              #      vendored 'vendor/foo/.planning/newdir/X-PLAN.md' whose
+              #      parent does not exist still does not bypass.
+              case "$_cpr_file_parent" in
+                /*) _cpr_lex_parent="$_cpr_file_parent" ;;
+                *) _cpr_lex_parent="$REPO_ROOT/$_cpr_file_parent" ;;
+              esac
+              if _is_contained "$_cpr_lex_parent" "$REPO_ROOT/.planning"; then
+                exit 0
+              fi
             fi
             ;;
         esac
