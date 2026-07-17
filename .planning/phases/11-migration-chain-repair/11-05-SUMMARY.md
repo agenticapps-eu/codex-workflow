@@ -134,3 +134,10 @@ None - no external service configuration required.
 ---
 *Phase: 11-migration-chain-repair*
 *Completed: 2026-07-17*
+
+## Self-Check: PASSED
+- FOUND: `.planning/phases/11-migration-chain-repair/11-05-SUMMARY.md`
+- FOUND commit: `aaabff4` (Task 1)
+- FOUND commit: `051403f` (Task 2)
+- FOUND commit: `0081e0c` (SUMMARY)
+- `git status --short` clean at time of check
