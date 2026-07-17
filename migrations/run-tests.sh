@@ -120,14 +120,35 @@ done
 # scan). When the label line carries nothing inline (0009/0010's style: the
 # label alone on its own line, followed by a fence), behavior is UNCHANGED --
 # falls through to the original want=1 fenced-block scan.
+#
+# DELIMITER GUARD (REV-02, 09-REVIEW.md IN-01): `index($0, stepp) == 1` is a
+# bare PREFIX test -- for step=1, stepp="### Step 1" also prefix-matches
+# "### Step 10" through "### Step 19" (and 100+), because "1" followed by
+# more digits is still a prefix match. A document with 10+ steps can
+# therefore latch `in_step=1` on the WRONG step's heading if that heading is
+# scanned before the real one. D-12's fix: require the character immediately
+# AFTER the matched prefix to be a valid delimiter -- ':' (this repo's
+# `### Step 1:` form), ' ' (space, covering trailing space and upstream's
+# `### Step 1 -- <title>` dash form), or EOL (empty string, end of line) --
+# via `delim_ok()`, a `substr`/literal character comparison. This is NOT a
+# compiled regex built from interpolated input (`stepp`/`nextp` are still
+# passed in as literal strings via `-v` and matched with `index()`, never
+# spliced into a `/.../ ` regex) -- the file header's "literal prefix, never
+# an interpolated regex, nothing to escape" no-escaping property (:80-91)
+# is unchanged. The same guard is applied to `nextp` so the end-of-block
+# boundary is equally precise.
 extract_step_block() {
   local doc="$1" step="$2" label="$3"
   local next_step=$((step + 1))
   awk -v stepp="### Step ${step}" \
       -v nextp="### Step ${next_step}" \
       -v lblp="**${label}:**" '
-    index($0, stepp) == 1 { in_step=1; next }
-    index($0, nextp) == 1 { in_step=0 }
+    function delim_ok(line, plen,    d) {
+      d = substr(line, plen + 1, 1)
+      return (d == "" || d == ":" || d == " ")
+    }
+    index($0, stepp) == 1 && delim_ok($0, length(stepp)) { in_step=1; next }
+    index($0, nextp) == 1 && delim_ok($0, length(nextp)) { in_step=0 }
     in_step && index($0, lblp) == 1 {
       rest = substr($0, length(lblp) + 1)
       sub(/^[ \t]+/, "", rest)
@@ -200,6 +221,117 @@ assert_extracted_shape() {
       ;;
   esac
   return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# extract_step_block delimiter guard (REV-02, 09-REVIEW.md IN-01)
+#
+# `index($0, stepp) == 1` with `stepp="### Step 1"` prefix-matches BOTH the
+# real `### Step 1:` heading AND `### Step 10:` .. `### Step 19:` (a bare
+# numeric continuation is not excluded by a prefix test). This is only
+# reachable when the wrong heading is scanned FIRST -- in a naturally
+# ascending document (1, 2, ..., 10) Step 1's own fenced block always closes
+# and `exit`s before the scan ever reaches Step 10, which is exactly why this
+# repo's real migration documents (currently <=4 steps) have never tripped it.
+# To reproduce it honestly this fixture places `### Step 10` BEFORE
+# `### Step 1` in the document text (D-34: printf-into-$tmp, no static
+# fixture file) -- under the PRE-FIX extractor, scanning hits "### Step 10:"
+# first, `index($0, stepp) == 1` matches it (bare-prefix collision), and
+# `in_step` latches there, so `extract_step_block(doc, 1, Apply)` returns
+# STEP 10's Apply body instead of Step 1's. Under the DELIMITER-GUARDED fix,
+# `delim_ok` sees "0" (not ":", " ", or EOL) immediately after the matched
+# "### Step 1" prefix on the "### Step 10:" line and correctly rejects it,
+# so the scan continues to the real "### Step 1:" heading further down.
+#
+# Mutation-proven (verifier re-runs this cycle, does not trust the claim):
+# stash the `delim_ok` guard (revert to the bare `index($0, stepp) == 1`
+# test) and this fixture goes RED (extraction contains Step 10's body, not
+# Step 1's); restore the guard and it returns GREEN. Observed by hand during
+# 12-02's execution (see 12-02-SUMMARY.md).
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_extract_step_block_delimiter() {
+  echo ""
+  echo "${YELLOW}=== extract_step_block — delimiter guard (REV-02, IN-01) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local doc="$tmp/synthetic-10-step.md"
+  # Deliberately Step 10 BEFORE Step 1 — see comment block above for why a
+  # naturally-ascending document cannot reproduce the collision.
+  {
+    printf '### Step 10: Synthetic step ten\n'
+    printf '\n'
+    printf '**Apply:**\n'
+    printf '```bash\n'
+    printf 'echo "this is step 10 body"\n'
+    printf '```\n'
+    printf '\n'
+    printf '### Step 1: Synthetic step one\n'
+    printf '\n'
+    printf '**Apply:**\n'
+    printf '```bash\n'
+    printf 'echo "this is step 1 body"\n'
+    printf '```\n'
+    printf '\n'
+    printf '### Step 2: Synthetic step two\n'
+    printf '\n'
+    printf '**Apply:**\n'
+    printf '```bash\n'
+    printf 'echo "this is step 2 body"\n'
+    printf '```\n'
+  } > "$doc"
+
+  local step1_apply
+  step1_apply="$(extract_step_block "$doc" 1 Apply 2>/dev/null)"
+
+  if [ -z "$step1_apply" ]; then
+    echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction is EMPTY"
+    FAIL=$((FAIL+1))
+    echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction does not contain Step 1's body (extraction was empty)"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} extract_step_block(doc,1,Apply): extraction is non-empty"
+    PASS=$((PASS+1))
+
+    case "$step1_apply" in
+      *'this is step 1 body'*)
+        echo "  ${GREEN}PASS${RESET} extract_step_block(doc,1,Apply): extraction contains Step 1's own body"
+        PASS=$((PASS+1))
+        ;;
+      *)
+        echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction does NOT contain Step 1's own body"
+        FAIL=$((FAIL+1))
+        ;;
+    esac
+
+    case "$step1_apply" in
+      *'this is step 10 body'*)
+        echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction WRONGLY contains Step 10's body — '### Step 1' bare-prefix-matched '### Step 10'"
+        FAIL=$((FAIL+1))
+        ;;
+      *)
+        echo "  ${GREEN}PASS${RESET} extract_step_block(doc,1,Apply): extraction does NOT contain Step 10's body (delimiter guard holds)"
+        PASS=$((PASS+1))
+        ;;
+    esac
+  fi
+
+  # Sanity: the fix must not break extraction of the step whose heading
+  # caused the false match — Step 10's own Apply must still extract cleanly.
+  local step10_apply
+  step10_apply="$(extract_step_block "$doc" 10 Apply 2>/dev/null)"
+  case "$step10_apply" in
+    *'this is step 10 body'*)
+      echo "  ${GREEN}PASS${RESET} extract_step_block(doc,10,Apply): Step 10's own extraction is unaffected by the guard"
+      PASS=$((PASS+1))
+      ;;
+    *)
+      echo "  ${RED}FAIL${RESET} extract_step_block(doc,10,Apply): Step 10's own extraction is BROKEN by the guard"
+      FAIL=$((FAIL+1))
+      ;;
+  esac
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -5152,6 +5284,10 @@ MD
 # ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "extract-step-block" ]; then
+  test_extract_step_block_delimiter
+fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0000" ]; then
   test_migration_0000
