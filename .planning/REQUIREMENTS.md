@@ -107,7 +107,7 @@ it is not optional per-item polish.
 
 ### Path Safety & Review Debt (WR / REV)
 
-- [ ] **WR-03**: `check-plan-review.sh`'s `--file` guard canonicalizes the *parent
+- [x] **WR-03**: `check-plan-review.sh`'s `--file` guard canonicalizes the *parent
       directory* of the path (via the existing `_canon_dir` / `_is_contained`
       helpers) and rejects a symlink-resolved escape — replacing the lexical-`..`
       -only check. Reverses ADR-0009 d.12. Fixtures cover a symlinked parent
@@ -189,7 +189,7 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 | MARK-02 | 14 | Pending |
 | MARK-03 | 14 | Pending |
 | MARK-04 | 14 | Pending |
-| WR-03 | 12 | Pending |
+| WR-03 | 12 | Complete |
 | REV-01 | 12 | Pending |
 | REV-02 | 12 | Pending |
 | REV-03 | 12 | Pending |

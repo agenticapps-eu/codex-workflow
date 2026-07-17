@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
 status: executing
-stopped_at: Phase 12 context gathered
-last_updated: "2026-07-17T11:45:35.250Z"
-last_activity: 2026-07-17 -- Phase 12 planning complete
+stopped_at: Completed 12-01-PLAN.md
+last_updated: "2026-07-17T12:31:45.865Z"
+last_activity: 2026-07-17
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 10
-  completed_plans: 7
+  completed_plans: 8
   percent: 40
 ---
 
@@ -28,7 +28,7 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** Phase 11 — migration-chain-repair
+**Current focus:** Phase 12 — path-safety-review-debt
 Prove Failure) — first phase, serial, blocking. Every gate this host claims to
 bind actually fires, every migration actually runs, every assertion has been
 observed failing. Roadmap: Phase 10 (CI-01/CI-02) → parallel Phases 11
@@ -39,20 +39,20 @@ Intention".
 
 ## Current Position
 
-Phase: 11 — COMPLETE
-Plan: 1 of 5
+Phase: 12 (path-safety-review-debt) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-07-17 -- Phase 12 planning complete
+Last activity: 2026-07-17
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
 
-Last session: 2026-07-17T10:55:33.912Z
-Stopped at: Phase 12 context gathered
+Last session: 2026-07-17T12:31:45.858Z
+Stopped at: Completed 12-01-PLAN.md
 with success criteria and full REQ-ID mappings; REQUIREMENTS.md Traceability
 table filled; STATE.md progress counters repopulated (milestone-scoped: 5
 phases, plans TBD).
-Resume file: .planning/phases/12-path-safety-review-debt/12-CONTEXT.md
+Resume file: None
 
 ## Accumulated Context
 
@@ -74,6 +74,7 @@ decisions for v0.8.0:
 - [Phase ?]: Migration 0010's Step 3 Apply uses a fenced code block, diverging from 0007/0008's inline-code-span style for the equivalent step — extract_step_block only recognizes fenced blocks; the inline form caused the test fixture's extractor to fall through into the wrong fenced block
 - [Phase 11]: MIGR-11 Stage D recovery runbook placed as an un-numbered bold-lead-in block inside Stage D — Apply, not a new top-level heading — D-04 requires concise, non-thin recovery prose inside Stage D; matches Failure-modes bullet style
 - [Phase 11]: MIGR-08 fixture extended extract_step_block with an inline-code-span fallback to reach 0008 Step 4's immutable inline Apply format — migrations are immutable; extraction had to be fixed rather than transcribing 0008's write, closing the gap 11-01-SUMMARY.md flagged
+- [Phase 12]: D-04/D-05: --file's WR-03 guard hoists repo-root above the bypass and tightens */.planning/* containment to $REPO_ROOT/.planning only — closes the symlink-escape hole ADR-0009 d.12 had accepted; disclosed behavior change for vendored sub-projects
 
 ### Blockers/Concerns
 

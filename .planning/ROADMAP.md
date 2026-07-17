@@ -198,7 +198,7 @@ closed with their own proof — not batched into one undifferentiated cleanup.
      roadmapper was told to honor when assigning Phase 11/13/14's new migration
      numbers.
 **Plans**: 3 plans
-- [ ] 12-01-PLAN.md — WR-03: augment the `--file` guard with parent-dir
+- [x] 12-01-PLAN.md — WR-03: augment the `--file` guard with parent-dir
   canonicalize-and-contain (reusing `_canon_dir`/`_is_contained`, lexical `..`
   floor retained), two RED-before-GREEN fixtures (symlinked-parent escape/inside,
   sibling-prefix collision), and the minimal in-place ADR-0009 d.12 Reversed marker
@@ -302,7 +302,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
-| 12. Path Safety & Review Debt                   | v0.8.0    | 0/3             | Planned     | -          |
+| 12. Path Safety & Review Debt                   | v0.8.0    | 1/3 | In Progress|  |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
