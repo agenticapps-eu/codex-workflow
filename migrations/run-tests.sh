@@ -3036,6 +3036,58 @@ EOF
   s="$tmp/bypass-traversal3"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-traversal3")"
   _cpr_case "bypass: --file .planning/phases/08-x/../08-x/08-01-PLAN.md -> exit 2 (traversal is a SHAPE check, not a resolution check)" "$s" 2 --file ".planning/phases/08-x/../08-x/08-01-PLAN.md"
 
+  # ── WR-03: symlink-resolution + sibling-prefix containment (Phase 12) ──────
+  #
+  # Reuses _cpr_case/_cpr_enf_phase verbatim (no second sandbox/exit-code
+  # helper, per this suite's own header rule). Each fixture below is
+  # mutation-proven RED-before-GREEN: observed exit=0 (fail-open) against
+  # the pre-Phase-12 lexical-'..'-only guard, exit=2 against the
+  # parent-dir canonicalize-and-contain fix (Task 1), except (b) which
+  # proves the accept side of resolve-then-contain (D-03) and is exit=0
+  # under both the old and new guard (not a regression case).
+
+  # (a) SYMLINKED-PARENT-ESCAPE: the --file value's parent directory is a
+  # symlink resolving OUTSIDE $REPO_ROOT/.planning. Mirrors ADR-0009
+  # decision 12's own live repro
+  # (`ln -s /tmp/outside .planning/phases/09-test-phase/evil-link`).
+  # Old lexical-'..'-only guard: no '..' component in the literal string,
+  # '.planning/' prefix matches, basename matches *PLAN.md -> exit 0
+  # (fail-open, the WR-03 hole). New guard: canonicalizes the parent,
+  # 'evil-link' resolves outside .planning -> containment fails -> bypass
+  # falls through (D-02) -> normal resolution finds the phase's real
+  # unreviewed PLAN.md -> exit 2 via the REVIEWS.md gate.
+  s="$tmp/wr03-symlink-escape"; phasedir="$(_cpr_enf_phase "$s" "12-wr03-escape")"
+  wr03_escdir="${tmp}-wr03-escape"
+  mkdir -p "$wr03_escdir"
+  ln -s "$wr03_escdir" "$phasedir/evil-link"
+  _cpr_case "WR-03 bypass: --file .../evil-link/some-PLAN.md -> exit 2 (symlinked parent resolves OUTSIDE .planning; old lexical-only guard returned exit 0 here -- fail-open closed)" "$s" 2 --file ".planning/phases/12-wr03-escape/evil-link/some-PLAN.md"
+
+  # (b) SYMLINKED-PARENT-INSIDE: the --file value's parent directory is a
+  # symlink resolving to a real directory INSIDE .planning/phases/.
+  # Resolve-then-contain (D-03) accepts this -- WR-03 does NOT adopt
+  # REVIEWS.md's reject-any-symlink asymmetry, which would false-block a
+  # legitimate worktree symlink under a --file edit target.
+  s="$tmp/wr03-symlink-inside"; phasedir="$(_cpr_enf_phase "$s" "12-wr03-inside")"
+  wr03_insidedir="$s/.planning/phases/12-wr03-inside-target"
+  mkdir -p "$wr03_insidedir"
+  ln -s "$wr03_insidedir" "$phasedir/inside-link"
+  _cpr_case "WR-03 bypass: --file .../inside-link/some-PLAN.md -> exit 0 (symlinked parent resolves INSIDE .planning -- resolve-then-contain accepts it, D-03)" "$s" 0 --file ".planning/phases/12-wr03-inside/inside-link/some-PLAN.md"
+
+  # (c) SIBLING-PREFIX-COLLISION: a 'vendor/foo/.planning/X-PLAN.md'-shaped
+  # path that satisfied the OLD lexical '*/.planning/*' arm textually.
+  # 'vendor/foo/.planning/' is created as a REAL directory here (not left
+  # absent) so _canon_dir on the parent succeeds and returns a non-empty
+  # path -- the exit=2 below is produced by _is_contained genuinely
+  # evaluating containment-false against $REPO_ROOT/.planning (SC#1), NOT
+  # by the D-02 fall-through that fires when a parent does not exist. Old
+  # guard: '*/.planning/*' + 'X-PLAN.md' basename match -> exit 0. New
+  # guard (D-05, disclosed tightening): containment is against THIS repo's
+  # $REPO_ROOT/.planning only -> a vendored sub-project's .planning/ no
+  # longer bypasses -> falls through -> exit 2 via the REVIEWS.md gate.
+  s="$tmp/wr03-sibling-prefix"; phasedir="$(_cpr_enf_phase "$s" "12-wr03-sibling")"
+  mkdir -p "$s/vendor/foo/.planning"
+  _cpr_case "WR-03 bypass: --file vendor/foo/.planning/X-PLAN.md -> exit 2 (sibling-prefix collision; old */.planning/* lexical arm returned exit 0 here -- D-05 tightens containment to \$REPO_ROOT/.planning only)" "$s" 2 --file "vendor/foo/.planning/X-PLAN.md"
+
   s="$tmp/bypass-codefile"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-codefile")"
   _cpr_case "bypass: --file src/app.ts -> exit 2 (ordinary code file, the gate's whole point)" "$s" 2 --file "src/app.ts"
 
