@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
-status: gaps_found
-stopped_at: Phase 12 verification — gaps_found (12/13 must-haves)
-last_updated: "2026-07-17T15:30:00.000Z"
+status: verifying
+stopped_at: "Completed 12-04-PLAN.md (gap-closure — 12-01 truth #4 / WR-01 fail-safe-accept fallback closed, mutation-proven). Phase 12 is now 4/4 plans complete, all 13 must-haves closed; ready for phase-level re-verification."
+last_updated: "2026-07-17T17:10:04.157Z"
 last_activity: 2026-07-17
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 10
-  completed_plans: 10
-  percent: 40
+  completed_phases: 3
+  total_plans: 11
+  completed_plans: 11
+  percent: 60
 ---
 
 # Project State
@@ -39,19 +39,16 @@ Intention".
 
 ## Current Position
 
-Phase: 12 (path-safety-review-debt) — GAPS FOUND (3/3 plans executed; verification 12/13)
-Plan: 3 of 3 executed; 1 gap-closure plan needed
-Status: gaps_found — WR-03 must-have #4 failed (not-yet-created-dir path exit-2-blocks when an unreviewed phase is active). Next: /gsd-plan-phase 12 --gaps
+Phase: 12 (path-safety-review-debt) — GAP CLOSED (4/4 plans executed; 13/13 must-haves)
+Plan: 4 of 4 executed (12-04 gap-closure complete)
+Status: Phase complete — ready for re-verification
 Last activity: 2026-07-17
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
 
-Last session: 2026-07-17T12:58:03.708Z
-Stopped at: Completed 12-02-PLAN.md (REV-01/REV-02/REV-03 debt closure — all
-three mutation-proven). Plans 12-01 (WR-03 guard) and 12-03 (REV-04 numbering
-convention) were already committed on this branch; Phase 12 is now 3/3 plans
-complete and ready for phase-level re-verification.
+Last session: 2026-07-17T17:10:04.148Z
+Stopped at: Completed 12-04-PLAN.md (gap-closure — 12-01 truth #4 / WR-01 fail-safe-accept fallback closed, mutation-proven). Phase 12 is now 4/4 plans complete, all 13 must-haves closed; ready for phase-level re-verification.
 Resume file: None
 
 ## Accumulated Context
@@ -78,6 +75,7 @@ decisions for v0.8.0:
 - [Phase 12]: REV-04's docs/decisions/README.md numbering-convention subsection states ADR-NNNN and migration-NNNN are independent sequences, always qualified, with the live ADR-0010-documents-migration-0009 worked example
 - [Phase 12]: REV-01's 'at line N' removal widened beyond CASE 2 to also cover COUNTER-CASE A and WIDENED TERMINATOR PASS text — the plan's own automated verify greps the whole script's stdout, not just CASE 2
 - [Phase 12]: REV-02's synthetic 10-step fixture places Step 10 before Step 1 in document text — natural ascending order never reproduces the prefix collision since extract_step_block exits at Step 1's own fence close first
+- [Phase 12]: The not-yet-created-dir fallback fires only in the elif [ -z "$_cpr_canon_parent" ] branch, sibling to (not nested inside) the existing resolve-then-contain accept -- keeps the two accept paths textually disjoint so the parent-exists symlink-escape guard (12-01 truths #1/#2/#3) stays provably untouched
 
 ### Blockers/Concerns
 

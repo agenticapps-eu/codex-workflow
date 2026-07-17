@@ -107,16 +107,21 @@ it is not optional per-item polish.
 
 ### Path Safety & Review Debt (WR / REV)
 
-- [~] **WR-03**: `check-plan-review.sh`'s `--file` guard canonicalizes the *parent
+- [x] **WR-03**: `check-plan-review.sh`'s `--file` guard canonicalizes the *parent
       directory* of the path (via the existing `_canon_dir` / `_is_contained`
       helpers) and rejects a symlink-resolved escape — replacing the lexical-`..`
       -only check. Reverses ADR-0009 d.12. Fixtures cover a symlinked parent
       directory and a sibling-prefix collision, not just a leaf symlink. (TOCTOU is
       explicitly out of scope — do not build a second path-safety primitive.)
-      GAP (12-VERIFICATION, 2026-07-17): the fail-safe fall-through is regressed —
-      a legitimate not-yet-created in-tree plan path returns exit 2 (block) when an
-      unreviewed phase is active, contradicting the "never exit-2-blocks" truth.
-      Needs gap closure before WR-03 is Complete.
+      GAP CLOSED (12-04, 2026-07-17): the fail-safe fall-through regression
+      (12-VERIFICATION, 2026-07-17 — a legitimate not-yet-created in-tree plan
+      path returned exit 2 when an unrelated unreviewed phase was active,
+      contradicting the "never exit-2-blocks" truth) is fixed by a lexical
+      `$REPO_ROOT/.planning`-rooted fallback that fires only when `_canon_dir`
+      returns empty (parent does not exist yet); mutation-proven RED (exit 2
+      with the fallback disabled) → GREEN (exit 0 restored), and the
+      symlink-escape fixture re-confirmed exit 2 (WR-03's original hole stays
+      closed). See 12-04-SUMMARY.md.
 - [x] **REV-01**: WR-05 — `validate-0009-anchor.sh`'s stdout is genuinely
       deterministic: a full-script grep for every mirror-derived stdout value
       (not just the banner) confirms no non-deterministic content, mutation-proven.
@@ -193,7 +198,7 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 | MARK-02 | 14 | Pending |
 | MARK-03 | 14 | Pending |
 | MARK-04 | 14 | Pending |
-| WR-03 | 12 | Gaps Found |
+| WR-03 | 12 | Complete |
 | REV-01 | 12 | Complete |
 | REV-02 | 12 | Complete |
 | REV-03 | 12 | Complete |

@@ -149,3 +149,11 @@ Phase 12's single verification gap (12-01 truth #4 / 12-VERIFICATION.md WR-01) i
 ---
 *Phase: 12-path-safety-review-debt*
 *Completed: 2026-07-17*
+
+## Self-Check: PASSED
+
+- FOUND: `.planning/phases/12-path-safety-review-debt/12-04-SUMMARY.md`
+- FOUND: `66b2b2d` (Task 1 commit)
+- FOUND: `c594293` (Task 2 commit)
+- FOUND: `1f368b5` (Task 3 commit)
+- FOUND: `d2e9a26` (SUMMARY.md commit)
