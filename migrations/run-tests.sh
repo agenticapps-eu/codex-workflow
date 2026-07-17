@@ -4831,6 +4831,23 @@ _m0010_apply() {
   ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
 }
 
+# _m0010_mk_version_sandbox <tmp> <name> <version>
+# WR-02: builds a scratch project root shaped like a REAL target project — a
+# `.git` directory (the pre-flight's `test -d .git` guard) plus
+# `.codex/workflow-version.txt` set to <version> — and DELIBERATELY NO local
+# `skills/` tree of any kind (D-07, mirrors `_m0009_mk_project`'s
+# no-scaffolder-tree shape, `run-tests.sh:3543-3559`). The version file is the
+# ONLY variable across the four sandboxes the floor-execution cases below
+# build, so a floor accept/reject can only be explained by the version-floor
+# regex itself. Prints the project root's path.
+_m0010_mk_version_sandbox() {
+  local p="$1/$2/proj"
+  mkdir -p "$p/.codex"
+  ( cd "$p" && git init -q )
+  printf '%s\n' "$3" > "$p/.codex/workflow-version.txt"
+  printf '%s\n' "$p"
+}
+
 test_migration_0010() {
   echo ""
   echo "${YELLOW}=== Migration 0010 — Heal 0007 knowledge-capture chain break ===${RESET}"
@@ -4883,6 +4900,46 @@ test_migration_0010() {
     _m0010_ok "$surface_bad" "D-07: no executable surface (pre-flight, applies_to, every Step Apply) names skills/agentic-apps-workflow"
   else
     _m0010_fail "D-07: no executable surface names skills/agentic-apps-workflow — NOT ASSERTED: one or more extractions failed"
+  fi
+
+  # ── WR-02: EXECUTE the extracted pre-flight (pf_block) against four
+  # seeded-version sandboxes, proving 0010's version-floor regex correct BY
+  # EXECUTION — not merely present as text (closes the gap flagged in
+  # 11-VERIFICATION.md: "a mutation to 0010's version-floor regex ... would
+  # survive the test suite undetected"). Mirrors test_migration_0009's
+  # _m0009_apply-against-seeded-sandbox pattern for its own pre-flight
+  # (`run-tests.sh:4358-4412`). CODEX_HOME is pinned to REPO_ROOT (trusted,
+  # same as the Step 1/2/3 executions below) so both required templates
+  # resolve and are held CONSTANT across all four sandboxes — the version
+  # file is the SOLE variable, isolating the floor regex exactly as 0009's
+  # fixture isolates its mirror-guard cases from its own version gate.
+  if [ "$pf_ok" = "1" ]; then
+    local v03 v04 v05 v06 out rc
+    v03="$(_m0010_mk_version_sandbox "$tmp" floor03 "0.3.0")"
+    v04="$(_m0010_mk_version_sandbox "$tmp" floor04 "0.4.0")"
+    v05="$(_m0010_mk_version_sandbox "$tmp" floor05 "0.5.0")"
+    v06="$(_m0010_mk_version_sandbox "$tmp" floor06 "0.6.0")"
+
+    out="$(_m0010_apply "$v03" "$REPO_ROOT" "$pf_block")"; rc=$?
+    [ "$rc" -ne 0 ]
+    _m0010_ok $? "WR-02 floor (execution): 0.3.0 (below 0.4.0 floor) REJECTED by the extracted pre-flight — got exit=$rc"
+
+    out="$(_m0010_apply "$v04" "$REPO_ROOT" "$pf_block")"; rc=$?
+    [ "$rc" -eq 0 ]
+    _m0010_ok $? "WR-02 floor (execution): 0.4.0 (fresh install) ACCEPTED by the extracted pre-flight — got exit=$rc"
+
+    out="$(_m0010_apply "$v05" "$REPO_ROOT" "$pf_block")"; rc=$?
+    [ "$rc" -eq 0 ]
+    _m0010_ok $? "WR-02 floor (execution): 0.5.0 (idempotent re-apply) ACCEPTED by the extracted pre-flight — got exit=$rc"
+
+    out="$(_m0010_apply "$v06" "$REPO_ROOT" "$pf_block")"; rc=$?
+    [ "$rc" -ne 0 ]
+    _m0010_ok $? "WR-02 floor (execution): 0.6.0 (above 0010's slot) REJECTED by the extracted pre-flight — got exit=$rc"
+  else
+    _m0010_fail "WR-02 floor (execution): 0.3.0 REJECTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
+    _m0010_fail "WR-02 floor (execution): 0.4.0 ACCEPTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
+    _m0010_fail "WR-02 floor (execution): 0.5.0 ACCEPTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
+    _m0010_fail "WR-02 floor (execution): 0.6.0 REJECTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
   fi
 
   # ── D-06 delivery fixture: a 0.4.0 sandbox carrying NONE of 0007's
@@ -4946,6 +5003,22 @@ MD
       _m0010_ok 1 "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3"
     fi
 
+    # WR-03: <repo-name> placeholder resolved in knowledge_capture.note — 0010's
+    # own Post-checks (migrations/0010-heal-0007-knowledge-capture.md:207-212)
+    # calls this "ALWAYS true on success"; mirrors test_migration_0007's
+    # identical assertion (run-tests.sh:838-845), adapted to this sandbox's
+    # real repo directory name ("sandbox", from `$tmp/sandbox`). Both halves
+    # required, same discipline as 0007's check: the resolved note path must
+    # END with "/sandbox.md" (not merely NOT contain the placeholder — a
+    # broken resolution that clobbers the whole note would still pass a
+    # placeholder-absence-only check).
+    if ( cd "$sbx" && jq -e '.knowledge_capture.note | endswith("/sandbox.md")' .planning/config.json >/dev/null 2>&1 ) \
+       && ! grep -qF '<repo-name>' "$sbx/.planning/config.json"; then
+      _m0010_ok 0 "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left"
+    else
+      _m0010_ok 1 "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left"
+    fi
+
     if grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' "$sbx/AGENTS.md"; then
       _m0010_ok 0 "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3"
     else
@@ -4964,6 +5037,7 @@ MD
     _m0010_fail "Step 2 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
     _m0010_fail "Step 3 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
     _m0010_fail "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3 — NOT ASSERTED: extraction failed"
+    _m0010_fail "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left — NOT ASSERTED: extraction failed"
     _m0010_fail "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3 — NOT ASSERTED: extraction failed"
     _m0010_fail "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3 — NOT ASSERTED: extraction failed"
   fi
