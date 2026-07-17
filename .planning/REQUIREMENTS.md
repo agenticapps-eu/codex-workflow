@@ -113,12 +113,12 @@ it is not optional per-item polish.
       -only check. Reverses ADR-0009 d.12. Fixtures cover a symlinked parent
       directory and a sibling-prefix collision, not just a leaf symlink. (TOCTOU is
       explicitly out of scope — do not build a second path-safety primitive.)
-- [ ] **REV-01**: WR-05 — `validate-0009-anchor.sh`'s stdout is genuinely
+- [x] **REV-01**: WR-05 — `validate-0009-anchor.sh`'s stdout is genuinely
       deterministic: a full-script grep for every mirror-derived stdout value
       (not just the banner) confirms no non-deterministic content, mutation-proven.
-- [ ] **REV-02**: IN-01 — `extract_step_block` no longer prefix-matches `### Step 1`
+- [x] **REV-02**: IN-01 — `extract_step_block` no longer prefix-matches `### Step 1`
       against `### Step 10`+, verified against a synthetic 10+-step document.
-- [ ] **REV-03**: IN-02 — the previously-unasserted line-drop in CASE 1 is asserted
+- [x] **REV-03**: IN-02 — the previously-unasserted line-drop in CASE 1 is asserted
       with a strictly-smaller-count check (no hardcoded line number), mutation-proven.
 - [x] **REV-04**: IN-03 — the ADR/migration numbering collision is corrected in
       `docs/decisions/README.md` so ADR numbers and migration numbers cannot be
@@ -190,9 +190,9 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 | MARK-03 | 14 | Pending |
 | MARK-04 | 14 | Pending |
 | WR-03 | 12 | Complete |
-| REV-01 | 12 | Pending |
-| REV-02 | 12 | Pending |
-| REV-03 | 12 | Pending |
+| REV-01 | 12 | Complete |
+| REV-02 | 12 | Complete |
+| REV-03 | 12 | Complete |
 | REV-04 | 12 | Complete |
 | DOC-03 | 13 | Pending |
 | DOC-04 | 14 | Pending |

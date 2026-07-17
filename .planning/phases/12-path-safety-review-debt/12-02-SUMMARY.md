@@ -237,6 +237,16 @@ None — no external service configuration required.
   `migrations/run-tests.sh`) did not overlap either. Phase 12 is now fully
   executed (3/3 plans); ready for phase-level re-verification / transition.
 
+## Self-Check: PASSED
+
+- FOUND: `migrations/validate-0009-anchor.sh`
+- FOUND: `migrations/run-tests.sh`
+- FOUND: `.planning/phases/12-path-safety-review-debt/12-02-SUMMARY.md`
+- FOUND: commit `9646c34` (Task 1 — REV-01)
+- FOUND: commit `a3b82ad` (Task 3 — REV-03)
+- FOUND: commit `043350f` (Task 2 — REV-02)
+- FOUND: commit `61eb554` (plan summary)
+
 ---
 *Phase: 12-path-safety-review-debt*
 *Completed: 2026-07-17*

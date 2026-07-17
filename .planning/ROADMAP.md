@@ -101,7 +101,7 @@ milestone and most benefits from a CI-verified baseline.
 
 - [x] **Phase 10: CI That Can Prove Failure** - Replace the Phase-0 placeholder workflow with real, remote CI that runs the full suite and is proven able to go red (completed 2026-07-16)
 - [x] **Phase 11: Migration Chain Repair** - Heal migration 0007's chain break for real installs and close MIGR-08's residual coverage gap (gaps found 2026-07-16 for SC#3/MIGR-11 recovery runbook; closed via plans 11-04/11-05, re-verified 4/4) (completed 2026-07-17)
-- [ ] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes
+- [x] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes (completed 2026-07-17)
 - [ ] **Phase 13: Native Enforcement — Plan-Review Hook** - Bind the plan-review gate to codex-cli's native `PreToolUse` surface, project-scoped, superseding ADR-0009 d.9
 - [ ] **Phase 14: Paired §11 Markers** - Explicit start/end markers bound the managed §11 block, retiring the inference-based defect class AG-01 belongs to
 
@@ -202,7 +202,7 @@ closed with their own proof — not batched into one undifferentiated cleanup.
   canonicalize-and-contain (reusing `_canon_dir`/`_is_contained`, lexical `..`
   floor retained), two RED-before-GREEN fixtures (symlinked-parent escape/inside,
   sibling-prefix collision), and the minimal in-place ADR-0009 d.12 Reversed marker
-- [ ] 12-02-PLAN.md — REV-01/REV-02/REV-03: remove mirror-derived stdout from
+- [x] 12-02-PLAN.md — REV-01/REV-02/REV-03: remove mirror-derived stdout from
   `validate-0009-anchor.sh` (+ determinism grep test), delimiter-aware
   `extract_step_block` (+ synthetic 10+-step fixture), CASE 1 strictly-smaller-count
   line-drop assertion — each independently mutation-proven
@@ -302,7 +302,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
-| 12. Path Safety & Review Debt                   | v0.8.0    | 2/3 | In Progress|  |
+| 12. Path Safety & Review Debt                   | v0.8.0    | 3/3 | Complete   | 2026-07-17 |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 

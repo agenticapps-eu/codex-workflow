@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
-status: executing
-stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-07-17T12:38:45.667Z"
+status: verifying
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-07-17T13:00:59.715Z"
 last_activity: 2026-07-17
 progress:
   total_phases: 5
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 10
-  completed_plans: 9
-  percent: 40
+  completed_plans: 10
+  percent: 60
 ---
 
 # Project State
@@ -39,19 +39,19 @@ Intention".
 
 ## Current Position
 
-Phase: 12 (path-safety-review-debt) — EXECUTING
+Phase: 12 (path-safety-review-debt) — COMPLETE (3/3 plans)
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-07-17
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
 
-Last session: 2026-07-17T12:35:17.729Z
-Stopped at: Completed 12-01-PLAN.md
-with success criteria and full REQ-ID mappings; REQUIREMENTS.md Traceability
-table filled; STATE.md progress counters repopulated (milestone-scoped: 5
-phases, plans TBD).
+Last session: 2026-07-17T12:58:03.708Z
+Stopped at: Completed 12-02-PLAN.md (REV-01/REV-02/REV-03 debt closure — all
+three mutation-proven). Plans 12-01 (WR-03 guard) and 12-03 (REV-04 numbering
+convention) were already committed on this branch; Phase 12 is now 3/3 plans
+complete and ready for phase-level re-verification.
 Resume file: None
 
 ## Accumulated Context
@@ -76,6 +76,8 @@ decisions for v0.8.0:
 - [Phase 11]: MIGR-08 fixture extended extract_step_block with an inline-code-span fallback to reach 0008 Step 4's immutable inline Apply format — migrations are immutable; extraction had to be fixed rather than transcribing 0008's write, closing the gap 11-01-SUMMARY.md flagged
 - [Phase 12]: D-04/D-05: --file's WR-03 guard hoists repo-root above the bypass and tightens */.planning/* containment to $REPO_ROOT/.planning only — closes the symlink-escape hole ADR-0009 d.12 had accepted; disclosed behavior change for vendored sub-projects
 - [Phase 12]: REV-04's docs/decisions/README.md numbering-convention subsection states ADR-NNNN and migration-NNNN are independent sequences, always qualified, with the live ADR-0010-documents-migration-0009 worked example
+- [Phase 12]: REV-01's 'at line N' removal widened beyond CASE 2 to also cover COUNTER-CASE A and WIDENED TERMINATOR PASS text — the plan's own automated verify greps the whole script's stdout, not just CASE 2
+- [Phase 12]: REV-02's synthetic 10-step fixture places Step 10 before Step 1 in document text — natural ascending order never reproduces the prefix collision since extract_step_block exits at Step 1's own fence close first
 
 ### Blockers/Concerns
 
