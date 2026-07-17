@@ -5003,6 +5003,22 @@ MD
       _m0010_ok 1 "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3"
     fi
 
+    # WR-03: <repo-name> placeholder resolved in knowledge_capture.note — 0010's
+    # own Post-checks (migrations/0010-heal-0007-knowledge-capture.md:207-212)
+    # calls this "ALWAYS true on success"; mirrors test_migration_0007's
+    # identical assertion (run-tests.sh:838-845), adapted to this sandbox's
+    # real repo directory name ("sandbox", from `$tmp/sandbox`). Both halves
+    # required, same discipline as 0007's check: the resolved note path must
+    # END with "/sandbox.md" (not merely NOT contain the placeholder — a
+    # broken resolution that clobbers the whole note would still pass a
+    # placeholder-absence-only check).
+    if ( cd "$sbx" && jq -e '.knowledge_capture.note | endswith("/sandbox.md")' .planning/config.json >/dev/null 2>&1 ) \
+       && ! grep -qF '<repo-name>' "$sbx/.planning/config.json"; then
+      _m0010_ok 0 "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left"
+    else
+      _m0010_ok 1 "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left"
+    fi
+
     if grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' "$sbx/AGENTS.md"; then
       _m0010_ok 0 "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3"
     else
@@ -5021,6 +5037,7 @@ MD
     _m0010_fail "Step 2 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
     _m0010_fail "Step 3 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
     _m0010_fail "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3 — NOT ASSERTED: extraction failed"
+    _m0010_fail "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left — NOT ASSERTED: extraction failed"
     _m0010_fail "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3 — NOT ASSERTED: extraction failed"
     _m0010_fail "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3 — NOT ASSERTED: extraction failed"
   fi
