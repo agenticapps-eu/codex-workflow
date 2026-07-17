@@ -89,25 +89,35 @@ forward. The skill refuses to run on a project that has no
 project is stuck because a pending migration's pre-flight exits
 non-zero on every run (for example, migration `0007`'s pre-flight
 greps a scaffolder-relative path no real project has, so it always
-aborts before writing anything), do not keep re-running it — it is a
-known-superseded dead end, not a transient failure.
+aborts before writing anything), do not keep re-running it — a plain
+re-run does not route around it. `0010` is the corrected replacement
+that re-delivers `0007`'s payload; reaching it requires the
+`--migration 0010` flag, not a bare re-run (see the `--migration
+NNNN` row in the Flags table below for the mechanism this depends
+on).
 
-- **Stuck on `0007`'s abort.** Migration `0007` is superseded by
-  migration `0010` for the same `0.4.0 -> 0.5.0` transition. Re-run
-  `$update-codex-agenticapps-workflow` — the project's recorded
-  version is still `0.4.0`, so `0007` no longer selects and `0010`
-  applies instead, delivering `0007`'s intended payload with a
-  corrected pre-flight. This terminates: once `0010` completes,
-  `.codex/workflow-version.txt` reads `0.5.0` and `0007` is never
-  pending again.
+- **Stuck on `0007`'s abort (project still records `0.4.0`).**
+  Migration `0007` and migration `0010` both target the `0.4.0 ->
+  0.5.0` transition, so Stage A step 4 computes BOTH as pending and,
+  sorting by `id` ascending, tries `0007` FIRST — its pre-flight
+  aborts (exit 3) before writing, every time. A plain re-run of
+  `$update-codex-agenticapps-workflow` hits the same abort again; it
+  does not skip to `0010`. Recovery: run
+  `$update-codex-agenticapps-workflow --migration 0010` to apply ONLY
+  `0010`, skipping `0007`'s dead-end pre-flight entirely. This
+  terminates: once `0010` completes, `.codex/workflow-version.txt`
+  reads `0.5.0` and the `0.4.0 -> 0.5.0` slot is satisfied.
 - **Manually forced to `0.5.0` to escape the abort.** If
-  `.codex/workflow-version.txt` was hand-edited to `0.5.0` to get past
-  `0007`'s abort, the project now reads `0.5.0` but is missing
-  `0007`'s payload (the `knowledge_capture` config block and the
-  AGENTS.md ritual-tail section). Apply `0010` explicitly:
-  `$update-codex-agenticapps-workflow --migration 0010`. `0010`'s
-  version floor accepts a `0.5.0` project for idempotent re-apply and
-  delivers the missing payload without re-touching anything already
+  `.codex/workflow-version.txt` was hand-edited to `0.5.0`, Stage A's
+  pending formula never selects `0010` at this version — its
+  `to_version` (`0.5.0`) is not `>` the project's recorded `0.5.0` —
+  so a plain update reports "project is up-to-date" and silently
+  delivers nothing. Recovery is the SAME command:
+  `$update-codex-agenticapps-workflow --migration 0010`, which — per
+  the `--migration NNNN` flag's boundary-override behavior (see Flags
+  table) — bypasses that boundary and re-applies `0010` idempotently,
+  delivering the missing `knowledge_capture` config block and the
+  AGENTS.md ritual-tail section without re-touching anything already
   in place.
 
 ### Stage E — Atomic commit
