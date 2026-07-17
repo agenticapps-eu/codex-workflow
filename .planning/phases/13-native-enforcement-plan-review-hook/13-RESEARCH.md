@@ -274,14 +274,14 @@ This researcher did not run this protocol (deliberately, per this phase's own ta
 
 **If this table were empty:** it is not — four claims above need confirmation, none of them block the DOC-RESOLVED sections from being usable for planning, but A1 in particular should be confirmed early in the spike since it changes HOOK-03's Apply-block shape.
 
-## Open Questions
+## Open Questions (RESOLVED — see 13-01 spike / 13-02 wrapper design)
 
-1. **Does the wrapper need a `Bash`-command-parsing fallback, or is `apply_patch` matcher coverage sufficient?**
+1. **Does the wrapper need a `Bash`-command-parsing fallback, or is `apply_patch` matcher coverage sufficient?** *(RESOLVED — routed to the 13-01 spike's Matcher decision, which 13-02/13-03 read before finalizing matcher/parse logic.)*
    - What we know: official docs say `apply_patch`/`Edit`/`Write` are valid matcher values and `tool_name: "apply_patch"` is reported for patch-based edits; one third-party source disputes this entirely.
    - What's unclear: which is true for codex-cli 0.144.4 specifically, and whether `Edit`/`Write` are actual distinct `tool_name` values or just alternate `matcher` spellings for the same `apply_patch` tool.
    - Recommendation: resolve in spike step 7; do not write the Bash-parsing fallback branch until the spike confirms it's needed (avoid speculative complexity in the wrapper).
 
-2. **What exactly does `check-plan-review.sh` need for a `--file` value derived from an `apply_patch` payload, given the script's own existing `--file` bypass logic (basename allowlist: `*PLAN.md`, `*REVIEW[S].md`, etc.)?**
+2. **What exactly does `check-plan-review.sh` need for a `--file` value derived from an `apply_patch` payload, given the script's own existing `--file` bypass logic (basename allowlist: `*PLAN.md`, `*REVIEW[S].md`, etc.)?** *(RESOLVED — `--file` is a nice-to-have, not required: the wrapper's "else, call without --file" branch (implemented in 13-02) blocks correctly via the core resolver regardless.)*
    - What we know: the existing bypass logic is designed around a plan/review-shaped filename; an arbitrary file edit (the kind HOOK-01 needs to demonstrably BLOCK) will almost never match that allowlist, meaning most real edits will fall through the bypass and hit the resolver/grandfather/REVIEWS.md-evidence path — which is exactly the intended behavior for a BLOCKING demo (SC#2 needs a disallowed edit to be blocked, and a disallowed edit is, by definition, not a plan/review file).
    - What's unclear: whether `--file` is even necessary for SC#2's demo to work, since `check-plan-review.sh` already resolves and blocks based on phase state with or without `--file` (the flag only affects the bypass-list fast path, not the core resolver).
    - Recommendation: the wrapper should call `check-plan-review.sh` correctly whether or not it could derive a `--file` value (already reflected in the wrapper design above, which has an explicit "else, call without --file" branch) — `--file` is a nice-to-have for bypass-list precision, not a hard requirement for the gate to function.
