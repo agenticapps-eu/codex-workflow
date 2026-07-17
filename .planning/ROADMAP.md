@@ -197,7 +197,18 @@ closed with their own proof — not batched into one undifferentiated cleanup.
      number can no longer be conflated (REV-04) — the exact hazard this
      roadmapper was told to honor when assigning Phase 11/13/14's new migration
      numbers.
-**Plans**: TBD
+**Plans**: 3 plans
+- [ ] 12-01-PLAN.md — WR-03: augment the `--file` guard with parent-dir
+  canonicalize-and-contain (reusing `_canon_dir`/`_is_contained`, lexical `..`
+  floor retained), two RED-before-GREEN fixtures (symlinked-parent escape/inside,
+  sibling-prefix collision), and the minimal in-place ADR-0009 d.12 Reversed marker
+- [ ] 12-02-PLAN.md — REV-01/REV-02/REV-03: remove mirror-derived stdout from
+  `validate-0009-anchor.sh` (+ determinism grep test), delimiter-aware
+  `extract_step_block` (+ synthetic 10+-step fixture), CASE 1 strictly-smaller-count
+  line-drop assertion — each independently mutation-proven
+- [ ] 12-03-PLAN.md — REV-04: normative ADR-NNNN vs migration-NNNN numbering
+  convention in `docs/decisions/README.md` (worked example: ADR-0010 documents
+  migration 0009)
 **Notes**: This phase's ADR-0009 touch (recording WR-03's d.12 reversal) is
 sequenced to land **before** Phase 13's ADR-0009 touch, per research guidance —
 avoids two PRs racing the same file region. DOC-03's full dated Correction
@@ -291,7 +302,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
-| 12. Path Safety & Review Debt                   | v0.8.0    | 0/TBD           | Not started | -          |
+| 12. Path Safety & Review Debt                   | v0.8.0    | 0/3             | Planned     | -          |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
