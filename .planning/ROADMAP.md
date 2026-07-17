@@ -100,7 +100,7 @@ but because it is the highest-consequence, most structurally novel change in the
 milestone and most benefits from a CI-verified baseline.
 
 - [x] **Phase 10: CI That Can Prove Failure** - Replace the Phase-0 placeholder workflow with real, remote CI that runs the full suite and is proven able to go red (completed 2026-07-16)
-- [x] **Phase 11: Migration Chain Repair** - Heal migration 0007's chain break for real installs and close MIGR-08's residual coverage gap (gaps found 2026-07-16 — SC#3/MIGR-11 recovery runbook; awaiting gap closure) (completed 2026-07-17)
+- [x] **Phase 11: Migration Chain Repair** - Heal migration 0007's chain break for real installs and close MIGR-08's residual coverage gap (gaps found 2026-07-16 for SC#3/MIGR-11 recovery runbook; closed via plans 11-04/11-05, re-verified 4/4) (completed 2026-07-17)
 - [ ] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes
 - [ ] **Phase 13: Native Enforcement — Plan-Review Hook** - Bind the plan-review gate to codex-cli's native `PreToolUse` surface, project-scoped, superseding ADR-0009 d.9
 - [ ] **Phase 14: Paired §11 Markers** - Explicit start/end markers bound the managed §11 block, retiring the inference-based defect class AG-01 belongs to
