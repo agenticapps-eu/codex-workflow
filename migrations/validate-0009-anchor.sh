@@ -260,6 +260,18 @@ else
   cp "$REPO_ROOT/AGENTS.md" "$tmp/case1-input.md"
   candidate_strip "$tmp/case1-input.md" > "$tmp/case1.strip"
 
+  # REV-03 (09-REVIEW.md IN-02): the ADR grounds CASE 1's non-vacuity on a
+  # specific number ("the strip genuinely removes 81 lines, 313 -> 232") but
+  # this harness never asserted it — the recorded justification lived outside
+  # the thing that reproduces it. Strictly-smaller-count, NO hardcoded line
+  # number (not the ADR's 313/232): a re-vendored AGENTS.md must not
+  # invalidate this assertion the way a hardcoded count would.
+  if [ "$(wc -l < "$tmp/case1.strip")" -lt "$(wc -l < "$tmp/case1-input.md")" ]; then
+    pass "CASE 1 LINE DROP — strip removed lines (strictly fewer than input)"
+  else
+    fail "CASE 1 LINE DROP — strip did not reduce line count"
+  fi
+
   candidate_insert "$tmp/case1.strip" > "$tmp/case1.out"
 
   if [ ! -s "$tmp/case1.strip" ] || [ ! -s "$tmp/case1.out" ]; then
