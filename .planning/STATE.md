@@ -4,13 +4,13 @@ milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
 status: executing
 stopped_at: Completed 12-01-PLAN.md
-last_updated: "2026-07-17T12:31:45.865Z"
+last_updated: "2026-07-17T12:38:45.667Z"
 last_activity: 2026-07-17
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 10
-  completed_plans: 8
+  completed_plans: 9
   percent: 40
 ---
 
@@ -40,14 +40,14 @@ Intention".
 ## Current Position
 
 Phase: 12 (path-safety-review-debt) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-07-17
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity
 
-Last session: 2026-07-17T12:31:45.858Z
+Last session: 2026-07-17T12:35:17.729Z
 Stopped at: Completed 12-01-PLAN.md
 with success criteria and full REQ-ID mappings; REQUIREMENTS.md Traceability
 table filled; STATE.md progress counters repopulated (milestone-scoped: 5
@@ -75,6 +75,7 @@ decisions for v0.8.0:
 - [Phase 11]: MIGR-11 Stage D recovery runbook placed as an un-numbered bold-lead-in block inside Stage D — Apply, not a new top-level heading — D-04 requires concise, non-thin recovery prose inside Stage D; matches Failure-modes bullet style
 - [Phase 11]: MIGR-08 fixture extended extract_step_block with an inline-code-span fallback to reach 0008 Step 4's immutable inline Apply format — migrations are immutable; extraction had to be fixed rather than transcribing 0008's write, closing the gap 11-01-SUMMARY.md flagged
 - [Phase 12]: D-04/D-05: --file's WR-03 guard hoists repo-root above the bypass and tightens */.planning/* containment to $REPO_ROOT/.planning only — closes the symlink-escape hole ADR-0009 d.12 had accepted; disclosed behavior change for vendored sub-projects
+- [Phase 12]: REV-04's docs/decisions/README.md numbering-convention subsection states ADR-NNNN and migration-NNNN are independent sequences, always qualified, with the live ADR-0010-documents-migration-0009 worked example
 
 ### Blockers/Concerns
 

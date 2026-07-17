@@ -86,3 +86,11 @@ None - no external service configuration required.
 ---
 *Phase: 12-path-safety-review-debt*
 *Completed: 2026-07-17*
+
+## Self-Check: PASSED
+
+- FOUND: docs/decisions/README.md
+- FOUND: .planning/phases/12-path-safety-review-debt/12-03-SUMMARY.md
+- FOUND: ecccc6b (task commit)
+- FOUND: 5ba255f (summary commit)
+- Acceptance-criteria greps (numbering, independent, never/bare/always, migration 0009, ADR-0010) all pass.

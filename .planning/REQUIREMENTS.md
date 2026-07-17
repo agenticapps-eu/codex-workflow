@@ -120,7 +120,7 @@ it is not optional per-item polish.
       against `### Step 10`+, verified against a synthetic 10+-step document.
 - [ ] **REV-03**: IN-02 — the previously-unasserted line-drop in CASE 1 is asserted
       with a strictly-smaller-count check (no hardcoded line number), mutation-proven.
-- [ ] **REV-04**: IN-03 — the ADR/migration numbering collision is corrected in
+- [x] **REV-04**: IN-03 — the ADR/migration numbering collision is corrected in
       `docs/decisions/README.md` so ADR numbers and migration numbers cannot be
       conflated (this is the constraint the roadmapper must honor when assigning
       MIGR-10 / HOOK-03 / MARK-01 migration numbers).
@@ -193,7 +193,7 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 | REV-01 | 12 | Pending |
 | REV-02 | 12 | Pending |
 | REV-03 | 12 | Pending |
-| REV-04 | 12 | Pending |
+| REV-04 | 12 | Complete |
 | DOC-03 | 13 | Pending |
 | DOC-04 | 14 | Pending |
 | MIGR-FUT-01 | Deferred (Future Requirements) | Not in v0.8.0 |

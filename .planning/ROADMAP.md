@@ -206,7 +206,7 @@ closed with their own proof — not batched into one undifferentiated cleanup.
   `validate-0009-anchor.sh` (+ determinism grep test), delimiter-aware
   `extract_step_block` (+ synthetic 10+-step fixture), CASE 1 strictly-smaller-count
   line-drop assertion — each independently mutation-proven
-- [ ] 12-03-PLAN.md — REV-04: normative ADR-NNNN vs migration-NNNN numbering
+- [x] 12-03-PLAN.md — REV-04: normative ADR-NNNN vs migration-NNNN numbering
   convention in `docs/decisions/README.md` (worked example: ADR-0010 documents
   migration 0009)
 **Notes**: This phase's ADR-0009 touch (recording WR-03's d.12 reversal) is
@@ -302,7 +302,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
-| 12. Path Safety & Review Debt                   | v0.8.0    | 1/3 | In Progress|  |
+| 12. Path Safety & Review Debt                   | v0.8.0    | 2/3 | In Progress|  |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
