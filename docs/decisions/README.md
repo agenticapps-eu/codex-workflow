@@ -11,6 +11,22 @@ uses the
 [`adr-db-security-acceptance.md`](../../skills/setup-codex-agenticapps-workflow/templates/adr-db-security-acceptance.md)
 template shape — risk owner, re-audit date, compensating controls.
 
+## Numbering convention
+
+`ADR-NNNN` (this index) and `migration NNNN` (`../../migrations/`) are
+**independent** numbering sequences — each starts at `0000` and increments on
+its own; the two series are not synchronized, so their same-numbered entries
+are unrelated unless a cross-reference says otherwise. Always qualify a
+number in prose as `ADR-NNNN` or `migration NNNN`; never write a bare `NNNN`
+— on its own it is ambiguous between the two series.
+
+**Worked example (the current collision):** migration 0009
+(`migrations/0009-spec-11-region-aware-placement.md`) is documented by
+**ADR-0010**, not ADR-0009. **ADR-0009** (`0009-plan-review-gate.md`, below)
+is a different subject entirely — the plan-review pre-execution gate. Reading
+a bare "0009" in prose could mean either one; qualifying it removes the
+ambiguity.
+
 ## Index
 
 | ADR | Title | Status |
