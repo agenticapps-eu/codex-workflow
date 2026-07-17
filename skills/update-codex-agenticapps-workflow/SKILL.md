@@ -132,7 +132,7 @@ known-superseded dead end, not a transient failure.
 | Flag | Effect |
 |---|---|
 | `--dry-run` | Run Stage C (dry-run) and exit; do not write or commit. |
-| `--migration NNNN` | Apply only the named migration (skip other pending). Useful for testing one migration in isolation. |
+| `--migration NNNN` | Apply only the named migration, skipping every other migration whether or not it is in Stage A's pending set. This overrides Stage A step 4's `from_version <= project_version AND to_version > project_version` computation — it bypasses the `to_version > project_version` boundary, so it also matches a migration whose `to_version == project_version` (an idempotent re-apply to a project already recorded at that version). Use it to apply a corrected replacement for a migration whose pre-flight permanently aborts, or to re-deliver a migration's payload to a project already at its `to_version`. |
 | `--from VERSION` | Override the project version detection (read from `.codex/workflow-version.txt` by default). Useful when the file was lost and the user wants to re-derive. |
 
 ## Required evidence (per spec/06)
