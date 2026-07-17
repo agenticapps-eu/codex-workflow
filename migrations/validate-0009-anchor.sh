@@ -228,17 +228,25 @@ line_of_sub() { grep -n -F -m1 -e "$2" "$1" 2>/dev/null | cut -d: -f1; }
 # Count of whole-line fixed matches.
 count_exact() { grep -c -x -F -e "$2" "$1" 2>/dev/null || true; }
 
-# This banner is deliberately DETERMINISTIC — no repo SHA, no absolute path.
-# The recorded evidence file (09-VALIDATION-EVIDENCE.md) must stay byte-
-# consistent with a fresh run so a verifier can re-run and diff (T-09-04).
+# This banner is deliberately DETERMINISTIC — no repo SHA, no absolute path,
+# and (REV-01, 09-REVIEW.md WR-05) no mirror-derived line count or line number
+# either. The recorded evidence file (09-VALIDATION-EVIDENCE.md) must stay
+# byte-consistent with a fresh run so a verifier can re-run and diff (T-09-04).
 # Echoing `git rev-parse HEAD` here would invalidate the record on the very next
 # commit — including the commit that records it — and echoing $REPO_ROOT would
 # diverge between a worktree and the main checkout. The SHA and repo path belong
 # in the evidence file's own header, captured alongside the run, not in stdout.
+# A mirror re-vendor (this repo's has already happened once, 75->79 lines) must
+# not change this script's stdout either — the banner no longer prints the
+# mirror's line count, and CASE 2 / COUNTER-CASE A / COUNTER-CASE B's PASS text
+# below report relational facts (provenance is ABOVE gitnexus:start; region
+# body is present) rather than the line numbers themselves, for the same
+# reason. The underlying relational comparisons ($c2_prov -ge $c2_start, etc.)
+# are unchanged — only what gets ECHOED to stdout was narrowed.
 echo ""
 echo "=== validate-0009-anchor — empirical replay of the D-21 anchor + D-24 terminator ==="
 echo "Pinned upstream: claude-workflow @ 8520f90d235e0c50b0484b170d595ab6f2cd1173 (D-48)"
-echo "Mirror:          skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md ($(wc -l < "$MIRROR" | tr -d ' ') lines)"
+echo "Mirror:          skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CASE 1 (ANCHOR-03) — zero churn against this repo's REAL AGENTS.md
@@ -251,6 +259,7 @@ if [ ! -s "$REPO_ROOT/AGENTS.md" ]; then
 else
   cp "$REPO_ROOT/AGENTS.md" "$tmp/case1-input.md"
   candidate_strip "$tmp/case1-input.md" > "$tmp/case1.strip"
+
   candidate_insert "$tmp/case1.strip" > "$tmp/case1.out"
 
   if [ ! -s "$tmp/case1.strip" ] || [ ! -s "$tmp/case1.out" ]; then
@@ -289,7 +298,7 @@ elif [ "$c2_start_n" != "1" ] || [ "$c2_end_n" != "1" ]; then
 elif [ -z "$c2_body" ]; then
   fail "CASE 2 ABOVE REGION — region body was destroyed by the insert"
 else
-  pass "CASE 2 ABOVE REGION — provenance at line $c2_prov is above gitnexus:start at line $c2_start; region intact and paired (start=$c2_start_n end=$c2_end_n), body at line $c2_body"
+  pass "CASE 2 ABOVE REGION — provenance is above gitnexus:start; region intact and paired (start=$c2_start_n end=$c2_end_n), region body present"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -312,7 +321,7 @@ if [ ! -s "$tmp/counterA-naive.md" ]; then
 elif [ -z "$cA_prov" ] || [ -z "$cA_start" ]; then
   fail "COUNTER-CASE A NAIVE ANCHOR INSERTS INSIDE REGION — provenance (line '${cA_prov:-none}') or start marker (line '${cA_start:-none}') absent"
 elif [ "$cA_prov" -gt "$cA_start" ]; then
-  pass "COUNTER-CASE A (counter) NAIVE ANCHOR INSERTS INSIDE REGION — naive rule put provenance at line $cA_prov, INSIDE the region that opens at line $cA_start (the latent defect, observed live)"
+  pass "COUNTER-CASE A (counter) NAIVE ANCHOR INSERTS INSIDE REGION — naive rule put provenance INSIDE the region, below gitnexus:start (the latent defect, observed live)"
 else
   fail "COUNTER-CASE A NAIVE ANCHOR INSERTS INSIDE REGION — naive rule anchored at line $cA_prov, above gitnexus:start at line $cA_start. The naive rule did NOT misbehave, so CASE 2 discriminates nothing and its PASS is dead-by-construction."
 fi
@@ -356,7 +365,7 @@ else
   if [ ! -s "$tmp/counterB-widened.md" ]; then
     fail "WIDENED TERMINATOR PRESERVES REGION — candidate strip produced empty output"
   elif [ "$wb_start_n" = "1" ] && [ "$wb_end_n" = "1" ] && [ -n "$wb_body" ] && [ -z "$wb_prov" ]; then
-    pass "WIDENED TERMINATOR PRESERVES REGION — region intact and paired (start=$wb_start_n end=$wb_end_n), body at line $wb_body, and the §11 block was still cleanly stripped (no provenance left)"
+    pass "WIDENED TERMINATOR PRESERVES REGION — region intact and paired (start=$wb_start_n end=$wb_end_n), region body present, and the §11 block was still cleanly stripped (no provenance left)"
   else
     fail "WIDENED TERMINATOR PRESERVES REGION — start=$wb_start_n end=$wb_end_n body=${wb_body:-absent} leftover-provenance=${wb_prov:-none} (expected start=1 end=1, body present, no provenance)"
   fi

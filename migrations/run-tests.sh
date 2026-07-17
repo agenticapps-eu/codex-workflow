@@ -4829,6 +4829,60 @@ test_migration_0009() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# validate-0009-anchor.sh stdout determinism (REV-01, 09-REVIEW.md WR-05)
+#
+# WR-05's finding: the script's own banner comment claims its stdout is
+# "deliberately DETERMINISTIC ... so a verifier can re-run and diff", but (pre
+# -fix) it printed `$(wc -l < "$MIRROR")` in the banner and mirror-length-
+# derived line numbers in CASE 2's PASS text — a mirror re-vendor (this repo's
+# has already happened once, 75->79 lines) would silently invalidate recorded
+# evidence the comment says it is designed to protect. D-11's fix-option (a):
+# REMOVE the mirror-derived values from stdout entirely (not reword the
+# claim). This is the full-script grep proving that removal, run against the
+# REAL validator (not a copy) so a future re-introduction of a `wc -l`-style
+# value is caught here rather than only in code review.
+#
+# Mutation-proven (verifier re-runs this cycle, does not trust the claim): a
+# `$(wc -l < "$MIRROR" ...)`-style value temporarily reintroduced into the
+# banner flips this test RED; removing it restores GREEN. Observed by hand
+# during 12-02's execution (see 12-02-SUMMARY.md) and re-verifiable at any
+# time by reintroducing the clause and re-running `bash migrations/run-tests.sh
+# determinism`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_validate_0009_anchor_determinism() {
+  echo ""
+  echo "${YELLOW}=== validate-0009-anchor.sh — stdout determinism (REV-01, WR-05) ===${RESET}"
+
+  local validator="$REPO_ROOT/migrations/validate-0009-anchor.sh"
+  if [ ! -f "$validator" ]; then
+    echo "  ${RED}FAIL${RESET} validator script missing: migrations/validate-0009-anchor.sh"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local out
+  out="$(bash "$validator" 2>/dev/null)"
+
+  if [ -z "$out" ]; then
+    echo "  ${RED}FAIL${RESET} validate-0009-anchor.sh determinism: validator produced no stdout"
+    FAIL=$((FAIL+1))
+    return
+  fi
+
+  # Full-script grep for the two mirror-derived shapes WR-05 named: a
+  # "(N lines)" banner count, and an "at line N" reference in any PASS/FAIL
+  # text. Absence of BOTH across the ENTIRE run (not just CASE 2) is what
+  # "genuinely deterministic" means here.
+  if printf '%s\n' "$out" | grep -Eq '\([0-9]+ lines\)|at line [0-9]+'; then
+    echo "  ${RED}FAIL${RESET} validate-0009-anchor.sh determinism: stdout carries a mirror-derived value (a '(N lines)' banner count or an 'at line N' reference) — a mirror re-vendor would silently invalidate recorded evidence"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} validate-0009-anchor.sh determinism: stdout carries zero mirror-derived values (no line count, no derived line number)"
+    PASS=$((PASS+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Migration 0010 — Heal 0007's knowledge-capture chain break (v0.4.0 -> 0.5.0)
 #
 # MIGR-10. 0007's pre-flight greps a scaffolder-relative path
@@ -5141,6 +5195,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
   test_migration_0009
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "determinism" ]; then
+  test_validate_0009_anchor_determinism
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0010" ]; then
