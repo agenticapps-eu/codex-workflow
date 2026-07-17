@@ -3220,6 +3220,48 @@ EOF
   mkdir -p "$s/vendor/foo/.planning"
   _cpr_case "WR-03 bypass: --file vendor/foo/.planning/X-PLAN.md -> exit 2 (sibling-prefix collision; old */.planning/* lexical arm returned exit 0 here -- D-05 tightens containment to \$REPO_ROOT/.planning only)" "$s" 2 --file "vendor/foo/.planning/X-PLAN.md"
 
+  # (d) NOT-YET-CREATED-DIR WITH UNRELATED ACTIVE PHASE (12-04 gap-closure;
+  # 12-VERIFICATION.md Priority Concern / WR-01; 12-01-PLAN.md truth #4).
+  #
+  # Reproduces the verifier's exact independently-constructed repro: an
+  # UNRELATED active phase (13-active-phase) is mid-review -- it has a
+  # *-PLAN.md but no *-REVIEWS.md, and .planning/current-phase points at
+  # it -- while the --file value names a DIFFERENT, not-yet-created plan
+  # artifact (14-new-nonexistent/14-01-PLAN.md). Expected: exit 0
+  # (fail-safe accept), matching the pre-Phase-12 script's behavior for
+  # the identical input.
+  #
+  # CRITICAL, unlike every other _cpr_enf_phase fixture in this file
+  # (which pre-creates the phase dir it operates on): this fixture
+  # deliberately does NOT create .planning/phases/14-new-nonexistent/.
+  # The entire point is that the --file value's parent dir does not
+  # exist, so _canon_dir returns empty and the resolve-then-contain
+  # branch (fixtures a/b/c above) never fires -- only the new lexical
+  # $REPO_ROOT/.planning-rooted fallback (check-plan-review.sh, the
+  # elif [ -z "$_cpr_canon_parent" ] branch) can produce the exit-0
+  # verdict here.
+  #
+  # RED-before-GREEN evidence (executor-observed, this gap-closure):
+  #   RED  (fallback commented out): FAIL WR-03 bypass: --file
+  #        .planning/phases/14-new-nonexistent/14-01-PLAN.md -> exit 0
+  #        (not-yet-created dir + unrelated active PLAN.md-no-REVIEWS.md
+  #        phase must fall through to fail-safe accept, matching
+  #        pre-Phase-12 behavior) (expected exit=0, got exit=2)
+  #   GREEN (fallback restored):   PASS WR-03 bypass: --file
+  #        .planning/phases/14-new-nonexistent/14-01-PLAN.md -> exit 0
+  #        (not-yet-created dir + unrelated active PLAN.md-no-REVIEWS.md
+  #        phase must fall through to fail-safe accept, matching
+  #        pre-Phase-12 behavior) (exit=0)
+  # See 12-04-SUMMARY.md for the verbatim transcript.
+  #
+  # Fixture (a) above (symlinked-parent-escape, :3191) is the paired
+  # hole-not-reopened invariant: its parent EXISTS as a symlink, so
+  # _canon_dir is non-empty there and the fallback added here never
+  # fires for it -- it must keep asserting exit 2 after this change.
+  s="$tmp/wr04-not-yet-created-unrelated-active"
+  phasedir="$(_cpr_enf_phase "$s" "13-active-phase" "13-01-PLAN.md")"
+  _cpr_case "WR-03 bypass: --file .planning/phases/14-new-nonexistent/14-01-PLAN.md -> exit 0 (not-yet-created dir + unrelated active PLAN.md-no-REVIEWS.md phase must fall through to fail-safe accept, matching pre-Phase-12 behavior)" "$s" 0 --file ".planning/phases/14-new-nonexistent/14-01-PLAN.md"
+
   s="$tmp/bypass-codefile"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-codefile")"
   _cpr_case "bypass: --file src/app.ts -> exit 2 (ordinary code file, the gate's whole point)" "$s" 2 --file "src/app.ts"
 
