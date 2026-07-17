@@ -101,7 +101,7 @@ milestone and most benefits from a CI-verified baseline.
 
 - [x] **Phase 10: CI That Can Prove Failure** - Replace the Phase-0 placeholder workflow with real, remote CI that runs the full suite and is proven able to go red (completed 2026-07-16)
 - [x] **Phase 11: Migration Chain Repair** - Heal migration 0007's chain break for real installs and close MIGR-08's residual coverage gap (gaps found 2026-07-16 for SC#3/MIGR-11 recovery runbook; closed via plans 11-04/11-05, re-verified 4/4) (completed 2026-07-17)
-- [x] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes (completed 2026-07-17)
+- [ ] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes (gaps found 2026-07-17 — 12/13 must-haves; WR-03's not-yet-created-dir path falls through to exit-2 when an unreviewed phase is active, contradicting the fail-safe truth — needs gap closure)
 - [ ] **Phase 13: Native Enforcement — Plan-Review Hook** - Bind the plan-review gate to codex-cli's native `PreToolUse` surface, project-scoped, superseding ADR-0009 d.9
 - [ ] **Phase 14: Paired §11 Markers** - Explicit start/end markers bound the managed §11 block, retiring the inference-based defect class AG-01 belongs to
 
@@ -302,7 +302,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
-| 12. Path Safety & Review Debt                   | v0.8.0    | 3/3 | Complete   | 2026-07-17 |
+| 12. Path Safety & Review Debt                   | v0.8.0    | 3/3 | Gaps Found  | —          |
 | 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 

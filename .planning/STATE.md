@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
-status: verifying
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-07-17T13:00:59.715Z"
+status: gaps_found
+stopped_at: Phase 12 verification — gaps_found (12/13 must-haves)
+last_updated: "2026-07-17T15:30:00.000Z"
 last_activity: 2026-07-17
 progress:
   total_phases: 5
-  completed_phases: 3
+  completed_phases: 2
   total_plans: 10
   completed_plans: 10
-  percent: 60
+  percent: 40
 ---
 
 # Project State
@@ -39,9 +39,9 @@ Intention".
 
 ## Current Position
 
-Phase: 12 (path-safety-review-debt) — COMPLETE (3/3 plans)
-Plan: 3 of 3
-Status: Phase complete — ready for verification
+Phase: 12 (path-safety-review-debt) — GAPS FOUND (3/3 plans executed; verification 12/13)
+Plan: 3 of 3 executed; 1 gap-closure plan needed
+Status: gaps_found — WR-03 must-have #4 failed (not-yet-created-dir path exit-2-blocks when an unreviewed phase is active). Next: /gsd-plan-phase 12 --gaps
 Last activity: 2026-07-17
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
