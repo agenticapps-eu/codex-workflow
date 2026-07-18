@@ -247,12 +247,27 @@ ADR-0009 lands last; DOC-03 is mapped there for coverage accounting, not here.
      (WR-03's real guard, Phase 12), and the factual correction of the "native
      hooks are global rather than per-project" claim (falsified by codex-cli's
      project-scoped `.codex/hooks.json` layer).
-**Plans**: TBD
-**Notes**: Research/spike-needed phase. Begin execution with the empirical
-trust-ledger spike (Success Criterion 1) before finalizing wrapper/migration
-design — recommend `--research-phase` or a dedicated spike plan first. The new
-migration installed here uses the next available migration ID, kept distinct
-from any ADR number (REV-04).
+**Plans**: 5 plans (4 waves; spike-gated design per plan-time option (a))
+- [ ] 13-01-PLAN.md — Trust-ledger + apply_patch SPIKE (SC#1): runs RESEARCH.md's
+  8-step protocol against SCRATCH repos, resolves the hash-input, one-gate-or-two,
+  default-trust, and apply_patch-coverage unknowns, freezes 13-01-SPIKE-FINDINGS.md
+  with the Matcher decision downstream plans read (HOOK-01) [wave 1, standalone]
+- [ ] 13-02-PLAN.md — HOOK-02 wrapper (`hook-wrapper-plan-review.sh`) execing the
+  unchanged check-plan-review.sh + fail-CLOSED mutation test (SC#3: empty-stderr
+  RED -> non-empty GREEN) [wave 2, depends 13-01]
+- [ ] 13-03-PLAN.md — HOOK-03 migration 0011: merge-don't-clobber PreToolUse into
+  project-scoped `.codex/hooks.json` + `[features] hooks=true` in `.codex/config.toml`,
+  version lockstep to 0.8.0, test_migration_0011 + SC#4-negative [wave 3, depends 13-01/02]
+- [ ] 13-04-PLAN.md — DOC-03 (SC#5): dated ADR-0009 `## Correction` (d.9 superseded,
+  d.12 reversed-by-reference, global-vs-project factual fix) + grep-assertion test [wave 4, depends 13-03]
+- [ ] 13-05-PLAN.md — HOOK-01 live block (SC#2 + SC#4-positive): Pitfall-4 pre-step,
+  install 0011, human-observed native denial of a disallowed edit end-to-end [wave 4, depends 13-03]
+**Notes**: Research/spike-needed phase. Execution begins with the empirical
+trust-ledger spike (13-01, Success Criterion 1); 13-02/13-03's matcher/parse logic
+is spike-gated (each halts and routes to `--gaps` if the spike falsified more than
+the matcher value). SC#2 and SC#4-positive are irreducibly manual (13-05's
+human-observed runbook), never faked as automated tests. The new migration (0011)
+uses the next available migration ID, kept distinct from any ADR number (REV-04).
 
 ### Phase 14: Paired §11 Markers
 **Goal**: The managed §11 block's extent is bounded by explicit markers, not
@@ -303,7 +318,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 4/4 | Complete    | 2026-07-17 |
-| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
+| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/5             | Not started | -          |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
 ## Known Follow-ups

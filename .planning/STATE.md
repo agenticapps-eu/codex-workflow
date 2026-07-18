@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.8.0
 milestone_name: Enforcement, Not Intention
-status: ready_to_plan
-stopped_at: Phase 12 complete (4/4) — ready to discuss Phase 13
-last_updated: 2026-07-17T17:18:01.782Z
-last_activity: 2026-07-17
+status: executing
+stopped_at: "Completed 12-04-PLAN.md (gap-closure — 12-01 truth #4 / WR-01 fail-safe-accept fallback closed, mutation-proven). Phase 12 is now 4/4 plans complete, all 13 must-haves closed; ready for phase-level re-verification."
+last_updated: "2026-07-18T07:23:52.859Z"
+last_activity: 2026-07-18 -- Phase 13 execution started
 progress:
   total_phases: 5
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 32
+  total_plans: 16
+  completed_plans: 11
   percent: 60
 ---
 
@@ -28,7 +28,7 @@ Overview.
 
 **Core value:** The OpenAI Codex CLI host binding for the AgenticApps spec-first
 workflow — a thin binding over upstream GSD and Superpowers (ADR-0007).
-**Current focus:** Phase 13 — native enforcement — plan review hook
+**Current focus:** Phase 13 — native-enforcement-plan-review-hook
 Prove Failure) — first phase, serial, blocking. Every gate this host claims to
 bind actually fires, every migration actually runs, every assertion has been
 observed failing. Roadmap: Phase 10 (CI-01/CI-02) → parallel Phases 11
@@ -39,10 +39,10 @@ Intention".
 
 ## Current Position
 
-Phase: 13
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-07-17
+Phase: 13 (native-enforcement-plan-review-hook) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 13
+Last activity: 2026-07-18 -- Phase 13 execution started
 19 in-scope requirements mapped (MIGR-FUT-01 deferred)
 
 ## Session Continuity

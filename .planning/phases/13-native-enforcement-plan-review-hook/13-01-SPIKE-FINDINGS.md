@@ -72,37 +72,94 @@ questions and states the Matcher decision that 13-02/13-03 consume.
 > dated observation during the live `codex` sessions, then the operator types
 > "observations recorded".
 
-### STEP 3 — default trust_level for an unlisted project
-_Run a trivial `codex` command inside `spike-repo` BEFORE adding any
-`[projects."…spike-repo"]` entry. Record: interactive trust prompt? Did the hook fire
-on first run, or only after an explicit trust action?_
+### STEP 3 — default trust_level for an unlisted project (recorded 2026-07-18)
+_Ran interactive `codex` inside `spike-repo` (no `[projects."…spike-repo"]` entry yet)
+and asked it to run `echo hello-from-spike`._
 
-- **Observation:** _(pending)_
+- **Observation:** Default for an unlisted/untrusted project is **PROMPT — not
+  silent-trusted, not silent-untrusted.** On startup codex surfaced **BOTH** a
+  project-trust prompt (Gate A) **and** a "1 hook is new or changed… Trust all and
+  continue" hooks-review prompt (Gate B). The hook did **not** fire until the operator
+  approved trust. After approval the `echo` tool call ran and the hook fired
+  (`fired.log`: `Sat Jul 18 10:45:15 CEST 2026 fired in spike-repo`).
+- **PreToolUse fires on shell/Bash tool calls** — confirmed by the hook firing on a
+  plain `echo` (relevant to the Matcher decision; apply_patch coverage still tested in
+  STEP 7).
+- **⚠ Decisive side-finding — an invalid-output hook FAILS OPEN.** The fixture command
+  ended in `; cat`, which echoed the raw stdin JSON to stdout. codex reported
+  **"PreToolUse hook (failed) — error: hook returned invalid pre-tool-use JSON output"**
+  and **still ran the command** (`Ran echo hello-from-spike → hello-from-spike`). So a
+  malformed/garbage-stdout hook does NOT block — the tool proceeds. This makes HOOK-02's
+  contract load-bearing: the allow path must emit **empty stdout / silent `exit 0`**, and
+  the deny path must emit **strictly valid `permissionDecision` JSON OR a clean
+  `exit 2`** — never partial/invalid stdout, or the gate silently fails open.
 
-### STEP 4 — trust flow + ledger diff (one operator action or two gates?)
-_Trust the hook via `/hooks` (or the startup "1 hook is new or changed… Trust all and
-continue" prompt). Immediately diff pre-trust vs post-trust `~/.codex/config.toml`._
+### STEP 4 — trust flow + ledger diff (recorded 2026-07-18)
+_Approved the startup trust flow, then diffed the saved pre-trust `config.toml` copy
+against the post-trust file._
 
-- **Exact `[hooks.state.<key>]` entry written for this hook:** _(pending)_
-- **Was a `[projects."…spike-repo"]` entry written at the SAME time (one action sets
-  both Gate A + Gate B, or two distinct actions)?:** _(pending)_
+- **Path canonicalization:** codex writes both keys under the **real** path
+  (`/private/tmp/…`, macOS resolving `/tmp` → `/private/tmp`), not the literal `/tmp/…`.
+  Gate A/B keys use the canonicalized absolute path.
+- **Exact Gate B `[hooks.state.<key>]` entry written for this hook:**
+  ```toml
+  [hooks.state."/private/tmp/gsd-phase13-spike/spike-repo/.codex/hooks.json:pre_tool_use:0:0"]
+  trusted_hash = "sha256:79880528f4285b85140ef44266db365535de02d35879c8829db6e3d0d47cbdbc"
+  ```
+  Confirms the 4-segment key format `<hooks.json-abs-path>:<event_snake>:<group>:<hook>`.
+- **Gate A written at the SAME time:**
+  ```toml
+  [projects."/private/tmp/gsd-phase13-spike/spike-repo"]
+  trust_level = "trusted"
+  ```
+- **One operator action or two?** Two *prompts* appeared at startup (project-trust +
+  hook-review), but a **single approval flow wrote BOTH gates** in one shot. From the
+  install perspective: **one interactive first-session trust flow sets Gate A and Gate B
+  together** — the operator does not have to perform two separate deliberate actions on
+  two separate occasions. (This is exactly the one-time operator action 13-05 documents.)
 
-### STEP 6 — untrusted-project case
-_In `spike-repo-2` with NO trust action, confirm the hook does NOT fire; record whether
-codex reports WHY (untrusted project = Gate A, vs untrusted hook = Gate B)._
+### STEP 6 — Gate A vs Gate B isolation (recorded 2026-07-18)
+_Ran `codex` in `spike-repo-2` and this time approved project trust but did NOT complete
+hook trust._
 
-- **Observation:** _(pending)_
+- **Result — the cleanest possible gate separation:**
+  - Gate A present: `[projects."/private/tmp/…/spike-repo-2"] trust_level = "trusted"`.
+  - Gate B ABSENT: no `[hooks.state."…spike-repo-2…"]` entry exists.
+  - **The hook did NOT fire** — `spike-repo-2/.codex/fired.log` is absent — while the
+    `echo hello-from-spike-2` tool call **still ran normally** (no error, no
+    "PreToolUse hook (failed)" line).
+- **Conclusion:** **Gate A (project trust) alone is NOT sufficient to fire a hook —
+  Gate B (per-hook `trusted_hash`) is independently required.** A newly-installed hook
+  in an already-trusted project stays silent until the operator separately trusts the
+  hook. Hook trust does **not** gate tool execution (the tool runs either way); it only
+  gates whether the hook runs. Consequence for HOOK-03/13-05: the one-time operator
+  trust action must explicitly include trusting the **hook** (Gate B), not merely the
+  project — trusting the repo is not enough to make the plan-review gate fire.
 
 ### STEP 7 — apply_patch coverage (THE decisive observation)
 _Point the hook command at `cat >> <repo>/.codex/payload.log`, then in a human-observed
 `codex` session perform ONE file-creating edit via whatever tool codex naturally chooses.
 Inspect the captured payload._
 
-- **`tool_name` reported for the file edit:** _(pending — `apply_patch`? `Bash`? other?)_
-- **Exact `tool_input` shape (patch text under `.input` / `.patch` / elsewhere; does it
-  carry a parseable `*** Update File:` / `*** Add File:` path?):** _(pending)_
-- **Deny visibility:** change the hook to actually deny and re-run — does the operator
-  SEE the block-reason text, or only a generic denial?: _(pending)_
+- **`tool_name` reported for the file edit: `apply_patch`** (CONFIRMED — recorded
+  2026-07-18). Captured invocation sequence for a one-file creation task:
+  `['Bash','Bash','Bash','apply_patch','Bash']` (the Bash calls are codex's own
+  workflow-skill/verify steps; the file edit itself is `apply_patch`).
+  **PreToolUse DOES fire for apply_patch file edits on codex-cli 0.144.4** — the official
+  docs are correct and the third-party "apply_patch not covered" claim is FALSIFIED.
+- **Exact `tool_input` shape:** the patch text is under **`tool_input.command`** (the
+  SAME field name Bash uses, different content — a shell string for Bash, a patch blob
+  for apply_patch), NOT `.input` and NOT `.patch`:
+  ```json
+  { "command": "*** Begin Patch\n*** Add File: hello.txt\n+spike apply_patch test\n*** End Patch" }
+  ```
+  It carries clean, parseable `*** Add File: <path>` / `*** Update File: <path>` header
+  lines — so a `--file` value IS derivable with a small `sed`/`grep` over
+  `tool_input.command`.
+- **Full PreToolUse stdin top-level keys (verbatim):** `session_id, turn_id,
+  transcript_path, cwd, hook_event_name, model, permission_mode, tool_name, tool_input,
+  tool_use_id`.
+- **Deny visibility:** _(tested separately in STEP 7b below — primary-path JSON deny.)_
 
 ### A1 — project-scoped `[features] hooks = true` honored?
 _In a trusted scratch repo, set ONLY a project-scoped `[features] hooks = true` in its
