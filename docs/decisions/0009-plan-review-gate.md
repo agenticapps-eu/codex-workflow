@@ -571,3 +571,51 @@ reconstructed by hand.
 - **Migrating `.planning/phases/` 00-07 to GSD-native layout** — closes
   ADR-0007 point 4 non-compliance; deliberately out of scope for this
   phase (D-18).
+
+## Correction
+
+**Dated 2026-07-18 (Phase 13, HOOK-01/DOC-03).** This section is an in-place
+addition to this existing ADR, not a new ADR number — this repo's numbering
+convention (REV-04, `docs/decisions/README.md`) treats ADR and migration IDs
+as independent, always-qualified sequences, and a Correction section edits
+the ADR it corrects in place, exactly as Phase 12 already did twice on
+decision 12 below.
+
+1. **Decision 9 is SUPERSEDED.** Migration 0011 (Phase 13, HOOK-03) wires
+   the plan-review gate onto codex-cli's native `PreToolUse` runtime hook
+   surface, installed project-scoped, and the gate now blocks
+   unconditionally at that surface — retiring decision 9's agent-mediated-
+   only binding (`AGENTS.md` ritual text plus a verifier script an agent
+   must choose to invoke). This does NOT retroactively validate decision
+   9's rejection of option B at the time: the trust-ledger and
+   self-scoping concerns it named were real considerations, confirmed as
+   real gates by Phase 13's own spike findings
+   (`13-01-SPIKE-FINDINGS.md`) — a two-gate model (project trust +
+   per-hook `trusted_hash`) that had to be understood and designed around,
+   not a phantom risk decision 9 invented. What no longer holds is
+   decision 9's specific factual premise, corrected in item 3 below.
+
+2. **Decision 12 was already REVERSED.** The `--file` bypass's
+   symlink-traversal limitation decision 12 originally accepted as a known,
+   documented gap was reversed by Phase 12 (WR-03) and further extended by
+   Phase 12's own gap-closure (12-04) — see the existing `Reversed (Phase
+   12, WR-03)` and `Extended (Phase 12 gap-closure, 12-04)` markers inline
+   on decision 12 above, dated 2026-07-17, for the reversal's full
+   mechanics. This Correction section records that reversal's existence
+   only, to satisfy DOC-03's dated-Correction-section requirement — it does
+   not repeat or re-explain the guard mechanics decision 12's own inline
+   markers already document.
+
+3. **Factual correction: native hooks are project-scoped, not only
+   global.** Decision 9's premise that Codex's native `PreToolUse` surface
+   is "global rather than per-project" is FALSE as of codex-cli 0.144.4 and
+   should not be relied on going forward. `<repo>/.codex/hooks.json` and
+   `<repo>/.codex/config.toml` are both documented, discovered,
+   project-scoped layers (developers.openai.com/codex/hooks,
+   developers.openai.com/codex/config-advanced), loaded IN ADDITION to the
+   global `~/.codex/hooks.json`/`~/.codex/config.toml` layers, with project
+   entries taking precedence on conflict. Migration 0011 (HOOK-03) uses
+   exactly this project-scoped layer — the one decision 9 believed did not
+   exist — which is what makes the unconditional block in item 1 possible
+   without decision 9's original global-scope, fires-in-every-repo
+   objection applying.
