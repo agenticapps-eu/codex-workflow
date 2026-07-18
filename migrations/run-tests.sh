@@ -5324,6 +5324,114 @@ MD
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# test_hook_wrapper_stderr_contract (HOOK-02, SC#3) — mutation-proves that
+# hook-wrapper-plan-review.sh's exit-2 fallback branch ALWAYS writes a
+# non-empty reason to its own stderr before exiting. A silent exit-2 block
+# with no reason is the fail-open nemesis 13-02-PLAN.md names: codex-cli
+# treats invalid/partial hook stdout as a hook FAILURE and runs the tool
+# anyway (13-01-SPIKE-FINDINGS.md STEP 3), so a caller relying on this
+# fallback path needs a guarantee it never goes silent, not just that it
+# "currently" writes something.
+#
+# Both directions are asserted, not just the fix:
+#   GREEN — the real (unmutated) wrapper, forced down the fallback branch by
+#           a stub check-plan-review.sh that exits 2 with EMPTY stdout+
+#           stderr, exits 2 AND writes non-empty stderr of its OWN.
+#   RED   — a MUTATED copy of the same wrapper, with the fallback's `>&2`
+#           write neutralized (redirected to /dev/null via a grep-located
+#           marker, never a hardcoded line number, so this stays valid as
+#           the wrapper grows), exits 2 with EMPTY stderr against the exact
+#           same fixture. The test PASSES by confirming this RED state is
+#           detectable — i.e. that the GREEN wrapper's stderr write is what
+#           stands between "silent block" and "attributable block", and a
+#           regression that drops it is caught, not silently accepted.
+#
+# Pinned portable idioms only (ubuntu + macOS CI matrix, RESEARCH.md
+# Environment Availability): no GNU-only sed flags, no `sed -i` (BSD/GNU
+# disagree on `-i` syntax) — the mutated copy is produced by piping sed's
+# transformed output to a new file, never in-place.
+# ─────────────────────────────────────────────────────────────────────────────
+test_hook_wrapper_stderr_contract() {
+  echo ""
+  echo "${YELLOW}=== hook-wrapper-plan-review.sh — fail-CLOSED stderr contract (HOOK-02, SC#3) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — hook-wrapper stderr contract test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local WRAPPER="$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+  if [ ! -f "$WRAPPER" ]; then
+    echo "  ${RED}FAIL${RESET} contract: $WRAPPER not found"
+    FAIL=$((FAIL+1))
+    return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # Stub check-plan-review.sh that exits 2 with EMPTY stdout AND EMPTY
+  # stderr — the fixture that forces the wrapper's own fallback branch
+  # (check-plan-review.sh's real _cpr_block() always writes a reason, so
+  # this stub simulates the "should be unreachable" case the fallback
+  # exists to defend against, per RESEARCH.md Assumption A3).
+  mkdir -p "$tmp/skills/agentic-apps-workflow/scripts"
+  cat > "$tmp/skills/agentic-apps-workflow/scripts/check-plan-review.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 2
+STUB
+  chmod +x "$tmp/skills/agentic-apps-workflow/scripts/check-plan-review.sh"
+
+  local payload='{"tool_name":"apply_patch","tool_input":{}}'
+
+  # ── GREEN: the real wrapper, unmutated ──────────────────────────────────
+  local green_stdout green_stderr green_rc
+  green_stdout="$(printf '%s' "$payload" | CODEX_HOME="$tmp" bash "$WRAPPER" 2>"$tmp/green.stderr")"
+  green_rc=$?
+  green_stderr="$(cat "$tmp/green.stderr")"
+
+  if [ "$green_rc" -eq 2 ] && [ -n "$green_stderr" ]; then
+    echo "  ${GREEN}PASS${RESET} contract: real wrapper's fallback exits 2 with non-empty stderr (GREEN) — rc=$green_rc"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} contract: real wrapper's fallback did NOT exit 2 with non-empty stderr — rc=$green_rc, stderr='$green_stderr'"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── RED: a mutated copy with the fallback's stderr write neutralized ────
+  # Locate the marker by grep, never a hardcoded line number (13-02-PLAN.md
+  # Task 2 action) — the echo line immediately follows the marker line.
+  local marker_line echo_line mutated_wrapper
+  marker_line="$(grep -n 'FALLBACK-STDERR-MARKER' "$WRAPPER" | head -1 | cut -d: -f1)"
+
+  if [ -z "$marker_line" ]; then
+    echo "  ${RED}FAIL${RESET} contract: FALLBACK-STDERR-MARKER not found in $WRAPPER — mutation target lost"
+    FAIL=$((FAIL+1))
+  else
+    echo_line=$((marker_line + 1))
+    mutated_wrapper="$tmp/mutated-wrapper.sh"
+    # Redirect the fallback echo's stderr write to /dev/null instead of
+    # /dev/stderr — portable sed (no GNU-only flags, no -i), piped to a new
+    # file rather than edited in place.
+    sed "${echo_line}s#>&2#>/dev/null#" "$WRAPPER" > "$mutated_wrapper"
+    chmod +x "$mutated_wrapper"
+
+    local red_stdout red_stderr red_rc
+    red_stdout="$(printf '%s' "$payload" | CODEX_HOME="$tmp" bash "$mutated_wrapper" 2>"$tmp/red.stderr")"
+    red_rc=$?
+    red_stderr="$(cat "$tmp/red.stderr")"
+
+    if [ "$red_rc" -eq 2 ] && [ -z "$red_stderr" ]; then
+      echo "  ${GREEN}PASS${RESET} contract: mutated wrapper (fallback stderr silenced) exits 2 with EMPTY stderr (RED is detectable) — rc=$red_rc"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} contract: mutation did not reproduce the RED (fail-open) state — rc=$red_rc, stderr='$red_stderr' (expected rc=2, empty stderr)"
+      FAIL=$((FAIL+1))
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -5387,6 +5495,10 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
   test_check_plan_review_resolver
   test_check_plan_review_enforcement
   test_check_plan_review_contract
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "hook-wrapper-plan-review" ]; then
+  test_hook_wrapper_stderr_contract
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
