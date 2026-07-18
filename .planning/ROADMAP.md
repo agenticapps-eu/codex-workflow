@@ -258,7 +258,7 @@ ADR-0009 lands last; DOC-03 is mapped there for coverage accounting, not here.
 - [x] 13-03-PLAN.md — HOOK-03 migration 0011: merge-don't-clobber PreToolUse into
   project-scoped `.codex/hooks.json` + `[features] hooks=true` in `.codex/config.toml`,
   version lockstep to 0.8.0, test_migration_0011 + SC#4-negative [wave 3, depends 13-01/02]
-- [ ] 13-04-PLAN.md — DOC-03 (SC#5): dated ADR-0009 `## Correction` (d.9 superseded,
+- [x] 13-04-PLAN.md — DOC-03 (SC#5): dated ADR-0009 `## Correction` (d.9 superseded,
   d.12 reversed-by-reference, global-vs-project factual fix) + grep-assertion test [wave 4, depends 13-03]
 - [ ] 13-05-PLAN.md — HOOK-01 live block (SC#2 + SC#4-positive): Pitfall-4 pre-step,
   install 0011, human-observed native denial of a disallowed edit end-to-end [wave 4, depends 13-03]
@@ -318,7 +318,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 4/4 | Complete    | 2026-07-17 |
-| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 3/5 | In Progress|  |
+| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 4/5 | In Progress|  |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
 ## Known Follow-ups
