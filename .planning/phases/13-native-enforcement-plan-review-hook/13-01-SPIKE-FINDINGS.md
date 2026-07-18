@@ -167,7 +167,43 @@ _In a trusted scratch repo, set ONLY a project-scoped `[features] hooks = true` 
 `codex -c features.hooks=false features list` from inside the repo). Record whether
 `hooks` reports ENABLED via the PROJECT layer specifically._
 
-- **Observation:** _(pending)_
+- **Observation — A1 CONFIRMED (recorded 2026-07-18).** The project-scoped
+  `<repo>/.codex/config.toml` `[features]` table **is** read and **does** override the
+  machine-wide default.
+
+  _Method note — the first attempt was confounded and discarded._ Running
+  `codex -c features.hooks=false features list` from inside the repo reported
+  `hooks … false`, but `-c` is a CLI override that outranks **every** config layer, so
+  that result proves nothing about project-vs-global precedence. The clean isolation
+  below uses no `-c` at all and instead flips the project layer against a global default
+  of `true`:
+
+  | Where run | Project `[features] hooks` | `codex features list` reports |
+  |---|---|---|
+  | outside any project | _(absent)_ | `hooks  stable  true`  ← global default |
+  | inside `spike-repo` | `false` | `hooks  stable  false` ← **project layer won** |
+  | inside `spike-repo` | `true` | `hooks  stable  true` |
+
+  The middle row is decisive: the global default is `true`, so `false` can only have come
+  from the project layer.
+
+- **Independent corroboration + a strictness caveat 13-03 must honor.** Injecting a
+  non-boolean key into the project `[features]` table makes codex fail at startup with an
+  error naming the file's exact path:
+  ```
+  Error: /private/tmp/gsd-phase13-spike/spike-repo/.codex/config.toml:3:9:
+    invalid type: string "spike-canary-model-xyz", expected a boolean
+    in `features`
+  ```
+  This both proves the file is genuinely parsed (not silently ignored) and shows
+  `[features]` is **strictly typed and fail-closed**: any non-boolean value is a hard
+  startup error, not a warning. **Consequence for HOOK-03 / migration 0011:** the
+  `[features]` block it writes must contain `hooks = true` and nothing else — a stray or
+  non-boolean key bricks `codex` startup for that repo.
+
+- **Consequence for HOOK-03 Step 2:** writing `[features] hooks = true` into
+  `<repo>/.codex/config.toml` is **effective**, not an ignored file. The migration does
+  NOT need to fall back to instructing the operator to enable hooks globally.
 
 ---
 
