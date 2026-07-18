@@ -1,0 +1,11 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "apply_patch",
+        "type": "command",
+        "command": "/Users/donald/.codex/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+      }
+    ]
+  }
+}
