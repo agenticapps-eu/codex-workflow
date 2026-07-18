@@ -68,9 +68,8 @@ questions and states the Matcher decision that 13-02/13-03 consume.
 
 ## Interactive Observations (Task 2 — human-observed live codex sessions)
 
-> **STATUS: PENDING — operator to fill.** Each block below is filled with a real,
-> dated observation during the live `codex` sessions, then the operator types
-> "observations recorded".
+> **STATUS: COMPLETE — 2026-07-18.** Every block below carries a real, dated observation
+> from human-observed live `codex` sessions (STEP 3/4/6/7) plus the A1 layer test.
 
 ### STEP 3 — default trust_level for an unlisted project (recorded 2026-07-18)
 _Ran interactive `codex` inside `spike-repo` (no `[projects."…spike-repo"]` entry yet)
@@ -209,18 +208,80 @@ _In a trusted scratch repo, set ONLY a project-scoped `[features] hooks = true` 
 
 ## Resolved Answers (Task 3 — frozen; consumed by 13-02 / 13-03)
 
-> **STATUS: PENDING — filled after Task 2, with the offline sha256 determination.**
+> **STATUS: FROZEN — 2026-07-18.** All four SPIKE-REQUIRED items answered by direct
+> observation on codex-cli 0.144.4. 13-02 and 13-03 read this section.
 
-- **SPIKE item 1 — exact `trusted_hash` input:** _(pending — a/b/c: command string /
-  compact-JSON hook object / normalized-TOML hook object)_
-- **SPIKE item 2 — pre-seeding viability + one-gate-or-two:** _(pending)_
-- **SPIKE item 3 — default trust_level for an unlisted project:** _(pending)_
-- **SPIKE item 4 — apply_patch coverage + `tool_input` field name:** _(pending)_
-- **sha256 hash-input determination:** _(pending — which of a/b/c matched observed hash)_
-- **A1 (project-scoped feature flag honored):** _(pending — CONFIRMED / FALSIFIED)_
+- **SPIKE item 1 — exact `trusted_hash` input: NOT REPRODUCIBLE BLACK-BOX (negative
+  result, and it is decisive rather than blocking).** Against a fixture whose exact bytes
+  were controlled (`hooks.json` sha256 `7465d8df…`, single no-`matcher` PreToolUse group,
+  command `cat >> /private/tmp/gsd-phase13-spike/spike-repo/.codex/payload.log`) and the
+  freshly-written ledger value
+  `sha256:002c38e7e76d694a5d27ae2ff751e90e4d121488cdb9ef1c18532ac0971fd470`, **65
+  candidate inputs failed to reproduce the hash**: (a) command string ±newline; (b) the
+  hook object as compact/spaced/sorted-key JSON in both key orders, with and without
+  `timeout`/`matcher` defaults; (c) normalized TOML in both key orders; plus group-level
+  objects, key/path/event-salted concatenations, and nine whole-file normalizations
+  (raw bytes, compact, sorted, pretty). **None matched.** The input is an internal
+  codex-cli serialization that is not derivable from the public file format.
+- **SPIKE item 2 — pre-seeding viability + one-gate-or-two: PRE-SEEDING IS NOT VIABLE;
+  two gates, but one approval flow.**
+  - _Viability:_ pre-seeding was **already forbidden** by Pitfall 3 (the migration must
+    never write the operator's global `~/.codex/config.toml`). Item 1's negative result
+    makes it additionally **impossible** to do correctly even if it were permitted. The
+    question is therefore closed from both directions, and **nothing downstream depends
+    on knowing the hash input** — 13-03's migration writes only project-scoped files, and
+    13-05 documents the one-time interactive trust as an operator action. This is why the
+    unresolved hash input does **not** block the phase.
+  - _One gate or two:_ **two independent gates.** Gate A (`[projects.<path>] trust_level`)
+    and Gate B (`[hooks.state.<key>] trusted_hash`) are separately required — STEP 6
+    proved Gate A alone does **not** fire a hook. But a **single first-session approval
+    flow writes both together**, so it is one operator action, not two occasions.
+  - _Caveat on stability:_ the same ledger key produced three different hashes across the
+    spike (`79880528…`, `1e6949b0…`, `002c38e7…`). Content changes explain at least the
+    first transition; whether the value is purely content-derived or additionally salted
+    was **not** established, since the earlier fixtures were reaped from `/tmp` before
+    their exact bytes could be re-hashed. Treat `trusted_hash` as opaque and
+    non-reconstructible.
+- **SPIKE item 3 — default trust_level for an unlisted project: PROMPT.** Not
+  silent-trusted, not silent-untrusted — codex surfaces an interactive trust prompt (and,
+  for a new hook, a separate hook-review prompt) and the hook does not fire until
+  approved. HOOK-03's "verified firing in target repo" criterion must therefore state
+  that firing follows an explicit operator trust action.
+- **SPIKE item 4 — apply_patch coverage + `tool_input` field name: COVERED; the field is
+  `tool_input.command`.** PreToolUse **does** fire for `apply_patch` file edits on
+  codex-cli 0.144.4 — the official docs are correct and the third-party "apply_patch is
+  not covered" claim is **FALSIFIED**. The patch blob arrives under
+  **`tool_input.command`** (same field name Bash uses, different content), carrying
+  parseable `*** Add File: <path>` / `*** Update File: <path>` header lines, so a
+  `--file` value is derivable with a small `sed`/`grep`.
+- **sha256 hash-input determination:** **UNRESOLVED — none of (a) command string,
+  (b) compact-JSON hook object, or (c) normalized-TOML hook object matched**, nor did 56
+  further variants. Recorded as a negative result; see item 1 for why it is non-blocking.
+- **A1 (project-scoped feature flag honored): CONFIRMED.** `<repo>/.codex/config.toml`
+  `[features] hooks` overrides the machine-wide default (project `false` beat global
+  `true`). The table is strictly typed and fail-closed — a non-boolean value is a hard
+  startup error — so migration 0011 must write `hooks = true` and nothing else.
 - **No `trusted_hash` was written into `~/.codex/config.toml` (Pitfall 3 honored):**
-  _(to be affirmed in Task 3)_
+  **AFFIRMED.** No automated task in this plan wrote to the global config. The only
+  mutations to it were codex's own writes in response to the operator's interactive trust
+  approvals, confined to the two `/private/tmp/gsd-phase13-spike/*` scratch keys.
+- **⚠ Baseline drift disclosure (Task 1 acceptance criterion).** Task 1 asserted
+  `~/.codex/hooks.json` byte-identity at `07112ce1…6d778`; it now hashes `eb7adec8…`.
+  Content inspection shows **zero** `gsd-phase13-spike` entries — the file holds only
+  live vendor hooks (nyx, cmux/termloop, superset, herdr), and its mtime post-dates the
+  spike sessions. **Cause is unrelated vendor churn, not spike contamination**, but the
+  criterion as literally written no longer holds and is recorded here rather than passed
+  over silently.
 
-**Matcher decision:** _(pending — the bold one-line decision naming the exact `matcher`
-value(s) 13-03's hooks.json entry must carry, and stating yes/no on whether 13-02's
-wrapper needs a `Bash`-command-parsing branch in addition to the apply_patch path.)_
+**Matcher decision:** 13-03's `hooks.json` PreToolUse entry MUST carry
+**`"matcher": "apply_patch"`**, and 13-02's wrapper does **NOT** need a
+`Bash`-command-parsing branch — STEP 7 proved `apply_patch` covers file edits, and per
+RESEARCH.md Open Question 1 the Bash branch is recommended only if apply_patch had proven
+uncovered; it did not. The wrapper parses the patch blob from `tool_input.command`,
+extracting the target path from its `*** Add File:` / `*** Update File:` headers.
+
+> **Load-bearing corollary for HOOK-02 (from STEP 3's side-finding).** A hook emitting
+> invalid stdout **fails OPEN** — codex reports `PreToolUse hook (failed)` and runs the
+> tool anyway. The wrapper's allow path must therefore emit **empty stdout / silent
+> `exit 0`**, and its deny path **strictly valid `permissionDecision` JSON or a clean
+> `exit 2`**. Any partial or malformed stdout silently disables the gate.
