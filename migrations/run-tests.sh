@@ -5663,6 +5663,97 @@ STUB
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# DOC-03 — ADR-0009's dated Correction section (Phase 13, HOOK-01/DOC-03;
+# 13-04-PLAN.md). Grep-assertion, not a fixture/mutation harness: pins the
+# Correction section's CONTENT so a silent removal of any one recorded item
+# — d.9 superseded, d.12 reversed (by reference), or the global-vs-
+# project-scoped factual correction — goes RED. Each check is scoped to the
+# section's own line span (heading to EOF, its document position), not the
+# whole file, so it cannot pass by matching decision 12's pre-existing
+# Phase-12 inline markers instead of the new section.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_adr_0009_correction() {
+  echo ""
+  echo "${YELLOW}=== ADR-0009 Correction section (DOC-03) ===${RESET}"
+
+  local adr="$REPO_ROOT/docs/decisions/0009-plan-review-gate.md"
+
+  if [ ! -f "$adr" ]; then
+    echo "  ${RED}FAIL${RESET} $adr MISSING"
+    FAIL=$((FAIL+1))
+    return
+  fi
+
+  # (a) exactly one '## Correction' heading — a missing OR a duplicated
+  # heading both flip this RED.
+  local heading_count
+  heading_count="$(grep -c '^## Correction' "$adr")"
+  if [ "$heading_count" -eq 1 ]; then
+    echo "  ${GREEN}PASS${RESET} exactly one '## Correction' heading ($heading_count)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} expected exactly one '## Correction' heading, found $heading_count"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Portable (BSD/macOS awk + gawk both honor '/pat/,0' as "to EOF", per
+  # migrations/run-tests.sh:609's existing awk-range precedent).
+  local section
+  section="$(awk '/^## Correction/,0' "$adr")"
+
+  # (b) decision 9 recorded superseded.
+  if printf '%s\n' "$section" | grep -iq 'decision 9' \
+     && printf '%s\n' "$section" | grep -iq 'supersed'; then
+    echo "  ${GREEN}PASS${RESET} Correction section records decision 9 superseded"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section missing decision 9 superseded language"
+    FAIL=$((FAIL+1))
+  fi
+
+  # (c) decision 12 recorded reversed, BY REFERENCE.
+  if printf '%s\n' "$section" | grep -iq 'decision 12' \
+     && printf '%s\n' "$section" | grep -iq 'revers'; then
+    echo "  ${GREEN}PASS${RESET} Correction section references decision 12 reversed"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section missing decision 12 reversed reference"
+    FAIL=$((FAIL+1))
+  fi
+
+  # (c2) ...and it is genuinely a reference, not a duplicate of decision 12's
+  # own guard-mechanics walkthrough (Phase 12's inline markers are the only
+  # place `_canon_dir`/`_is_contained` should appear).
+  if printf '%s\n' "$section" | grep -q '_canon_dir\|_is_contained'; then
+    echo "  ${RED}FAIL${RESET} Correction section re-explains decision 12's guard mechanics (duplicate, not reference)"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} Correction section does not duplicate decision 12's guard mechanics"
+    PASS=$((PASS+1))
+  fi
+
+  # (d) the "global, not per-project" factual correction.
+  if printf '%s\n' "$section" | grep -iq 'project-scoped' \
+     && printf '%s\n' "$section" | grep -iqE 'global rather than per-project|not global'; then
+    echo "  ${GREEN}PASS${RESET} Correction section corrects the global-vs-project-scoped claim"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section missing the global-vs-project-scoped factual correction"
+    FAIL=$((FAIL+1))
+  fi
+
+  # (e) dated.
+  if printf '%s\n' "$section" | grep -qE '2026-07-(1[7-9]|2[0-9])'; then
+    echo "  ${GREEN}PASS${RESET} Correction section is dated"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section is not dated"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -5734,6 +5825,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "hook-wrapper-plan-review" ]; then
   test_hook_wrapper_stderr_contract
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "adr-0009-correction" ]; then
+  test_adr_0009_correction
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
