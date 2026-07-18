@@ -252,7 +252,7 @@ ADR-0009 lands last; DOC-03 is mapped there for coverage accounting, not here.
   8-step protocol against SCRATCH repos, resolves the hash-input, one-gate-or-two,
   default-trust, and apply_patch-coverage unknowns, freezes 13-01-SPIKE-FINDINGS.md
   with the Matcher decision downstream plans read (HOOK-01) [wave 1, standalone]
-- [ ] 13-02-PLAN.md — HOOK-02 wrapper (`hook-wrapper-plan-review.sh`) execing the
+- [x] 13-02-PLAN.md — HOOK-02 wrapper (`hook-wrapper-plan-review.sh`) execing the
   unchanged check-plan-review.sh + fail-CLOSED mutation test (SC#3: empty-stderr
   RED -> non-empty GREEN) [wave 2, depends 13-01]
 - [ ] 13-03-PLAN.md — HOOK-03 migration 0011: merge-don't-clobber PreToolUse into
@@ -318,7 +318,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 4/4 | Complete    | 2026-07-17 |
-| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 1/5 | In Progress|  |
+| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 2/5 | In Progress|  |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
 ## Known Follow-ups
