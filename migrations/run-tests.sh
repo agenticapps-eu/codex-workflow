@@ -3664,6 +3664,8 @@ test_repo_layout() {
     skills/codex-plan-review/SKILL.md \
     migrations/0008-plan-review-gate.md \
     docs/decisions/0009-plan-review-gate.md \
+    skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh \
+    migrations/0011-native-plan-review-hook.md \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -5324,6 +5326,235 @@ MD
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# test_migration_0011 (HOOK-03, phase 13-native-enforcement-plan-review-hook)
+#
+# Proves migration 0011's Step 1/2 Apply blocks — EXTRACTED FROM THE
+# DOCUMENT ITSELF, never hand-transcribed (TEST-01, 11-02's own lesson) —
+# actually merge-don't-clobber against fixtures carrying a PRE-EXISTING
+# unrelated vendor's content, are idempotent on re-apply, and that SC#4's
+# negative half (a second, untouched repo carries no plan-review entry) is
+# automated. Mirrors test_migration_0010's structural template:
+# extract_step_block + assert_extracted_shape gating, mktemp -d sandboxes
+# with `trap ... RETURN`, CODEX_HOME pinned to the real repo root (trusted,
+# same discipline as _m0010_apply/_m0009_apply) so the wrapper path in
+# Step 1's jq --arg resolves.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# _m0011_ok <rc> <label> — PASS iff rc is 0. Mirrors _m0010_ok's convention.
+_m0011_ok() {
+  if [ "$1" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} $2"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $2"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# _m0011_fail <label> — unconditional FAIL, used when an extraction gate is
+# down so a case reports FAILED rather than silently disappearing.
+_m0011_fail() {
+  echo "  ${RED}FAIL${RESET} $1"
+  FAIL=$((FAIL+1))
+}
+
+# _m0011_apply <sandbox_dir> <codex_home> <block_text>
+# Runs an extracted Apply block against the sandbox with CODEX_HOME resolved
+# to the real repo root (0011's Step 1 Apply resolves
+# $CODEX_HOME/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh,
+# so CODEX_HOME must point at this trusted repo, never the developer's real
+# ~/.codex). Subshell-wrapped so a block that exits non-zero cannot terminate
+# the whole harness mid-suite (same discipline as _m0010_apply/_m0009_apply).
+_m0011_apply() {
+  ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
+}
+
+test_migration_0011() {
+  echo ""
+  echo "${YELLOW}=== Migration 0011 — Native PreToolUse plan-review hook (HOOK-03) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — migration 0011 test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local MIGRATION_0011="$REPO_ROOT/migrations/0011-native-plan-review-hook.md"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # ── Extraction (TEST-01): 0011's own shell, pulled from 0011's own
+  # document, never hand-transcribed. Every extraction is gated by
+  # assert_extracted_shape (D-36) before it is executed or asserted-on.
+  # Idempotency-check blocks are extracted too (not just Apply): the
+  # "idempotent re-apply" case below re-runs each step's OWN idempotency
+  # check before deciding whether to re-invoke Apply — the SAME discipline
+  # test_migration_0008's partial-application fixture uses
+  # (`run-tests.sh:1928`, "each step checks its OWN idempotency"), mirroring
+  # how the real update flow gates re-invocation. 0011's Step 1 Apply is an
+  # unconditional array-append by design (leaf-merge discipline, T-13-04) —
+  # it is the EXTERNAL idempotency check that makes re-application safe, not
+  # an append-if-absent Apply body.
+  local pf_block applies_to_block step1_apply step2_apply step1_idem step2_idem
+  pf_block="$(extract_preflight_block "$MIGRATION_0011" 2>/dev/null)"
+  applies_to_block="$(awk '/^applies_to:/{f=1;next} f && /^[^ ]/{exit} f{print}' "$MIGRATION_0011")"
+  step1_apply="$(extract_step_block "$MIGRATION_0011" 1 Apply 2>/dev/null)"
+  step2_apply="$(extract_step_block "$MIGRATION_0011" 2 Apply 2>/dev/null)"
+  step1_idem="$(extract_step_block "$MIGRATION_0011" 1 "Idempotency check" 2>/dev/null)"
+  step2_idem="$(extract_step_block "$MIGRATION_0011" 2 "Idempotency check" 2>/dev/null)"
+
+  local pf_ok=1 applies_ok=1 s1_ok=1 s2_ok=1 s1i_ok=1 s2i_ok=1
+  assert_extracted_shape "0011 Pre-flight" "$pf_block" 'hook-wrapper-plan-review.sh' || pf_ok=0
+  assert_extracted_shape "0011 applies_to" "$applies_to_block" '.codex/hooks.json' || applies_ok=0
+  assert_extracted_shape "0011 Step 1 Apply" "$step1_apply" 'PreToolUse' || s1_ok=0
+  assert_extracted_shape "0011 Step 2 Apply" "$step2_apply" 'features' || s2_ok=0
+  assert_extracted_shape "0011 Step 1 Idempotency check" "$step1_idem" 'PreToolUse' || s1i_ok=0
+  assert_extracted_shape "0011 Step 2 Idempotency check" "$step2_idem" 'hooks' || s2i_ok=0
+
+  local all_ok=1
+  [ "$pf_ok" = "1" ] && [ "$applies_ok" = "1" ] && [ "$s1_ok" = "1" ] && [ "$s2_ok" = "1" ] \
+    && [ "$s1i_ok" = "1" ] && [ "$s2i_ok" = "1" ] || all_ok=0
+
+  if [ "$all_ok" != "1" ]; then
+    _m0011_fail "Step 1 Apply: merge-don't-clobber (decoy vendor entry survives) — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 1 Apply: wrapper PreToolUse entry present after apply — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 1 Apply: idempotent re-apply adds no duplicate entry — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 2 Apply: config-flag merge (decoy [some_other] table survives) — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 2 Apply: [features] hooks = true present after apply — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 2 Apply: idempotent re-apply adds no duplicate flag — NOT ASSERTED: extraction failed"
+    _m0011_fail "SC#4-negative: second repo with no .codex/hooks.json has no PreToolUse plan-review entry — NOT ASSERTED: extraction failed"
+    return
+  fi
+
+  local CODEX_HOME_FOR_TEST="$REPO_ROOT"
+  local WRAPPER_PATH="$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+
+  # ── Sandbox 1: hooks.json merge-don't-clobber + config.toml flag merge ──
+  local sbx="$tmp/sandbox"
+  mkdir -p "$sbx/.codex"
+  ( cd "$sbx" && git init -q )
+
+  # Decoy vendor hooks.json — a PRE-EXISTING unrelated vendor's PreToolUse
+  # entry that must survive the merge (T-13-04). Matches this repo's own
+  # live multi-vendor hooks.json shape (13-RESEARCH.md).
+  cat > "$sbx/.codex/hooks.json" <<'JSON'
+{"hooks":{"PreToolUse":[{"matcher":"Bash","type":"command","command":"/opt/vendor/some-other-hook.sh"}]}}
+JSON
+
+  # Decoy config.toml — an unrelated [some_other] table that must survive
+  # the [features] merge (T-13-05).
+  cat > "$sbx/.codex/config.toml" <<'TOML'
+[some_other]
+foo = "bar"
+TOML
+
+  local out rc
+  out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step1_apply")"; rc=$?
+  _m0011_ok "$rc" "Step 1 Apply executes cleanly against the seeded sandbox — got exit=$rc"
+  [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
+
+  if ( cd "$sbx" && jq -e '.hooks.PreToolUse | length == 2' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: .hooks.PreToolUse has exactly 2 entries after apply (decoy + wrapper)"
+  else
+    _m0011_ok 1 "Step 1: .hooks.PreToolUse has exactly 2 entries after apply (decoy + wrapper)"
+  fi
+
+  if ( cd "$sbx" && jq -e '.hooks.PreToolUse[] | select(.command == "/opt/vendor/some-other-hook.sh")' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: pre-existing decoy vendor PreToolUse entry survives the merge (T-13-04)"
+  else
+    _m0011_ok 1 "Step 1: pre-existing decoy vendor PreToolUse entry survives the merge (T-13-04)"
+  fi
+
+  if ( cd "$sbx" && jq -e --arg cmd "$WRAPPER_PATH" \
+       '.hooks.PreToolUse[] | select(.command == $cmd and .matcher == "apply_patch")' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: wrapper PreToolUse entry (matcher=apply_patch) present after apply"
+  else
+    _m0011_ok 1 "Step 1: wrapper PreToolUse entry (matcher=apply_patch) present after apply"
+  fi
+
+  # Idempotent re-apply — no duplicate entry. Mirrors test_migration_0008's
+  # partial-application fixture discipline (run-tests.sh:1928, "each step
+  # checks its OWN idempotency"): 0011's Step 1 Apply is an unconditional
+  # leaf-level array-append BY DESIGN (T-13-04 — never an append-if-absent
+  # body, which is what 0008's OBJECT merge achieves for free but an ARRAY
+  # append cannot without re-checking membership); it is the EXTRACTED
+  # Idempotency check that must gate re-invocation, exactly as the real
+  # update flow would. The regression this proves: if the idempotency
+  # check's own `select` match ever stopped tracking the wrapper's command
+  # string, this assertion (not the Apply body) is what would catch a
+  # silent double-fire on every re-run.
+  if ( cd "$sbx" && export CODEX_HOME="$CODEX_HOME_FOR_TEST" && eval "$step1_idem" >/dev/null 2>&1 ); then
+    out=""; rc=0
+  else
+    out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step1_apply")"; rc=$?
+  fi
+  _m0011_ok "$rc" "Step 1 Apply re-executes cleanly (idempotent re-apply, gated by its own Idempotency check) — got exit=$rc"
+
+  if ( cd "$sbx" && jq -e '.hooks.PreToolUse | length == 2' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: idempotent re-apply adds NO duplicate entry (still exactly 2)"
+  else
+    _m0011_ok 1 "Step 1: idempotent re-apply adds NO duplicate entry (still exactly 2)"
+  fi
+
+  # Step 2 — config.toml [features] hooks = true merge.
+  out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step2_apply")"; rc=$?
+  _m0011_ok "$rc" "Step 2 Apply executes cleanly against the seeded sandbox — got exit=$rc"
+  [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
+
+  if grep -q '^foo = "bar"' "$sbx/.codex/config.toml" && grep -q '^\[some_other\]' "$sbx/.codex/config.toml"; then
+    _m0011_ok 0 "Step 2: pre-existing decoy [some_other] table survives the [features] merge (T-13-05)"
+  else
+    _m0011_ok 1 "Step 2: pre-existing decoy [some_other] table survives the [features] merge (T-13-05)"
+  fi
+
+  if grep -q '^hooks = true$' "$sbx/.codex/config.toml"; then
+    _m0011_ok 0 "Step 2: [features] hooks = true present after apply"
+  else
+    _m0011_ok 1 "Step 2: [features] hooks = true present after apply"
+  fi
+
+  # Idempotent re-apply — no duplicate flag. Step 2's Apply is idempotent by
+  # construction (the awk pass replaces an existing `hooks =` line rather
+  # than appending a second one), but re-invocation is still gated by the
+  # extracted Idempotency check first, matching Step 1's discipline and the
+  # real update flow (each step checks its OWN idempotency, run-tests.sh:1928).
+  if ( cd "$sbx" && export CODEX_HOME="$CODEX_HOME_FOR_TEST" && eval "$step2_idem" >/dev/null 2>&1 ); then
+    out=""; rc=0
+  else
+    out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step2_apply")"; rc=$?
+  fi
+  _m0011_ok "$rc" "Step 2 Apply re-executes cleanly (idempotent re-apply, gated by its own Idempotency check) — got exit=$rc"
+
+  local hooks_count
+  hooks_count="$(grep -c '^hooks = true$' "$sbx/.codex/config.toml" 2>/dev/null || true)"
+  if [ "$hooks_count" = "1" ]; then
+    _m0011_ok 0 "Step 2: idempotent re-apply adds NO duplicate hooks=true line (still exactly 1)"
+  else
+    _m0011_ok 1 "Step 2: idempotent re-apply adds NO duplicate hooks=true line (still exactly 1, got $hooks_count)"
+  fi
+
+  # ── SC#4-negative: a second repo with no .codex/hooks.json has no
+  # PreToolUse plan-review entry — asserted by absence, never by running
+  # Step 1 against it (the point is an UNTOUCHED second repo).
+  local sbx2="$tmp/sandbox2"
+  mkdir -p "$sbx2/.codex"
+  ( cd "$sbx2" && git init -q )
+
+  if [ ! -f "$sbx2/.codex/hooks.json" ]; then
+    _m0011_ok 0 "SC#4-negative: second repo has no .codex/hooks.json before any apply (clean state)"
+  else
+    _m0011_ok 1 "SC#4-negative: second repo has no .codex/hooks.json before any apply (clean state)"
+  fi
+
+  if [ ! -f "$sbx2/.codex/hooks.json" ] || ! jq -e --arg cmd "$WRAPPER_PATH" \
+       '.hooks.PreToolUse[]? | select(.command == $cmd)' "$sbx2/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0011_ok 0 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence)"
+  else
+    _m0011_ok 1 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence)"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # test_hook_wrapper_stderr_contract (HOOK-02, SC#3) — mutation-proves that
 # hook-wrapper-plan-review.sh's exit-2 fallback branch ALWAYS writes a
 # non-empty reason to its own stderr before exiting. A silent exit-2 block
@@ -5489,6 +5720,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0010" ]; then
   test_migration_0010
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0011" ]; then
+  test_migration_0011
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
