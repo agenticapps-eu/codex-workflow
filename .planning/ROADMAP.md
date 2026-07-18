@@ -248,7 +248,7 @@ ADR-0009 lands last; DOC-03 is mapped there for coverage accounting, not here.
      hooks are global rather than per-project" claim (falsified by codex-cli's
      project-scoped `.codex/hooks.json` layer).
 **Plans**: 5 plans (4 waves; spike-gated design per plan-time option (a))
-- [ ] 13-01-PLAN.md — Trust-ledger + apply_patch SPIKE (SC#1): runs RESEARCH.md's
+- [x] 13-01-PLAN.md — Trust-ledger + apply_patch SPIKE (SC#1): runs RESEARCH.md's
   8-step protocol against SCRATCH repos, resolves the hash-input, one-gate-or-two,
   default-trust, and apply_patch-coverage unknowns, freezes 13-01-SPIKE-FINDINGS.md
   with the Matcher decision downstream plans read (HOOK-01) [wave 1, standalone]
@@ -318,7 +318,7 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
 | 12. Path Safety & Review Debt                   | v0.8.0    | 4/4 | Complete    | 2026-07-17 |
-| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/5             | Not started | -          |
+| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 1/5 | In Progress|  |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
 ## Known Follow-ups
