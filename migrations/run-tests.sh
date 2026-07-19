@@ -3558,6 +3558,169 @@ test_check_plan_review_contract() {
 # migration's to_version (version is migration-coupled).
 # ─────────────────────────────────────────────────────────────────────────────
 
+test_migration_0012() {
+  echo ""
+  echo "${YELLOW}=== Migration 0012 — slim the eager AGENTS.md + reconcile the citation ===${RESET}"
+
+  local doc="$REPO_ROOT/migrations/0012-slim-agents-eager-surface.md"
+  local mirror="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/spec-mirrors/11-coding-discipline-0.4.0.md"
+  local skill="$REPO_ROOT/skills/agentic-apps-workflow/SKILL.md"
+
+  if [ ! -f "$doc" ]; then
+    echo "  ${RED}FAIL${RESET} 0012 doc missing"; FAIL=$((FAIL+1)); return
+  fi
+
+  # The transform is extracted from the DOCUMENT and executed, so the doc stays
+  # the single source of truth. Shape-guarded per D-36: non-empty != correct.
+  local apply2; apply2="$(extract_step_block "$doc" 2 Apply)"
+  assert_extracted_shape "0012 step 2" "$apply2" "slim_agents_block" || return
+
+  local tmp; tmp="$(mktemp -d)"
+  mkdir -p "$tmp/skills/setup-codex-agenticapps-workflow/templates"
+  printf '%s\n' "$apply2" > "$tmp/apply2.sh"
+
+  # Fixture: a v0.8.0-shaped AGENTS.md with all five relocated sections, plus a
+  # fenced session-handoff example whose lines start with '## '. That fence is
+  # the real-world shape this host's installer template carries; a transform
+  # that is not fence-aware reads those lines as headings, ends the drop early,
+  # and leaks the fence body into the slimmed file.
+  {
+    printf '# AGENTS\n\nproject preamble\n\n'
+    printf '<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->\n\n'
+    printf '<!-- spec-source: agenticapps-workflow-core@0.4.0 §11 -->\n'
+    cat "$mirror"
+    printf '\n## Development Workflow\n\nold workflow prose\n\n'
+    printf '## Workflow Enforcement Hooks (MANDATORY)\n\n| Gate | Bound skill |\n|---|---|\n| tdd | x |\n\n'
+    printf '## Skill routing\n\n- Tiny -> verification\n\n'
+    printf '## Session handoff\n\nprose\n\n```markdown\n# Handoff\n\n## Accomplished\n- x\n\n## Decisions\n- y\n```\n\ntrailing handoff prose\n\n'
+    printf '## Knowledge Capture — Ritual Tail (spec §15)\n\nlong ritual prose\n\n'
+    printf '## Pre-execution Gate — Plan Review (spec §02)\n\nplan review ritual prose\n\n'
+    printf '<!-- END: agentic-apps-workflow sections -->\n\n'
+    printf '## Project Section\n\nproject-owned content below the marker\n'
+  } > "$tmp/AGENTS.md"
+
+  if ! ( cd "$tmp" && bash apply2.sh >/dev/null ); then
+    echo "  ${RED}FAIL${RESET} 0012 step 2 shell errored on the fixture"; FAIL=$((FAIL+1)); rm -rf "$tmp"; return
+  fi
+
+  # 1. §11 survives byte-identical.
+  if awk '/^## Coding Discipline \(NON-NEGOTIABLE\)$/{f=1} f{print} /session-level discipline the model brings to every diff\.$/{exit}' "$tmp/AGENTS.md" \
+       | diff -q - "$mirror" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} §11 block survives the slim byte-identical"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §11 block altered by the slim"; FAIL=$((FAIL+1))
+  fi
+
+  # 2. All four dropped sections are gone.
+  if ! grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$tmp/AGENTS.md" \
+     && ! grep -q '^## Skill routing$' "$tmp/AGENTS.md" \
+     && ! grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$tmp/AGENTS.md" \
+     && ! grep -q '^## Pre-execution Gate — Plan Review (spec §02)$' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} gate table, routing, §15 tail and plan-review prose removed"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} a relocated section survived in AGENTS.md"; FAIL=$((FAIL+1))
+  fi
+
+  # 3. Fence leak — the regression this transform's octal-escape matcher prevents.
+  if ! grep -q '^## Accomplished$' "$tmp/AGENTS.md" \
+     && ! grep -q '^## Decisions$' "$tmp/AGENTS.md" \
+     && ! grep -q '^trailing handoff prose$' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} fenced '## ' lines inside a dropped section do not leak"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} fence leak — a '## ' line inside a code fence ended the drop early"; FAIL=$((FAIL+1))
+  fi
+
+  # 4. Both pointers installed.
+  if grep -q 'Full protocol in the trigger skill' "$tmp/AGENTS.md" \
+     && grep -q 'agentic-apps-workflow` trigger' "$tmp/AGENTS.md" \
+     && grep -q 'PreToolUse` hook' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} trigger-skill and session-handoff pointers installed"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} pointers missing after slim"; FAIL=$((FAIL+1))
+  fi
+
+  # 5. Content outside the marker block untouched.
+  if grep -q '^project-owned content below the marker$' "$tmp/AGENTS.md" \
+     && grep -q '^project preamble$' "$tmp/AGENTS.md" \
+     && grep -q '^## Project Section$' "$tmp/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} content outside the marker block untouched"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} slim escaped the marker block"; FAIL=$((FAIL+1))
+  fi
+
+  # 6. §11 still followed by a '## ' line (0001's replace/rollback bound).
+  if awk '/session-level discipline the model brings to every diff\.$/{getline; getline; print; exit}' "$tmp/AGENTS.md" | grep -q '^## '; then
+    echo "  ${GREEN}PASS${RESET} §11 block still bounded by a following '## ' heading"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §11 lost its trailing '## ' bound (breaks 0001/0009)"; FAIL=$((FAIL+1))
+  fi
+
+  # 7. The installer template is left ALONE. This host installs by replay, so the
+  # template is an input to the chain, not the end state — and migrations
+  # 0007/0008/0010 read their sections out of it. Slimming it breaks their replay
+  # (0010 would insert nothing, regressing D-06). A fresh install applies the
+  # heavy template early and this migration slims the result at the end of the
+  # same replay, so it lands slim either way.
+  if grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md" \
+     && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md"; then
+    echo "  ${GREEN}PASS${RESET} installer template left intact as the chain's input (0007/0008/0010 read it)"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} installer template was slimmed — breaks 0007/0008/0010 replay (D-06)"; FAIL=$((FAIL+1))
+  fi
+
+  # 8. Idempotent.
+  cp "$tmp/AGENTS.md" "$tmp/AGENTS.once"
+  ( cd "$tmp" && bash apply2.sh >/dev/null )
+  if diff -q "$tmp/AGENTS.once" "$tmp/AGENTS.md" >/dev/null 2>&1; then
+    echo "  ${GREEN}PASS${RESET} second apply is a no-op"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} slim is not idempotent"; FAIL=$((FAIL+1))
+  fi
+
+  rm -rf "$tmp"
+
+  # 9. Live repo is at the end state (dogfooding).
+  if ! grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$REPO_ROOT/AGENTS.md" \
+     && grep -q 'Full protocol in the trigger skill' "$REPO_ROOT/AGENTS.md"; then
+    echo "  ${GREEN}PASS${RESET} live AGENTS.md is at the 0012 end state"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} live AGENTS.md not slimmed (repo must dogfood its own migration)"; FAIL=$((FAIL+1))
+  fi
+
+  # 10. Relocated procedures present in the trigger skill.
+  if grep -q '^## Session handoff$' "$skill" \
+     && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$skill" \
+     && grep -q '^## Pre-execution Gate — Plan Review (spec §02)$' "$skill" \
+     && grep -q '^## Instruction surface — eager vs lazy (spec §12)$' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} handoff, §15 tail, plan-review and §12 rationale in trigger skill"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} a relocated procedure is missing from the trigger skill"; FAIL=$((FAIL+1))
+  fi
+
+  # 11. §14 declared — the 0.6.0 gap that gated the whole citation advance.
+  if grep -q '§14' "$REPO_ROOT/docs/ENFORCEMENT-PLAN.md" && grep -q '§14' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} §14 declared in ENFORCEMENT-PLAN and trigger skill"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} §14 undeclared — cannot honestly claim >= 0.6.0"; FAIL=$((FAIL+1))
+  fi
+
+  # 12. Claim advanced, and ONLY on the normative carrier.
+  if grep -q '^implements_spec: 0.10.0$' "$skill" \
+     && grep -q '^implements_spec: 0.4.0$' "$REPO_ROOT/skills/codex-cso/SKILL.md"; then
+    echo "  ${GREEN}PASS${RESET} claim 0.10.0 on the trigger skill; gate skills still cite their contract"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} claim not advanced, or a gate skill's contract citation was collaterally bumped"; FAIL=$((FAIL+1))
+  fi
+
+  # 13. Enforcement untouched — the point of the whole scope note.
+  if grep -q 'hook-wrapper-plan-review.sh' "$REPO_ROOT/.codex/hooks.json" \
+     && [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ]; then
+    echo "  ${GREEN}PASS${RESET} plan-review hook wiring untouched by the prose relocation"; PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} plan-review enforcement disturbed — prose moved but so did the hook"; FAIL=$((FAIL+1))
+  fi
+}
+
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
@@ -5983,6 +6146,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "adr-0009-correction" ]; then
   test_adr_0009_correction
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0012" ]; then
+  test_migration_0012
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

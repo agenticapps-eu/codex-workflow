@@ -3,8 +3,12 @@
 This document records which `agenticapps-workflow-core/spec/02-hook-taxonomy.md`
 gates fire for `codex-workflow`'s **own** development, which gates do not
 apply (with rationale), and which `codex-*` skill is bound to each.
-It is the host-side companion to `AGENTS.md`'s Workflow Enforcement
-Hooks table.
+It is the host-side companion to the trigger skill's **Step 3 — Gate-to-skill
+bindings** table. (Until v0.9.0 it companioned a duplicate of that table in
+`AGENTS.md`; migration `0012` removed the eager copy under spec 0.10.0's §12
+instruction-surface economy convention — the bindings now live in the lazily
+loaded `skills/agentic-apps-workflow/SKILL.md`, with the machine-readable copy
+in `.planning/config.codex.json`.)
 
 The scaffolder repo dogfoods its own workflow per Phase 6 of the
 build-out (`docs/dogfood-2026-05-10.md`).
@@ -12,7 +16,15 @@ build-out (`docs/dogfood-2026-05-10.md`).
 ## Conformance claim
 
 `codex-workflow` claims **`full` conformance** to
-`agenticapps-workflow-core` v0.4.0 per spec/09 because:
+`agenticapps-workflow-core` v0.10.0 per spec/09 because:
+
+> **Citation history.** This document and the trigger skill cited **v0.4.0**
+> until host v0.9.0, which understated the repo by six spec versions: §02's
+> `plan-review` gate (0.5.0), §15 knowledge capture (0.7.0), §04's red-flag
+> composition rules (0.8.0) and §08's setup end-state amendment (0.9.0) were all
+> already satisfied by shipped implementation. Audited 2026-07-19; the one real
+> gap was §14 (0.6.0), which was never *declared* — see item 6. The claim was
+> advanced only after closing it.
 
 1. The trigger skill `agentic-apps-workflow` reproduces the **five**
    canonical-prose blocks verbatim — Step 0 Commitment Ritual,
@@ -29,7 +41,28 @@ build-out (`docs/dogfood-2026-05-10.md`).
    - **§12 (authoring conventions)** — branchy workflows newly
      authored/edited at 0.4.0 render as Mermaid `flowchart`s
      (`codex-ts-declare-first` refusals; trigger Step 2 routing).
-     Surgical scope per §12 (no bulk conversion required).
+     Surgical scope per §12 (no bulk conversion required). The v0.10.0
+     **instruction-surface economy** SHOULD is satisfied as of host
+     v0.9.0: the always-loaded `AGENTS.md` carries the §11 canonical
+     block plus two short pointers (the trigger skill, and the
+     session-handoff protocol), while the §02 gate table, task-size
+     routing, the session-handoff procedure, the §15 ritual tail and the
+     plan-review procedure live in the lazily-loaded trigger skill.
+     Gate *enforcement* is unaffected — the `PreToolUse` plan-review
+     hook and `.planning/config.codex.json` are untouched; only prose
+     moved. Migration `0012`; core ADR-0020.
+   - **§15 (knowledge capture)** — wired at all three ritual triggers
+     (handoff, plan completion, phase completion) in the trigger skill,
+     routed exclusively through the `knowledge_capture` block in
+     `.planning/config.json` with no hardcoded vault path, and skipping
+     silently when the block is absent, disabled, or the vault folder
+     does not exist. Migrations `0007` / `0010`.
+   - **§08 (migration format), as amended at v0.9.0** — satisfied by
+     **replay**: setup walks the `0000`→latest chain step by step
+     (`skills/setup-codex-agenticapps-workflow/SKILL.md`, Stage C), it
+     does not install a prebuilt snapshot. Replay is §08's first-listed
+     strategy, so the amendment's drift-guard obligation — which binds
+     snapshot installers — does not apply to this host.
    - **§13 (declare-first TS)** — `codex-ts-declare-first` skill
      strengthens the `tdd` gate for new TS modules.
 3. Host-specific bindings exist for every gate **whose trigger
@@ -37,9 +70,28 @@ build-out (`docs/dogfood-2026-05-10.md`).
    whose triggers cannot occur are listed under "Spec Deltas" with
    the rationale per spec/09.
 4. `skills/agentic-apps-workflow/SKILL.md` carries
-   `implements_spec: 0.4.0` in frontmatter; the gate skills, GSD
-   entry-point skills, and lifecycle skills all cite
-   `implements_spec: 0.4.0`.
+   `implements_spec: 0.10.0` in frontmatter. That file is the **only
+   normative carrier** of the host claim per spec/09. The gate skills,
+   GSD entry-point skills and lifecycle skills continue to cite
+   `implements_spec: 0.4.0`, which is deliberate: they cite the version
+   of the *gate contract* they implement, not the host's claim, and
+   those contracts are unchanged since 0.4.0.
+6. **§14 (prompt-injection defense) — trivially conformant, and hereby
+   declared.** §14 is conditional on the host shipping an LLM
+   prompt-building surface. `codex-workflow` has none: the repo is
+   markdown and shell, the skills it ships are prose the agent reads
+   rather than prompts assembled from untrusted input, and the only
+   TypeScript is inert template fixtures under
+   `skills/codex-ts-declare-first/templates/`. §14's trigger condition
+   therefore cannot occur, and §09 requires only that the host say so —
+   which, until host v0.9.0, it never did. That undeclared state was the
+   sole substantive gap between this repo and an honest post-0.6.0
+   claim. Downstream projects that *do* build prompts get §14 coverage
+   via the `injection-guard` skill (agenticapps-observability), on the
+   same delegation basis as §10; and the `security` gate still carries
+   §02's obligation to record §14 evidence when it fires on such a
+   project.
+
 5. Each phase produces CONTEXT.md / PLAN.md / VERIFICATION.md /
    REVIEW.md as well-formed, machine-discoverable artifacts. (For
    the build-out itself the artifacts live in PR descriptions and

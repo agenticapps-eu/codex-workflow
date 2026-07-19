@@ -1,7 +1,7 @@
 ---
 name: agentic-apps-workflow
-version: 0.8.0
-implements_spec: 0.4.0
+version: 0.9.0
+implements_spec: 0.10.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
   activate whenever the user asks Codex to implement, build, code, fix,
@@ -21,8 +21,15 @@ description: |
 This is the trigger skill for the AgenticApps spec-first workflow on
 the OpenAI Codex CLI host. It is a `full`-conformance implementation of
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
-v0.4.0. The frontmatter `implements_spec: 0.4.0` is the conformance
+v0.10.0. The frontmatter `implements_spec: 0.10.0` is the conformance
 citation per spec/09.
+
+The claim advanced `0.4.0 → 0.10.0` at host v0.9.0 (migration `0012`). The
+citation had been stale by six spec versions: §02's `plan-review` gate (0.5.0),
+§15 knowledge capture (0.7.0), §04's red-flag composition rules (0.8.0) and
+§08's setup end-state amendment (0.9.0) were all already satisfied by shipped
+implementation. §14 (0.6.0) was the one real gap and is declared below; §12's
+0.10.0 instruction-surface economy is satisfied by that same migration.
 
 This repo is a **thin binding**, not a re-port (see
 [`docs/BINDING.md`](../../docs/BINDING.md) and
@@ -179,7 +186,7 @@ Superpowers-for-Codex distribution); the rest bind to this repo's
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| plan-review | `codex-plan-review` | Fires before the phase's first code-touching edit; writes `<NN>-REVIEWS.md` with ≥2 independent external reviewers. See `AGENTS.md` §"Pre-execution Gate — Plan Review (spec §02)" for the invocation ritual |
+| plan-review | `codex-plan-review` | Fires before the phase's first code-touching edit; writes `<NN>-REVIEWS.md` with ≥2 independent external reviewers. See §"Pre-execution Gate — Plan Review (spec §02)" below for the invocation ritual (it moved here from `AGENTS.md` at v0.9.0); enforcement is the `PreToolUse` hook in `.codex/hooks.json` |
 
 ### Pre-phase
 
@@ -399,6 +406,104 @@ description matches.
 
 ---
 
+## Session handoff
+
+`.codex/session-handoff.md` is the primary continuity mechanism across sessions —
+it survives context resets and `--resume`.
+
+**At session start:** check for `.codex/session-handoff.md`. If it exists and was
+modified in the last 7 days, read it before doing anything else and confirm what
+was found. **Only read the codex handoff** — do NOT read a bare root
+`session-handoff.md` or another host's (e.g. the opencode host's, which lives
+under its own marker dir). Handoffs are host-scoped so several hosts can share
+one working tree without cross-contaminating context.
+
+**Before ending any session** — when asked to exit, when the final task is done,
+or when context is getting full — write `.codex/session-handoff.md`:
+
+```markdown
+# Session Handoff — [date]
+
+## Accomplished
+- ...
+
+## Decisions
+- decision — why
+
+## Files modified
+- path — what changed
+
+## Next session: start here
+One paragraph on exactly where to pick up and what the first action should be.
+
+## Open questions
+- ...
+```
+
+Keep it under 150 lines. Write the file directly — do not print it to the
+terminal.
+
+The knowledge-capture ritual tail below runs **after** the handoff is written,
+never before.
+
+---
+
+## Instruction surface — eager vs lazy (spec §12)
+
+Spec 0.10.0 added an "Instruction-surface economy" SHOULD to §12: the
+always-loaded instruction file is re-billed on every turn, so it carries only
+what must be resident on *every* turn.
+
+`AGENTS.md` therefore carries the §11 canonical block (verbatim, behind its
+provenance anchor, near the top) plus two short pointers — this skill, and the
+session-handoff protocol. Everything procedural lives **here**, in the lazily
+loaded trigger skill, which loads on exactly the code-touching turns where those
+procedures bind: the Step 3 gate-binding table, Step 1 task-size routing, the
+session-handoff protocol, the §15 knowledge-capture ritual tail, and the §02
+plan-review gate procedure.
+
+Before v0.9.0 all of it was duplicated into `AGENTS.md` — ~150 eager lines per
+turn, pushing the §11 block toward the mid-context position §12's placement
+advisory exists to avoid. The plan-review *procedure* moved; its **enforcement**
+did not. That gate is enforced programmatically by a `PreToolUse` hook
+(`.codex/hooks.json` → `hook-wrapper-plan-review.sh` → `check-plan-review.sh`,
+exit 0 = ALLOW / exit 2 = BLOCK), and §12 is explicit that hook wiring stays
+where the runtime needs it. Both files are untouched by the relocation.
+
+---
+
+## Spec deltas (spec 0.10.0)
+
+Per core spec §09, a host names every requirement it does not satisfy verbatim,
+with rationale. Audited 2026-07-19.
+
+- **§14 prompt-injection — trivially conformant.** This scaffolder builds no LLM
+  prompts from non-self-authored values, so §14's trigger condition cannot occur;
+  §09 requires only that the host say so. The repo is markdown and shell; the
+  skills it ships are prose the agent reads, not prompts assembled from untrusted
+  input, and the only TypeScript is inert template fixtures under
+  `skills/codex-ts-declare-first/templates/`. Downstream projects that *do* build
+  prompts get §14 coverage via the `injection-guard` skill
+  (agenticapps-observability), on the same delegation basis as §10. The `security`
+  gate still carries §02's obligation to record §14 evidence when it fires on a
+  project with a prompt-building surface.
+- **Eight spec/02 gates whose trigger cannot occur here** (`brainstorm-ui`,
+  `design-shotgun`, `design-critique`, `ui-preview`, `qa`, `impeccable-audit`,
+  `database-security`, `db-pre-launch-audit`) are bound for downstream projects
+  but never fire on this UI-less, DB-less scaffolder. Enumerated with rationale in
+  [docs/ENFORCEMENT-PLAN.md](../../docs/ENFORCEMENT-PLAN.md). Per spec/09 an
+  omission whose trigger cannot occur does not downgrade `full` to `partial`.
+- **§10 observability — satisfied by delegation**, not omitted: the generator
+  obligation is met by the standalone `agenticapps-observability` skill. A
+  satisfied MUST per §09, not a delta — recorded here only because readers look
+  for it.
+- **§08 setup — satisfied by replay.** This host installs by walking the
+  `0000`→latest migration chain, not by installing a prebuilt snapshot. Replay is
+  §08's first-listed strategy, so the v0.9.0 amendment's drift-guard obligation
+  (which binds snapshot installers) does not apply here.
+
+---
+
 ## Knowledge Capture — Ritual Tail (spec §15)
 
 Transferable learnings must not die in a `.codex/session-handoff.md` that the
@@ -414,9 +519,10 @@ rituals — run it AFTER, never before, the ritual's own artifact exists:
 
 The vault write is machine-local: it MUST NEVER be committed to the repo, and
 it MUST NEVER fail, block, or roll back the ritual that triggered it — on any
-failure print one warning line and continue. This mirrors the same section in
-the project `AGENTS.md` (root-down concat); both are the same contract, so a
-session that only reads `AGENTS.md` still performs the capture.
+failure print one warning line and continue. This section is the **only** copy
+of the contract: it lived in duplicate in the project `AGENTS.md` until v0.9.0,
+when spec 0.10.0's instruction-surface economy convention moved it here, where it
+loads on exactly the code-touching turns that can trigger it.
 
 Procedure (mechanical — follow exactly):
 
