@@ -491,6 +491,21 @@ _cpr_block() {
     echo "   Phase:     $CURRENT_PHASE"
     [ -n "$CPR_FILE" ] && echo "   File:      $CPR_FILE"
     echo "   Missing:   $CURRENT_PHASE/<NN>-REVIEWS.md"
+    # Source tag (debug session codex-hook-not-firing, 2026-07-19): this
+    # script is invoked from TWO independent places that read structurally
+    # identical block text — an agent's own compliant bash call (AGENTS.md's
+    # "Pre-execution Gate" ritual) and codex-cli's NATIVE PreToolUse hook
+    # (via hook-wrapper-plan-review.sh, migration 0011/HOOK-03). Without a
+    # tag, a block observed in a live session is textually indistinguishable
+    # between "the model complied and self-checked" (prompt-based, NOT
+    # enforcement) and "the native hook denied the tool call independent of
+    # model compliance" (real enforcement) — exactly the false-positive this
+    # debug session exists to close. The wrapper sets
+    # GSD_PLAN_REVIEW_SOURCE=native-hook before invoking this script; every
+    # other caller (the agent's own bash ritual, a human at a shell) leaves
+    # it unset and gets the explicit default below, so the tag is always
+    # present, never silently absent.
+    echo "   Source:    ${GSD_PLAN_REVIEW_SOURCE:-agent-bash (direct invocation, not the native hook)}"
     echo ""
     echo "   Reason: $reason"
     echo ""
