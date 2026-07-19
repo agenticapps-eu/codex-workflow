@@ -120,14 +120,35 @@ done
 # scan). When the label line carries nothing inline (0009/0010's style: the
 # label alone on its own line, followed by a fence), behavior is UNCHANGED --
 # falls through to the original want=1 fenced-block scan.
+#
+# DELIMITER GUARD (REV-02, 09-REVIEW.md IN-01): `index($0, stepp) == 1` is a
+# bare PREFIX test -- for step=1, stepp="### Step 1" also prefix-matches
+# "### Step 10" through "### Step 19" (and 100+), because "1" followed by
+# more digits is still a prefix match. A document with 10+ steps can
+# therefore latch `in_step=1` on the WRONG step's heading if that heading is
+# scanned before the real one. D-12's fix: require the character immediately
+# AFTER the matched prefix to be a valid delimiter -- ':' (this repo's
+# `### Step 1:` form), ' ' (space, covering trailing space and upstream's
+# `### Step 1 -- <title>` dash form), or EOL (empty string, end of line) --
+# via `delim_ok()`, a `substr`/literal character comparison. This is NOT a
+# compiled regex built from interpolated input (`stepp`/`nextp` are still
+# passed in as literal strings via `-v` and matched with `index()`, never
+# spliced into a `/.../ ` regex) -- the file header's "literal prefix, never
+# an interpolated regex, nothing to escape" no-escaping property (:80-91)
+# is unchanged. The same guard is applied to `nextp` so the end-of-block
+# boundary is equally precise.
 extract_step_block() {
   local doc="$1" step="$2" label="$3"
   local next_step=$((step + 1))
   awk -v stepp="### Step ${step}" \
       -v nextp="### Step ${next_step}" \
       -v lblp="**${label}:**" '
-    index($0, stepp) == 1 { in_step=1; next }
-    index($0, nextp) == 1 { in_step=0 }
+    function delim_ok(line, plen,    d) {
+      d = substr(line, plen + 1, 1)
+      return (d == "" || d == ":" || d == " ")
+    }
+    index($0, stepp) == 1 && delim_ok($0, length(stepp)) { in_step=1; next }
+    index($0, nextp) == 1 && delim_ok($0, length(nextp)) { in_step=0 }
     in_step && index($0, lblp) == 1 {
       rest = substr($0, length(lblp) + 1)
       sub(/^[ \t]+/, "", rest)
@@ -200,6 +221,117 @@ assert_extracted_shape() {
       ;;
   esac
   return 0
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# extract_step_block delimiter guard (REV-02, 09-REVIEW.md IN-01)
+#
+# `index($0, stepp) == 1` with `stepp="### Step 1"` prefix-matches BOTH the
+# real `### Step 1:` heading AND `### Step 10:` .. `### Step 19:` (a bare
+# numeric continuation is not excluded by a prefix test). This is only
+# reachable when the wrong heading is scanned FIRST -- in a naturally
+# ascending document (1, 2, ..., 10) Step 1's own fenced block always closes
+# and `exit`s before the scan ever reaches Step 10, which is exactly why this
+# repo's real migration documents (currently <=4 steps) have never tripped it.
+# To reproduce it honestly this fixture places `### Step 10` BEFORE
+# `### Step 1` in the document text (D-34: printf-into-$tmp, no static
+# fixture file) -- under the PRE-FIX extractor, scanning hits "### Step 10:"
+# first, `index($0, stepp) == 1` matches it (bare-prefix collision), and
+# `in_step` latches there, so `extract_step_block(doc, 1, Apply)` returns
+# STEP 10's Apply body instead of Step 1's. Under the DELIMITER-GUARDED fix,
+# `delim_ok` sees "0" (not ":", " ", or EOL) immediately after the matched
+# "### Step 1" prefix on the "### Step 10:" line and correctly rejects it,
+# so the scan continues to the real "### Step 1:" heading further down.
+#
+# Mutation-proven (verifier re-runs this cycle, does not trust the claim):
+# stash the `delim_ok` guard (revert to the bare `index($0, stepp) == 1`
+# test) and this fixture goes RED (extraction contains Step 10's body, not
+# Step 1's); restore the guard and it returns GREEN. Observed by hand during
+# 12-02's execution (see 12-02-SUMMARY.md).
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_extract_step_block_delimiter() {
+  echo ""
+  echo "${YELLOW}=== extract_step_block — delimiter guard (REV-02, IN-01) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  local doc="$tmp/synthetic-10-step.md"
+  # Deliberately Step 10 BEFORE Step 1 — see comment block above for why a
+  # naturally-ascending document cannot reproduce the collision.
+  {
+    printf '### Step 10: Synthetic step ten\n'
+    printf '\n'
+    printf '**Apply:**\n'
+    printf '```bash\n'
+    printf 'echo "this is step 10 body"\n'
+    printf '```\n'
+    printf '\n'
+    printf '### Step 1: Synthetic step one\n'
+    printf '\n'
+    printf '**Apply:**\n'
+    printf '```bash\n'
+    printf 'echo "this is step 1 body"\n'
+    printf '```\n'
+    printf '\n'
+    printf '### Step 2: Synthetic step two\n'
+    printf '\n'
+    printf '**Apply:**\n'
+    printf '```bash\n'
+    printf 'echo "this is step 2 body"\n'
+    printf '```\n'
+  } > "$doc"
+
+  local step1_apply
+  step1_apply="$(extract_step_block "$doc" 1 Apply 2>/dev/null)"
+
+  if [ -z "$step1_apply" ]; then
+    echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction is EMPTY"
+    FAIL=$((FAIL+1))
+    echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction does not contain Step 1's body (extraction was empty)"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} extract_step_block(doc,1,Apply): extraction is non-empty"
+    PASS=$((PASS+1))
+
+    case "$step1_apply" in
+      *'this is step 1 body'*)
+        echo "  ${GREEN}PASS${RESET} extract_step_block(doc,1,Apply): extraction contains Step 1's own body"
+        PASS=$((PASS+1))
+        ;;
+      *)
+        echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction does NOT contain Step 1's own body"
+        FAIL=$((FAIL+1))
+        ;;
+    esac
+
+    case "$step1_apply" in
+      *'this is step 10 body'*)
+        echo "  ${RED}FAIL${RESET} extract_step_block(doc,1,Apply): extraction WRONGLY contains Step 10's body — '### Step 1' bare-prefix-matched '### Step 10'"
+        FAIL=$((FAIL+1))
+        ;;
+      *)
+        echo "  ${GREEN}PASS${RESET} extract_step_block(doc,1,Apply): extraction does NOT contain Step 10's body (delimiter guard holds)"
+        PASS=$((PASS+1))
+        ;;
+    esac
+  fi
+
+  # Sanity: the fix must not break extraction of the step whose heading
+  # caused the false match — Step 10's own Apply must still extract cleanly.
+  local step10_apply
+  step10_apply="$(extract_step_block "$doc" 10 Apply 2>/dev/null)"
+  case "$step10_apply" in
+    *'this is step 10 body'*)
+      echo "  ${GREEN}PASS${RESET} extract_step_block(doc,10,Apply): Step 10's own extraction is unaffected by the guard"
+      PASS=$((PASS+1))
+      ;;
+    *)
+      echo "  ${RED}FAIL${RESET} extract_step_block(doc,10,Apply): Step 10's own extraction is BROKEN by the guard"
+      FAIL=$((FAIL+1))
+      ;;
+  esac
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3036,6 +3168,100 @@ EOF
   s="$tmp/bypass-traversal3"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-traversal3")"
   _cpr_case "bypass: --file .planning/phases/08-x/../08-x/08-01-PLAN.md -> exit 2 (traversal is a SHAPE check, not a resolution check)" "$s" 2 --file ".planning/phases/08-x/../08-x/08-01-PLAN.md"
 
+  # ── WR-03: symlink-resolution + sibling-prefix containment (Phase 12) ──────
+  #
+  # Reuses _cpr_case/_cpr_enf_phase verbatim (no second sandbox/exit-code
+  # helper, per this suite's own header rule). Each fixture below is
+  # mutation-proven RED-before-GREEN: observed exit=0 (fail-open) against
+  # the pre-Phase-12 lexical-'..'-only guard, exit=2 against the
+  # parent-dir canonicalize-and-contain fix (Task 1), except (b) which
+  # proves the accept side of resolve-then-contain (D-03) and is exit=0
+  # under both the old and new guard (not a regression case).
+
+  # (a) SYMLINKED-PARENT-ESCAPE: the --file value's parent directory is a
+  # symlink resolving OUTSIDE $REPO_ROOT/.planning. Mirrors ADR-0009
+  # decision 12's own live repro
+  # (`ln -s /tmp/outside .planning/phases/09-test-phase/evil-link`).
+  # Old lexical-'..'-only guard: no '..' component in the literal string,
+  # '.planning/' prefix matches, basename matches *PLAN.md -> exit 0
+  # (fail-open, the WR-03 hole). New guard: canonicalizes the parent,
+  # 'evil-link' resolves outside .planning -> containment fails -> bypass
+  # falls through (D-02) -> normal resolution finds the phase's real
+  # unreviewed PLAN.md -> exit 2 via the REVIEWS.md gate.
+  s="$tmp/wr03-symlink-escape"; phasedir="$(_cpr_enf_phase "$s" "12-wr03-escape")"
+  wr03_escdir="${tmp}-wr03-escape"
+  mkdir -p "$wr03_escdir"
+  ln -s "$wr03_escdir" "$phasedir/evil-link"
+  _cpr_case "WR-03 bypass: --file .../evil-link/some-PLAN.md -> exit 2 (symlinked parent resolves OUTSIDE .planning; old lexical-only guard returned exit 0 here -- fail-open closed)" "$s" 2 --file ".planning/phases/12-wr03-escape/evil-link/some-PLAN.md"
+
+  # (b) SYMLINKED-PARENT-INSIDE: the --file value's parent directory is a
+  # symlink resolving to a real directory INSIDE .planning/phases/.
+  # Resolve-then-contain (D-03) accepts this -- WR-03 does NOT adopt
+  # REVIEWS.md's reject-any-symlink asymmetry, which would false-block a
+  # legitimate worktree symlink under a --file edit target.
+  s="$tmp/wr03-symlink-inside"; phasedir="$(_cpr_enf_phase "$s" "12-wr03-inside")"
+  wr03_insidedir="$s/.planning/phases/12-wr03-inside-target"
+  mkdir -p "$wr03_insidedir"
+  ln -s "$wr03_insidedir" "$phasedir/inside-link"
+  _cpr_case "WR-03 bypass: --file .../inside-link/some-PLAN.md -> exit 0 (symlinked parent resolves INSIDE .planning -- resolve-then-contain accepts it, D-03)" "$s" 0 --file ".planning/phases/12-wr03-inside/inside-link/some-PLAN.md"
+
+  # (c) SIBLING-PREFIX-COLLISION: a 'vendor/foo/.planning/X-PLAN.md'-shaped
+  # path that satisfied the OLD lexical '*/.planning/*' arm textually.
+  # 'vendor/foo/.planning/' is created as a REAL directory here (not left
+  # absent) so _canon_dir on the parent succeeds and returns a non-empty
+  # path -- the exit=2 below is produced by _is_contained genuinely
+  # evaluating containment-false against $REPO_ROOT/.planning (SC#1), NOT
+  # by the D-02 fall-through that fires when a parent does not exist. Old
+  # guard: '*/.planning/*' + 'X-PLAN.md' basename match -> exit 0. New
+  # guard (D-05, disclosed tightening): containment is against THIS repo's
+  # $REPO_ROOT/.planning only -> a vendored sub-project's .planning/ no
+  # longer bypasses -> falls through -> exit 2 via the REVIEWS.md gate.
+  s="$tmp/wr03-sibling-prefix"; phasedir="$(_cpr_enf_phase "$s" "12-wr03-sibling")"
+  mkdir -p "$s/vendor/foo/.planning"
+  _cpr_case "WR-03 bypass: --file vendor/foo/.planning/X-PLAN.md -> exit 2 (sibling-prefix collision; old */.planning/* lexical arm returned exit 0 here -- D-05 tightens containment to \$REPO_ROOT/.planning only)" "$s" 2 --file "vendor/foo/.planning/X-PLAN.md"
+
+  # (d) NOT-YET-CREATED-DIR WITH UNRELATED ACTIVE PHASE (12-04 gap-closure;
+  # 12-VERIFICATION.md Priority Concern / WR-01; 12-01-PLAN.md truth #4).
+  #
+  # Reproduces the verifier's exact independently-constructed repro: an
+  # UNRELATED active phase (13-active-phase) is mid-review -- it has a
+  # *-PLAN.md but no *-REVIEWS.md, and .planning/current-phase points at
+  # it -- while the --file value names a DIFFERENT, not-yet-created plan
+  # artifact (14-new-nonexistent/14-01-PLAN.md). Expected: exit 0
+  # (fail-safe accept), matching the pre-Phase-12 script's behavior for
+  # the identical input.
+  #
+  # CRITICAL, unlike every other _cpr_enf_phase fixture in this file
+  # (which pre-creates the phase dir it operates on): this fixture
+  # deliberately does NOT create .planning/phases/14-new-nonexistent/.
+  # The entire point is that the --file value's parent dir does not
+  # exist, so _canon_dir returns empty and the resolve-then-contain
+  # branch (fixtures a/b/c above) never fires -- only the new lexical
+  # $REPO_ROOT/.planning-rooted fallback (check-plan-review.sh, the
+  # elif [ -z "$_cpr_canon_parent" ] branch) can produce the exit-0
+  # verdict here.
+  #
+  # RED-before-GREEN evidence (executor-observed, this gap-closure):
+  #   RED  (fallback commented out): FAIL WR-03 bypass: --file
+  #        .planning/phases/14-new-nonexistent/14-01-PLAN.md -> exit 0
+  #        (not-yet-created dir + unrelated active PLAN.md-no-REVIEWS.md
+  #        phase must fall through to fail-safe accept, matching
+  #        pre-Phase-12 behavior) (expected exit=0, got exit=2)
+  #   GREEN (fallback restored):   PASS WR-03 bypass: --file
+  #        .planning/phases/14-new-nonexistent/14-01-PLAN.md -> exit 0
+  #        (not-yet-created dir + unrelated active PLAN.md-no-REVIEWS.md
+  #        phase must fall through to fail-safe accept, matching
+  #        pre-Phase-12 behavior) (exit=0)
+  # See 12-04-SUMMARY.md for the verbatim transcript.
+  #
+  # Fixture (a) above (symlinked-parent-escape, :3191) is the paired
+  # hole-not-reopened invariant: its parent EXISTS as a symlink, so
+  # _canon_dir is non-empty there and the fallback added here never
+  # fires for it -- it must keep asserting exit 2 after this change.
+  s="$tmp/wr04-not-yet-created-unrelated-active"
+  phasedir="$(_cpr_enf_phase "$s" "13-active-phase" "13-01-PLAN.md")"
+  _cpr_case "WR-03 bypass: --file .planning/phases/14-new-nonexistent/14-01-PLAN.md -> exit 0 (not-yet-created dir + unrelated active PLAN.md-no-REVIEWS.md phase must fall through to fail-safe accept, matching pre-Phase-12 behavior)" "$s" 0 --file ".planning/phases/14-new-nonexistent/14-01-PLAN.md"
+
   s="$tmp/bypass-codefile"; phasedir="$(_cpr_enf_phase "$s" "08-bypass-codefile")"
   _cpr_case "bypass: --file src/app.ts -> exit 2 (ordinary code file, the gate's whole point)" "$s" 2 --file "src/app.ts"
 
@@ -3438,6 +3664,8 @@ test_repo_layout() {
     skills/codex-plan-review/SKILL.md \
     migrations/0008-plan-review-gate.md \
     docs/decisions/0009-plan-review-gate.md \
+    skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh \
+    migrations/0011-native-plan-review-hook.md \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -4777,6 +5005,60 @@ test_migration_0009() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# validate-0009-anchor.sh stdout determinism (REV-01, 09-REVIEW.md WR-05)
+#
+# WR-05's finding: the script's own banner comment claims its stdout is
+# "deliberately DETERMINISTIC ... so a verifier can re-run and diff", but (pre
+# -fix) it printed `$(wc -l < "$MIRROR")` in the banner and mirror-length-
+# derived line numbers in CASE 2's PASS text — a mirror re-vendor (this repo's
+# has already happened once, 75->79 lines) would silently invalidate recorded
+# evidence the comment says it is designed to protect. D-11's fix-option (a):
+# REMOVE the mirror-derived values from stdout entirely (not reword the
+# claim). This is the full-script grep proving that removal, run against the
+# REAL validator (not a copy) so a future re-introduction of a `wc -l`-style
+# value is caught here rather than only in code review.
+#
+# Mutation-proven (verifier re-runs this cycle, does not trust the claim): a
+# `$(wc -l < "$MIRROR" ...)`-style value temporarily reintroduced into the
+# banner flips this test RED; removing it restores GREEN. Observed by hand
+# during 12-02's execution (see 12-02-SUMMARY.md) and re-verifiable at any
+# time by reintroducing the clause and re-running `bash migrations/run-tests.sh
+# determinism`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_validate_0009_anchor_determinism() {
+  echo ""
+  echo "${YELLOW}=== validate-0009-anchor.sh — stdout determinism (REV-01, WR-05) ===${RESET}"
+
+  local validator="$REPO_ROOT/migrations/validate-0009-anchor.sh"
+  if [ ! -f "$validator" ]; then
+    echo "  ${RED}FAIL${RESET} validator script missing: migrations/validate-0009-anchor.sh"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local out
+  out="$(bash "$validator" 2>/dev/null)"
+
+  if [ -z "$out" ]; then
+    echo "  ${RED}FAIL${RESET} validate-0009-anchor.sh determinism: validator produced no stdout"
+    FAIL=$((FAIL+1))
+    return
+  fi
+
+  # Full-script grep for the two mirror-derived shapes WR-05 named: a
+  # "(N lines)" banner count, and an "at line N" reference in any PASS/FAIL
+  # text. Absence of BOTH across the ENTIRE run (not just CASE 2) is what
+  # "genuinely deterministic" means here.
+  if printf '%s\n' "$out" | grep -Eq '\([0-9]+ lines\)|at line [0-9]+'; then
+    echo "  ${RED}FAIL${RESET} validate-0009-anchor.sh determinism: stdout carries a mirror-derived value (a '(N lines)' banner count or an 'at line N' reference) — a mirror re-vendor would silently invalidate recorded evidence"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} validate-0009-anchor.sh determinism: stdout carries zero mirror-derived values (no line count, no derived line number)"
+    PASS=$((PASS+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Migration 0010 — Heal 0007's knowledge-capture chain break (v0.4.0 -> 0.5.0)
 #
 # MIGR-10. 0007's pre-flight greps a scaffolder-relative path
@@ -5044,8 +5326,590 @@ MD
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# test_migration_0011 (HOOK-03, phase 13-native-enforcement-plan-review-hook)
+#
+# Proves migration 0011's Step 1/2 Apply blocks — EXTRACTED FROM THE
+# DOCUMENT ITSELF, never hand-transcribed (TEST-01, 11-02's own lesson) —
+# actually merge-don't-clobber against fixtures carrying a PRE-EXISTING
+# unrelated vendor's content, are idempotent on re-apply, and that SC#4's
+# negative half (a second, untouched repo carries no plan-review entry) is
+# automated. Mirrors test_migration_0010's structural template:
+# extract_step_block + assert_extracted_shape gating, mktemp -d sandboxes
+# with `trap ... RETURN`, CODEX_HOME pinned to the real repo root (trusted,
+# same discipline as _m0010_apply/_m0009_apply) so the wrapper path in
+# Step 1's jq --arg resolves.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# _m0011_ok <rc> <label> — PASS iff rc is 0. Mirrors _m0010_ok's convention.
+_m0011_ok() {
+  if [ "$1" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} $2"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $2"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# _m0011_fail <label> — unconditional FAIL, used when an extraction gate is
+# down so a case reports FAILED rather than silently disappearing.
+_m0011_fail() {
+  echo "  ${RED}FAIL${RESET} $1"
+  FAIL=$((FAIL+1))
+}
+
+# _m0011_apply <sandbox_dir> <codex_home> <block_text>
+# Runs an extracted Apply block against the sandbox with CODEX_HOME resolved
+# to the real repo root (0011's Step 1 Apply resolves
+# $CODEX_HOME/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh,
+# so CODEX_HOME must point at this trusted repo, never the developer's real
+# ~/.codex). Subshell-wrapped so a block that exits non-zero cannot terminate
+# the whole harness mid-suite (same discipline as _m0010_apply/_m0009_apply).
+_m0011_apply() {
+  ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
+}
+
+test_migration_0011() {
+  echo ""
+  echo "${YELLOW}=== Migration 0011 — Native PreToolUse plan-review hook (HOOK-03) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — migration 0011 test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local MIGRATION_0011="$REPO_ROOT/migrations/0011-native-plan-review-hook.md"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # ── Extraction (TEST-01): 0011's own shell, pulled from 0011's own
+  # document, never hand-transcribed. Every extraction is gated by
+  # assert_extracted_shape (D-36) before it is executed or asserted-on.
+  # Idempotency-check blocks are extracted too (not just Apply): the
+  # "idempotent re-apply" case below re-runs each step's OWN idempotency
+  # check before deciding whether to re-invoke Apply — the SAME discipline
+  # test_migration_0008's partial-application fixture uses
+  # (`run-tests.sh:1928`, "each step checks its OWN idempotency"), mirroring
+  # how the real update flow gates re-invocation. 0011's Step 1 Apply is an
+  # unconditional array-append by design (leaf-merge discipline, T-13-04) —
+  # it is the EXTERNAL idempotency check that makes re-application safe, not
+  # an append-if-absent Apply body.
+  local pf_block applies_to_block step1_apply step2_apply step1_idem step2_idem
+  pf_block="$(extract_preflight_block "$MIGRATION_0011" 2>/dev/null)"
+  applies_to_block="$(awk '/^applies_to:/{f=1;next} f && /^[^ ]/{exit} f{print}' "$MIGRATION_0011")"
+  step1_apply="$(extract_step_block "$MIGRATION_0011" 1 Apply 2>/dev/null)"
+  step2_apply="$(extract_step_block "$MIGRATION_0011" 2 Apply 2>/dev/null)"
+  step1_idem="$(extract_step_block "$MIGRATION_0011" 1 "Idempotency check" 2>/dev/null)"
+  step2_idem="$(extract_step_block "$MIGRATION_0011" 2 "Idempotency check" 2>/dev/null)"
+
+  local pf_ok=1 applies_ok=1 s1_ok=1 s2_ok=1 s1i_ok=1 s2i_ok=1
+  assert_extracted_shape "0011 Pre-flight" "$pf_block" 'hook-wrapper-plan-review.sh' || pf_ok=0
+  assert_extracted_shape "0011 applies_to" "$applies_to_block" '.codex/hooks.json' || applies_ok=0
+  assert_extracted_shape "0011 Step 1 Apply" "$step1_apply" 'PreToolUse' || s1_ok=0
+  assert_extracted_shape "0011 Step 2 Apply" "$step2_apply" 'features' || s2_ok=0
+  assert_extracted_shape "0011 Step 1 Idempotency check" "$step1_idem" 'PreToolUse' || s1i_ok=0
+  assert_extracted_shape "0011 Step 2 Idempotency check" "$step2_idem" 'hooks' || s2i_ok=0
+
+  local all_ok=1
+  [ "$pf_ok" = "1" ] && [ "$applies_ok" = "1" ] && [ "$s1_ok" = "1" ] && [ "$s2_ok" = "1" ] \
+    && [ "$s1i_ok" = "1" ] && [ "$s2i_ok" = "1" ] || all_ok=0
+
+  if [ "$all_ok" != "1" ]; then
+    _m0011_fail "Step 1 Apply: merge-don't-clobber (decoy vendor entry survives) — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 1 Apply: wrapper PreToolUse entry present after apply — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 1 Apply: idempotent re-apply adds no duplicate entry — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 2 Apply: config-flag merge (decoy [some_other] table survives) — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 2 Apply: [features] hooks = true present after apply — NOT ASSERTED: extraction failed"
+    _m0011_fail "Step 2 Apply: idempotent re-apply adds no duplicate flag — NOT ASSERTED: extraction failed"
+    _m0011_fail "SC#4-negative: second repo with no .codex/hooks.json has no PreToolUse plan-review entry — NOT ASSERTED: extraction failed"
+    return
+  fi
+
+  local CODEX_HOME_FOR_TEST="$REPO_ROOT"
+  local WRAPPER_PATH="$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+
+  # ── Sandbox 1: hooks.json merge-don't-clobber + config.toml flag merge ──
+  local sbx="$tmp/sandbox"
+  mkdir -p "$sbx/.codex"
+  ( cd "$sbx" && git init -q )
+
+  # Decoy vendor hooks.json — a PRE-EXISTING unrelated vendor's PreToolUse
+  # entry that must survive the merge (T-13-04). Uses the NESTED matcher-group
+  # schema ({"hooks":[{"type","command"}]}), which is what codex-cli actually
+  # loads and what this machine's live ~/.codex/hooks.json carries; the flat
+  # form is silently dropped (migration 0011 ## Correction, 2026-07-19).
+  cat > "$sbx/.codex/hooks.json" <<'JSON'
+{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/opt/vendor/some-other-hook.sh"}]}]}}
+JSON
+
+  # Decoy config.toml — an unrelated [some_other] table that must survive
+  # the [features] merge (T-13-05).
+  cat > "$sbx/.codex/config.toml" <<'TOML'
+[some_other]
+foo = "bar"
+TOML
+
+  local out rc
+  out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step1_apply")"; rc=$?
+  _m0011_ok "$rc" "Step 1 Apply executes cleanly against the seeded sandbox — got exit=$rc"
+  [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
+
+  if ( cd "$sbx" && jq -e '.hooks.PreToolUse | length == 2' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: .hooks.PreToolUse has exactly 2 entries after apply (decoy + wrapper)"
+  else
+    _m0011_ok 1 "Step 1: .hooks.PreToolUse has exactly 2 entries after apply (decoy + wrapper)"
+  fi
+
+  if ( cd "$sbx" && jq -e '.hooks.PreToolUse[] | (.hooks // [])[] | select(.command == "/opt/vendor/some-other-hook.sh")' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: pre-existing decoy vendor PreToolUse entry survives the merge (T-13-04)"
+  else
+    _m0011_ok 1 "Step 1: pre-existing decoy vendor PreToolUse entry survives the merge (T-13-04)"
+  fi
+
+  if ( cd "$sbx" && jq -e --arg cmd "$WRAPPER_PATH" \
+       '.hooks.PreToolUse[] | select(.matcher == "apply_patch") | (.hooks // [])[] | select(.command == $cmd and .type == "command")' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: wrapper PreToolUse entry (matcher=apply_patch) present after apply"
+  else
+    _m0011_ok 1 "Step 1: wrapper PreToolUse entry (matcher=apply_patch) present after apply"
+  fi
+
+  # SCHEMA REGRESSION GUARD (migration 0011 ## Correction, 2026-07-19).
+  # The original migration wrote the entry FLAT — {"matcher","type","command"}
+  # with no nested `hooks` array. codex-cli drops such an entry silently: no
+  # error, no warning, and `/hooks` does not count it, so the gate ships inert
+  # while every filesystem-level post-check still passes. The assertion above
+  # would go RED on that regression, but only implicitly; this one names the
+  # defect directly so a future reader sees WHY the shape matters.
+  if ( cd "$sbx" && jq -e --arg cmd "$WRAPPER_PATH" \
+       '[.hooks.PreToolUse[] | select(.command == $cmd)] | length == 0' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: wrapper entry is NOT in the silently-dropped flat schema (no group-level .command)"
+  else
+    _m0011_ok 1 "Step 1: wrapper entry is NOT in the silently-dropped flat schema (no group-level .command)"
+  fi
+
+  # The matcher group must carry its command in a nested `hooks` ARRAY — the
+  # exact shape codex-cli loads. Asserted structurally, not just by lookup.
+  if ( cd "$sbx" && jq -e --arg cmd "$WRAPPER_PATH" \
+       '.hooks.PreToolUse[] | select(.matcher == "apply_patch") | (.hooks | type == "array") and ((.hooks | length) >= 1)' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: apply_patch matcher group carries a nested hooks[] array (codex-cli load shape)"
+  else
+    _m0011_ok 1 "Step 1: apply_patch matcher group carries a nested hooks[] array (codex-cli load shape)"
+  fi
+
+  # Idempotent re-apply — no duplicate entry. Mirrors test_migration_0008's
+  # partial-application fixture discipline (run-tests.sh:1928, "each step
+  # checks its OWN idempotency"): 0011's Step 1 Apply is an unconditional
+  # leaf-level array-append BY DESIGN (T-13-04 — never an append-if-absent
+  # body, which is what 0008's OBJECT merge achieves for free but an ARRAY
+  # append cannot without re-checking membership); it is the EXTRACTED
+  # Idempotency check that must gate re-invocation, exactly as the real
+  # update flow would. The regression this proves: if the idempotency
+  # check's own `select` match ever stopped tracking the wrapper's command
+  # string, this assertion (not the Apply body) is what would catch a
+  # silent double-fire on every re-run.
+  if ( cd "$sbx" && export CODEX_HOME="$CODEX_HOME_FOR_TEST" && eval "$step1_idem" >/dev/null 2>&1 ); then
+    out=""; rc=0
+  else
+    out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step1_apply")"; rc=$?
+  fi
+  _m0011_ok "$rc" "Step 1 Apply re-executes cleanly (idempotent re-apply, gated by its own Idempotency check) — got exit=$rc"
+
+  if ( cd "$sbx" && jq -e '.hooks.PreToolUse | length == 2' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: idempotent re-apply adds NO duplicate entry (still exactly 2)"
+  else
+    _m0011_ok 1 "Step 1: idempotent re-apply adds NO duplicate entry (still exactly 2)"
+  fi
+
+  # Step 2 — config.toml [features] hooks = true merge.
+  out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step2_apply")"; rc=$?
+  _m0011_ok "$rc" "Step 2 Apply executes cleanly against the seeded sandbox — got exit=$rc"
+  [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
+
+  if grep -q '^foo = "bar"' "$sbx/.codex/config.toml" && grep -q '^\[some_other\]' "$sbx/.codex/config.toml"; then
+    _m0011_ok 0 "Step 2: pre-existing decoy [some_other] table survives the [features] merge (T-13-05)"
+  else
+    _m0011_ok 1 "Step 2: pre-existing decoy [some_other] table survives the [features] merge (T-13-05)"
+  fi
+
+  if grep -q '^hooks = true$' "$sbx/.codex/config.toml"; then
+    _m0011_ok 0 "Step 2: [features] hooks = true present after apply"
+  else
+    _m0011_ok 1 "Step 2: [features] hooks = true present after apply"
+  fi
+
+  # Idempotent re-apply — no duplicate flag. Step 2's Apply is idempotent by
+  # construction (the awk pass replaces an existing `hooks =` line rather
+  # than appending a second one), but re-invocation is still gated by the
+  # extracted Idempotency check first, matching Step 1's discipline and the
+  # real update flow (each step checks its OWN idempotency, run-tests.sh:1928).
+  if ( cd "$sbx" && export CODEX_HOME="$CODEX_HOME_FOR_TEST" && eval "$step2_idem" >/dev/null 2>&1 ); then
+    out=""; rc=0
+  else
+    out="$(_m0011_apply "$sbx" "$CODEX_HOME_FOR_TEST" "$step2_apply")"; rc=$?
+  fi
+  _m0011_ok "$rc" "Step 2 Apply re-executes cleanly (idempotent re-apply, gated by its own Idempotency check) — got exit=$rc"
+
+  local hooks_count
+  hooks_count="$(grep -c '^hooks = true$' "$sbx/.codex/config.toml" 2>/dev/null || true)"
+  if [ "$hooks_count" = "1" ]; then
+    _m0011_ok 0 "Step 2: idempotent re-apply adds NO duplicate hooks=true line (still exactly 1)"
+  else
+    _m0011_ok 1 "Step 2: idempotent re-apply adds NO duplicate hooks=true line (still exactly 1, got $hooks_count)"
+  fi
+
+  # ── SC#4-negative: a second repo with no .codex/hooks.json has no
+  # PreToolUse plan-review entry — asserted by absence, never by running
+  # Step 1 against it (the point is an UNTOUCHED second repo).
+  local sbx2="$tmp/sandbox2"
+  mkdir -p "$sbx2/.codex"
+  ( cd "$sbx2" && git init -q )
+
+  if [ ! -f "$sbx2/.codex/hooks.json" ]; then
+    _m0011_ok 0 "SC#4-negative: second repo has no .codex/hooks.json before any apply (clean state)"
+  else
+    _m0011_ok 1 "SC#4-negative: second repo has no .codex/hooks.json before any apply (clean state)"
+  fi
+
+  # Searches BOTH schemas — group-level `.command` (the dropped flat form) and
+  # the nested `hooks[].command` (the real load shape). An absence assertion
+  # that checks only one shape can pass while an entry in the other shape is
+  # sitting right there, which would make this negative half vacuously true.
+  if [ ! -f "$sbx2/.codex/hooks.json" ] || ! jq -e --arg cmd "$WRAPPER_PATH" \
+       '[.hooks.PreToolUse[]? | (.command // empty), ((.hooks // [])[]? | .command)] | index($cmd)' \
+       "$sbx2/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0011_ok 0 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence, both schemas)"
+  else
+    _m0011_ok 1 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence, both schemas)"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# test_hook_wrapper_stderr_contract (HOOK-02, SC#3) — mutation-proves that
+# hook-wrapper-plan-review.sh's exit-2 fallback branch ALWAYS writes a
+# non-empty reason to its own stderr before exiting. A silent exit-2 block
+# with no reason is the fail-open nemesis 13-02-PLAN.md names: codex-cli
+# treats invalid/partial hook stdout as a hook FAILURE and runs the tool
+# anyway (13-01-SPIKE-FINDINGS.md STEP 3), so a caller relying on this
+# fallback path needs a guarantee it never goes silent, not just that it
+# "currently" writes something.
+#
+# Both directions are asserted, not just the fix:
+#   GREEN — the real (unmutated) wrapper, forced down the fallback branch by
+#           a stub check-plan-review.sh that exits 2 with EMPTY stdout+
+#           stderr, exits 2 AND writes non-empty stderr of its OWN.
+#   RED   — a MUTATED copy of the same wrapper, with the fallback's `>&2`
+#           write neutralized (redirected to /dev/null via a grep-located
+#           marker, never a hardcoded line number, so this stays valid as
+#           the wrapper grows), exits 2 with EMPTY stderr against the exact
+#           same fixture. The test PASSES by confirming this RED state is
+#           detectable — i.e. that the GREEN wrapper's stderr write is what
+#           stands between "silent block" and "attributable block", and a
+#           regression that drops it is caught, not silently accepted.
+#
+# Pinned portable idioms only (ubuntu + macOS CI matrix, RESEARCH.md
+# Environment Availability): no GNU-only sed flags, no `sed -i` (BSD/GNU
+# disagree on `-i` syntax) — the mutated copy is produced by piping sed's
+# transformed output to a new file, never in-place.
+# ─────────────────────────────────────────────────────────────────────────────
+test_hook_wrapper_stderr_contract() {
+  echo ""
+  echo "${YELLOW}=== hook-wrapper-plan-review.sh — fail-CLOSED stderr contract (HOOK-02, SC#3) ===${RESET}"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — hook-wrapper stderr contract test not run"
+    SKIP=$((SKIP+1)); return
+  fi
+
+  local WRAPPER="$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+  if [ ! -f "$WRAPPER" ]; then
+    echo "  ${RED}FAIL${RESET} contract: $WRAPPER not found"
+    FAIL=$((FAIL+1))
+    return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  # Stub check-plan-review.sh that exits 2 with EMPTY stdout AND EMPTY
+  # stderr — the fixture that forces the wrapper's own fallback branch
+  # (check-plan-review.sh's real _cpr_block() always writes a reason, so
+  # this stub simulates the "should be unreachable" case the fallback
+  # exists to defend against, per RESEARCH.md Assumption A3).
+  mkdir -p "$tmp/skills/agentic-apps-workflow/scripts"
+  cat > "$tmp/skills/agentic-apps-workflow/scripts/check-plan-review.sh" <<'STUB'
+#!/usr/bin/env bash
+exit 2
+STUB
+  chmod +x "$tmp/skills/agentic-apps-workflow/scripts/check-plan-review.sh"
+
+  local payload='{"tool_name":"apply_patch","tool_input":{}}'
+
+  # ── GREEN: the real wrapper, unmutated ──────────────────────────────────
+  local green_stdout green_stderr green_rc
+  green_stdout="$(printf '%s' "$payload" | CODEX_HOME="$tmp" bash "$WRAPPER" 2>"$tmp/green.stderr")"
+  green_rc=$?
+  green_stderr="$(cat "$tmp/green.stderr")"
+
+  if [ "$green_rc" -eq 2 ] && [ -n "$green_stderr" ]; then
+    echo "  ${GREEN}PASS${RESET} contract: real wrapper's fallback exits 2 with non-empty stderr (GREEN) — rc=$green_rc"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} contract: real wrapper's fallback did NOT exit 2 with non-empty stderr — rc=$green_rc, stderr='$green_stderr'"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── RED: a mutated copy with the fallback's stderr write neutralized ────
+  # Locate the marker by grep, never a hardcoded line number (13-02-PLAN.md
+  # Task 2 action) — the echo line immediately follows the marker line.
+  local marker_line echo_line mutated_wrapper
+  marker_line="$(grep -n 'FALLBACK-STDERR-MARKER' "$WRAPPER" | head -1 | cut -d: -f1)"
+
+  if [ -z "$marker_line" ]; then
+    echo "  ${RED}FAIL${RESET} contract: FALLBACK-STDERR-MARKER not found in $WRAPPER — mutation target lost"
+    FAIL=$((FAIL+1))
+  else
+    echo_line=$((marker_line + 1))
+    mutated_wrapper="$tmp/mutated-wrapper.sh"
+    # Redirect the fallback echo's stderr write to /dev/null instead of
+    # /dev/stderr — portable sed (no GNU-only flags, no -i), piped to a new
+    # file rather than edited in place.
+    sed "${echo_line}s#>&2#>/dev/null#" "$WRAPPER" > "$mutated_wrapper"
+    chmod +x "$mutated_wrapper"
+
+    local red_stdout red_stderr red_rc
+    red_stdout="$(printf '%s' "$payload" | CODEX_HOME="$tmp" bash "$mutated_wrapper" 2>"$tmp/red.stderr")"
+    red_rc=$?
+    red_stderr="$(cat "$tmp/red.stderr")"
+
+    if [ "$red_rc" -eq 2 ] && [ -z "$red_stderr" ]; then
+      echo "  ${GREEN}PASS${RESET} contract: mutated wrapper (fallback stderr silenced) exits 2 with EMPTY stderr (RED is detectable) — rc=$red_rc"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} contract: mutation did not reproduce the RED (fail-open) state — rc=$red_rc, stderr='$red_stderr' (expected rc=2, empty stderr)"
+      FAIL=$((FAIL+1))
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Native-hook vs agent-bash Source tag (debug session codex-hook-not-firing,
+# 2026-07-19). Root cause of that session: a block observed in a live codex
+# transcript was textually indistinguishable between "the model's own
+# AGENTS.md-mandated bash self-check ran check-plan-review.sh and blocked"
+# (prompt-based, NOT enforcement — hypothesis 5) and "codex-cli's native
+# PreToolUse dispatch denied an apply_patch call independent of model
+# compliance" (real enforcement — HOOK-03's whole purpose). This suite pins
+# the fix: check-plan-review.sh's _cpr_block() now always emits a `Source:`
+# line, defaulting to "agent-bash" and switching to "native-hook" only when
+# GSD_PLAN_REVIEW_SOURCE=native-hook is set — which only
+# hook-wrapper-plan-review.sh sets, and only when it execs the gate. It also
+# regression-guards the sed portability fix found while building this suite:
+# CPR_FILE derivation used a GNU-only `\|` BRE alternation that silently
+# never matched on BSD/macOS sed, so `--file` was never threaded through on
+# this operator's own machine — `sed -E` fixes it for both dialects.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_hook_native_source_evidence() {
+  echo ""
+  echo "${YELLOW}=== check-plan-review.sh / hook-wrapper — native-hook vs agent-bash Source tag (codex-hook-not-firing) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  mkdir -p "$tmp/.planning/phases" "$tmp/err"
+  local errdir="$tmp/err"
+  local s phasedir e
+
+  # ── Direct invocation (mirrors the agent's own AGENTS.md bash ritual) ──────
+  # No GSD_PLAN_REVIEW_SOURCE set — must default to "agent-bash", never omit
+  # the tag, never silently say "native-hook" for a plain direct call.
+
+  s="$tmp/direct"
+  phasedir="$(_cpr_enf_phase "$s" "08-direct-source")"
+  e="$errdir/direct.err"
+  _cpr_case "direct call: no *-REVIEWS.md -> exit 2" "$s" 2 --err-out "$e"
+  _cpr_check_contains "direct call: Source tag defaults to agent-bash" "$e" "Source:    agent-bash"
+  if grep -qF -- "Source:    native-hook" "$e"; then
+    echo "  ${RED}FAIL${RESET} direct call: Source tag must NOT read native-hook (env unset)"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} direct call: Source tag does not falsely claim native-hook"
+    PASS=$((PASS+1))
+  fi
+
+  # ── GSD_PLAN_REVIEW_SOURCE=native-hook set directly on check-plan-review.sh ─
+  # (isolates the _cpr_block() half of the contract from the wrapper).
+
+  s="$tmp/tagged"
+  phasedir="$(_cpr_enf_phase "$s" "08-tagged-source")"
+  e="$errdir/tagged.err"
+  ( cd "$s" && GSD_PLAN_REVIEW_SOURCE=native-hook bash "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ) >/dev/null 2>"$e"
+  local tagged_rc=$?
+  if [ "$tagged_rc" = "2" ]; then
+    echo "  ${GREEN}PASS${RESET} GSD_PLAN_REVIEW_SOURCE=native-hook: still blocks (exit=2)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} GSD_PLAN_REVIEW_SOURCE=native-hook: expected exit=2, got exit=$tagged_rc"
+    FAIL=$((FAIL+1))
+  fi
+  _cpr_check_contains "GSD_PLAN_REVIEW_SOURCE=native-hook: Source tag reads native-hook" "$e" "Source:    native-hook"
+
+  # ── End-to-end through hook-wrapper-plan-review.sh ──────────────────────────
+  # A realistic apply_patch PreToolUse payload (same shape 13-05-LIVE-SESSION.md
+  # section 3 captured), run with a scratch CODEX_HOME carrying only the real
+  # check-plan-review.sh so the wrapper's $GATE resolves. Never touches the
+  # operator's real ~/.codex/hook-wrapper-plan-review.log (CODEX_HOME is
+  # this test's own tmp dir).
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — wrapper end-to-end Source/log test not run"
+    SKIP=$((SKIP+1))
+  else
+    s="$tmp/wrapper-e2e"
+    phasedir="$(_cpr_enf_phase "$s" "08-wrapper-e2e")"
+    local codexhome="$tmp/codexhome"
+    mkdir -p "$codexhome/skills/agentic-apps-workflow/scripts"
+    cp "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" \
+       "$codexhome/skills/agentic-apps-workflow/scripts/check-plan-review.sh"
+
+    local payload wrapper_out wrapper_rc logfile
+    payload='{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Add File: NOTES-scratch.md\n+hello\n*** End Patch"}}'
+    wrapper_out="$(cd "$s" && printf '%s' "$payload" | CODEX_HOME="$codexhome" bash "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh")"
+    wrapper_rc=$?
+    logfile="$codexhome/hook-wrapper-plan-review.log"
+
+    if [ "$wrapper_rc" = "0" ]; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: deny-via-JSON path exits 0 (load-bearing contract)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: expected exit=0 (deny expressed via JSON), got exit=$wrapper_rc"
+      FAIL=$((FAIL+1))
+    fi
+
+    if printf '%s' "$wrapper_out" | grep -qF 'Source:    native-hook'; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: deny JSON reason carries Source: native-hook"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: deny JSON reason missing Source: native-hook — got: $wrapper_out"
+      FAIL=$((FAIL+1))
+    fi
+
+    if printf '%s' "$wrapper_out" | grep -qF 'File:      NOTES-scratch.md'; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: --file derivation survives portable sed fix (BSD/GNU)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: --file was not derived (sed portability regression) — got: $wrapper_out"
+      FAIL=$((FAIL+1))
+    fi
+
+    if [ -f "$logfile" ] && grep -q 'tool_name=apply_patch' "$logfile"; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: self-evidencing invocation log records tool_name=apply_patch"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: invocation log missing or missing tool_name=apply_patch — $(cat "$logfile" 2>/dev/null || echo '<no log file>')"
+      FAIL=$((FAIL+1))
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DOC-03 — ADR-0009's dated Correction section (Phase 13, HOOK-01/DOC-03;
+# 13-04-PLAN.md). Grep-assertion, not a fixture/mutation harness: pins the
+# Correction section's CONTENT so a silent removal of any one recorded item
+# — d.9 superseded, d.12 reversed (by reference), or the global-vs-
+# project-scoped factual correction — goes RED. Each check is scoped to the
+# section's own line span (heading to EOF, its document position), not the
+# whole file, so it cannot pass by matching decision 12's pre-existing
+# Phase-12 inline markers instead of the new section.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_adr_0009_correction() {
+  echo ""
+  echo "${YELLOW}=== ADR-0009 Correction section (DOC-03) ===${RESET}"
+
+  local adr="$REPO_ROOT/docs/decisions/0009-plan-review-gate.md"
+
+  if [ ! -f "$adr" ]; then
+    echo "  ${RED}FAIL${RESET} $adr MISSING"
+    FAIL=$((FAIL+1))
+    return
+  fi
+
+  # (a) exactly one '## Correction' heading — a missing OR a duplicated
+  # heading both flip this RED.
+  local heading_count
+  heading_count="$(grep -c '^## Correction' "$adr")"
+  if [ "$heading_count" -eq 1 ]; then
+    echo "  ${GREEN}PASS${RESET} exactly one '## Correction' heading ($heading_count)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} expected exactly one '## Correction' heading, found $heading_count"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Portable (BSD/macOS awk + gawk both honor '/pat/,0' as "to EOF", per
+  # migrations/run-tests.sh:609's existing awk-range precedent).
+  local section
+  section="$(awk '/^## Correction/,0' "$adr")"
+
+  # (b) decision 9 recorded superseded.
+  if printf '%s\n' "$section" | grep -iq 'decision 9' \
+     && printf '%s\n' "$section" | grep -iq 'supersed'; then
+    echo "  ${GREEN}PASS${RESET} Correction section records decision 9 superseded"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section missing decision 9 superseded language"
+    FAIL=$((FAIL+1))
+  fi
+
+  # (c) decision 12 recorded reversed, BY REFERENCE.
+  if printf '%s\n' "$section" | grep -iq 'decision 12' \
+     && printf '%s\n' "$section" | grep -iq 'revers'; then
+    echo "  ${GREEN}PASS${RESET} Correction section references decision 12 reversed"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section missing decision 12 reversed reference"
+    FAIL=$((FAIL+1))
+  fi
+
+  # (c2) ...and it is genuinely a reference, not a duplicate of decision 12's
+  # own guard-mechanics walkthrough (Phase 12's inline markers are the only
+  # place `_canon_dir`/`_is_contained` should appear).
+  if printf '%s\n' "$section" | grep -q '_canon_dir\|_is_contained'; then
+    echo "  ${RED}FAIL${RESET} Correction section re-explains decision 12's guard mechanics (duplicate, not reference)"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} Correction section does not duplicate decision 12's guard mechanics"
+    PASS=$((PASS+1))
+  fi
+
+  # (d) the "global, not per-project" factual correction.
+  if printf '%s\n' "$section" | grep -iq 'project-scoped' \
+     && printf '%s\n' "$section" | grep -iqE 'global rather than per-project|not global'; then
+    echo "  ${GREEN}PASS${RESET} Correction section corrects the global-vs-project-scoped claim"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section missing the global-vs-project-scoped factual correction"
+    FAIL=$((FAIL+1))
+  fi
+
+  # (e) dated.
+  if printf '%s\n' "$section" | grep -qE '2026-07-(1[7-9]|2[0-9])'; then
+    echo "  ${GREEN}PASS${RESET} Correction section is dated"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} Correction section is not dated"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Dispatcher
 # ─────────────────────────────────────────────────────────────────────────────
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "extract-step-block" ]; then
+  test_extract_step_block_delimiter
+fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0000" ]; then
   test_migration_0000
@@ -5091,14 +5955,34 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "0009" ]; then
   test_migration_0009
 fi
 
+if [ -z "$FILTER" ] || [ "$FILTER" = "determinism" ]; then
+  test_validate_0009_anchor_determinism
+fi
+
 if [ -z "$FILTER" ] || [ "$FILTER" = "0010" ]; then
   test_migration_0010
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0011" ]; then
+  test_migration_0011
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "check-plan-review" ]; then
   test_check_plan_review_resolver
   test_check_plan_review_enforcement
   test_check_plan_review_contract
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "hook-wrapper-plan-review" ]; then
+  test_hook_wrapper_stderr_contract
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "hook-native-source" ]; then
+  test_hook_native_source_evidence
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "adr-0009-correction" ]; then
+  test_adr_0009_correction
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

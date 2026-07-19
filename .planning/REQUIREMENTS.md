@@ -107,20 +107,29 @@ it is not optional per-item polish.
 
 ### Path Safety & Review Debt (WR / REV)
 
-- [ ] **WR-03**: `check-plan-review.sh`'s `--file` guard canonicalizes the *parent
+- [x] **WR-03**: `check-plan-review.sh`'s `--file` guard canonicalizes the *parent
       directory* of the path (via the existing `_canon_dir` / `_is_contained`
       helpers) and rejects a symlink-resolved escape — replacing the lexical-`..`
       -only check. Reverses ADR-0009 d.12. Fixtures cover a symlinked parent
       directory and a sibling-prefix collision, not just a leaf symlink. (TOCTOU is
       explicitly out of scope — do not build a second path-safety primitive.)
-- [ ] **REV-01**: WR-05 — `validate-0009-anchor.sh`'s stdout is genuinely
+      GAP CLOSED (12-04, 2026-07-17): the fail-safe fall-through regression
+      (12-VERIFICATION, 2026-07-17 — a legitimate not-yet-created in-tree plan
+      path returned exit 2 when an unrelated unreviewed phase was active,
+      contradicting the "never exit-2-blocks" truth) is fixed by a lexical
+      `$REPO_ROOT/.planning`-rooted fallback that fires only when `_canon_dir`
+      returns empty (parent does not exist yet); mutation-proven RED (exit 2
+      with the fallback disabled) → GREEN (exit 0 restored), and the
+      symlink-escape fixture re-confirmed exit 2 (WR-03's original hole stays
+      closed). See 12-04-SUMMARY.md.
+- [x] **REV-01**: WR-05 — `validate-0009-anchor.sh`'s stdout is genuinely
       deterministic: a full-script grep for every mirror-derived stdout value
       (not just the banner) confirms no non-deterministic content, mutation-proven.
-- [ ] **REV-02**: IN-01 — `extract_step_block` no longer prefix-matches `### Step 1`
+- [x] **REV-02**: IN-01 — `extract_step_block` no longer prefix-matches `### Step 1`
       against `### Step 10`+, verified against a synthetic 10+-step document.
-- [ ] **REV-03**: IN-02 — the previously-unasserted line-drop in CASE 1 is asserted
+- [x] **REV-03**: IN-02 — the previously-unasserted line-drop in CASE 1 is asserted
       with a strictly-smaller-count check (no hardcoded line number), mutation-proven.
-- [ ] **REV-04**: IN-03 — the ADR/migration numbering collision is corrected in
+- [x] **REV-04**: IN-03 — the ADR/migration numbering collision is corrected in
       `docs/decisions/README.md` so ADR numbers and migration numbers cannot be
       conflated (this is the constraint the roadmapper must honor when assigning
       MIGR-10 / HOOK-03 / MARK-01 migration numbers).
@@ -189,11 +198,11 @@ Explicit boundaries, with reasoning to prevent silent re-adding.
 | MARK-02 | 14 | Pending |
 | MARK-03 | 14 | Pending |
 | MARK-04 | 14 | Pending |
-| WR-03 | 12 | Pending |
-| REV-01 | 12 | Pending |
-| REV-02 | 12 | Pending |
-| REV-03 | 12 | Pending |
-| REV-04 | 12 | Pending |
+| WR-03 | 12 | Complete |
+| REV-01 | 12 | Complete |
+| REV-02 | 12 | Complete |
+| REV-03 | 12 | Complete |
+| REV-04 | 12 | Complete |
 | DOC-03 | 13 | Pending |
 | DOC-04 | 14 | Pending |
 | MIGR-FUT-01 | Deferred (Future Requirements) | Not in v0.8.0 |

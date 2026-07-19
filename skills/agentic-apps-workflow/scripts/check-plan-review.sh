@@ -67,56 +67,6 @@ if [ "${GSD_SKIP_REVIEWS:-}" = "1" ]; then
   exit 0
 fi
 
-# ─────────────────────────────────────────────────────────────────────────────
-# --file bypass list (T-08-08, T-08-37; <ordering> step 2) -- fires ONLY when
-# --file was supplied, and only ABOVE resolution (plan 08-02).
-#
-# Traversal rejected FIRST, before the prefix test (bypass 2 in <ordering>;
-# T-08-37): '.planning/../docs/IMPLEMENTATION-PLAN.md' satisfies BOTH the
-# '.planning/' prefix and the 'PLAN.md' basename textually, and resolves to
-# the exact file the FLAG-A fix below exists to exclude. Reject on the '..'
-# component itself -- do NOT normalize-then-test: _canon_dir cd's and
-# therefore requires the path to exist, and --file may name a file about to
-# be created. A rejected --file is NOT a block by itself; the bypass simply
-# does not fire and the gate falls through to normal resolution -- the
-# phase's real state then decides.
-# ─────────────────────────────────────────────────────────────────────────────
-if [ -n "$CPR_FILE" ]; then
-  _cpr_has_dotdot=0
-  IFS='/' read -ra _cpr_file_parts <<< "$CPR_FILE"
-  for _cpr_file_part in "${_cpr_file_parts[@]}"; do
-    if [ "$_cpr_file_part" = ".." ]; then
-      _cpr_has_dotdot=1
-      break
-    fi
-  done
-
-  if [ "$_cpr_has_dotdot" -eq 0 ]; then
-    # Ported from the reference's FLAG-A fix (its lines 51-60): gate on the
-    # path PREFIX (.planning/*, */.planning/*) AND the basename, never the
-    # basename alone. A basename-only check matched docs/IMPLEMENTATION-PLAN.md
-    # and any repo file ending in a canonical basename, defeating the gate by
-    # filename trivially (T-08-08).
-    case "$CPR_FILE" in
-      .planning/*|*/.planning/*)
-        # NOTE: *REVIEW[S].md (not *REVIEWS.md) is deliberate, not a typo --
-        # the bracket expression matches identically to *REVIEWS.md but
-        # avoids spelling the contiguous substring "REVIEWS.md" this early
-        # in the file. This plan's own acceptance criteria assert a source-
-        # order regression guard (multi-ai-review-skipped must precede the
-        # REVIEWS.md evidence-check block later in this file); an early,
-        # unrelated "REVIEWS.md" occurrence here would falsely satisfy that
-        # grep-based check. Do not "simplify" this back to *REVIEWS.md.
-        case "$(basename "$CPR_FILE")" in
-          *PLAN.md|*PLAN-*.md|*REVIEW[S].md|ROADMAP.md|PROJECT.md|REQUIREMENTS.md|*CONTEXT.md|*RESEARCH.md)
-            exit 0
-            ;;
-        esac
-        ;;
-    esac
-  fi
-fi
-
 _debug() {
   [ "${GSD_PLAN_REVIEW_DEBUG:-}" = "1" ] && echo "$1" >&2
   return 0
@@ -162,6 +112,11 @@ _mtime() {
 # earlier draft assumed cwd == root, which cross-AI review (Codex, HIGH)
 # identified as a silent fail-open: the gate would authorize exactly the
 # edit it exists to block.
+#
+# WR-03 (D-04): hoisted above the --file bypass block below (which used to
+# run first, before $REPO_ROOT existed). The GSD_SKIP_REVIEWS hatch above
+# stays the first executable gate; only the --file bypass moved below this,
+# so it can canonicalize-and-contain against $REPO_ROOT/.planning.
 # ─────────────────────────────────────────────────────────────────────────────
 
 REPO_ROOT=""
@@ -188,6 +143,132 @@ fi
 
 cd "$REPO_ROOT" 2>/dev/null || exit 0
 _debug "repo-root: $REPO_ROOT"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# --file bypass list (T-08-08, T-08-37; <ordering> step 2) -- fires ONLY when
+# --file was supplied. WR-03 (D-04): this block now runs AFTER repo-root
+# self-location above, so $REPO_ROOT is available for the parent-dir
+# containment gate added below.
+#
+# Traversal rejected FIRST, before the prefix test (bypass 2 in <ordering>;
+# T-08-37): '.planning/../docs/IMPLEMENTATION-PLAN.md' satisfies BOTH the
+# '.planning/' prefix and the 'PLAN.md' basename textually, and resolves to
+# the exact file the FLAG-A fix below exists to exclude. Reject on the '..'
+# component itself -- do NOT normalize-then-test: _canon_dir cd's and
+# therefore requires the path to exist, and --file may name a file about to
+# be created. A rejected --file is NOT a block by itself; the bypass simply
+# does not fire and the gate falls through to normal resolution -- the
+# phase's real state then decides. This lexical '..' check stays as a
+# defensive floor (D-01) even with the WR-03 containment gate below: it
+# still fires when the parent dir does not exist, where _canon_dir returns
+# empty and cannot help.
+# ─────────────────────────────────────────────────────────────────────────────
+if [ -n "$CPR_FILE" ]; then
+  _cpr_has_dotdot=0
+  IFS='/' read -ra _cpr_file_parts <<< "$CPR_FILE"
+  for _cpr_file_part in "${_cpr_file_parts[@]}"; do
+    if [ "$_cpr_file_part" = ".." ]; then
+      _cpr_has_dotdot=1
+      break
+    fi
+  done
+
+  if [ "$_cpr_has_dotdot" -eq 0 ]; then
+    # Ported from the reference's FLAG-A fix (its lines 51-60): gate on the
+    # path PREFIX (.planning/*, */.planning/*) AND the basename, never the
+    # basename alone. A basename-only check matched docs/IMPLEMENTATION-PLAN.md
+    # and any repo file ending in a canonical basename, defeating the gate by
+    # filename trivially (T-08-08).
+    case "$CPR_FILE" in
+      .planning/*|*/.planning/*)
+        # NOTE: *REVIEW[S].md (not *REVIEWS.md) is deliberate, not a typo --
+        # the bracket expression matches identically to *REVIEWS.md but
+        # avoids spelling the contiguous substring "REVIEWS.md" this early
+        # in the file. This plan's own acceptance criteria assert a source-
+        # order regression guard (multi-ai-review-skipped must precede the
+        # REVIEWS.md evidence-check block later in this file); an early,
+        # unrelated "REVIEWS.md" occurrence here would falsely satisfy that
+        # grep-based check. Do not "simplify" this back to *REVIEWS.md.
+        case "$(basename "$CPR_FILE")" in
+          *PLAN.md|*PLAN-*.md|*REVIEW[S].md|ROADMAP.md|PROJECT.md|REQUIREMENTS.md|*CONTEXT.md|*RESEARCH.md)
+            # WR-03 (D-02/D-03/D-05): canonicalize the --file value's
+            # PARENT directory (not the leaf -- _canon_dir cd's and
+            # requires the path to exist, and --file may legitimately name
+            # a file about to be created) and require it resolve INSIDE
+            # $REPO_ROOT/.planning -- this repo's tree only. Reuses the
+            # same _canon_dir/_is_contained helpers the current-phase
+            # resolver below already uses (SC#1: reuse, not reinvent).
+            #
+            # Resolve-then-contain (D-03), not reject-any-symlink: a
+            # symlinked parent that resolves INSIDE the tree is accepted;
+            # only one that escapes is rejected. Do not copy the
+            # REVIEWS.md evidence guard's reject-any-symlink rule below --
+            # that asymmetry is deliberate for evidence artifacts, wrong
+            # for a --file edit target, which may legitimately sit behind
+            # a symlinked parent (e.g. a worktree symlink).
+            #
+            # D-05 tightens the old lexical '*/.planning/*' arm:
+            # containment is against THIS repo's $REPO_ROOT/.planning
+            # only, so a vendored 'vendor/foo/.planning/X-PLAN.md' that
+            # used to satisfy the lexical prefix test alone no longer
+            # bypasses -- disclosed behavior change, not a silent
+            # regression (see phase SUMMARY / ADR-0009 decision 12).
+            #
+            # D-02: when _canon_dir returns empty (parent does not exist /
+            # cannot be canonicalized), this resolve-then-contain gate
+            # simply does not pass. Control does NOT fall all the way
+            # through to normal resolution unconditionally any more --
+            # 12-04's lexical fallback below (empty-_cpr_canon_parent
+            # branch) accepts an in-tree not-yet-created path first; only
+            # a value that ALSO fails the lexical check falls through to
+            # normal resolution. Never exit 2 here, never bypass-approve
+            # on a path outside $REPO_ROOT/.planning -- failing open on an
+            # escape is the milestone's nemesis (T-12-02).
+            _cpr_file_parent="$(dirname "$CPR_FILE")"
+            _cpr_canon_parent="$(_canon_dir "$_cpr_file_parent")"
+            _cpr_canon_planning_root="$(_canon_dir "$REPO_ROOT/.planning")"
+            if [ -n "$_cpr_canon_parent" ] && _is_contained "$_cpr_canon_parent" "$_cpr_canon_planning_root"; then
+              exit 0
+            elif [ -z "$_cpr_canon_parent" ]; then
+              # 12-04 (gap-closure, 12-VERIFICATION.md WR-01 / 12-01 truth
+              # #4): the parent directory does not exist yet, so
+              # _canon_dir returned empty and the resolve-then-contain
+              # branch above never fired. Without this fallback, control
+              # falls through to resolve_phase below, which can resolve an
+              # UNRELATED active phase (current-phase -> a phase dir with
+              # a PLAN.md and no REVIEWS.md) and exit-2-block a legitimate
+              # not-yet-created in-tree plan file -- the pre-Phase-12
+              # script returned exit 0 for this exact input.
+              #
+              # Safety argument (do not weaken):
+              #   1. This branch is nested inside the '..'-clear guard
+              #      above (the same one gating this whole case arm), which
+              #      already ran and found no traversal component, so a
+              #      purely LEXICAL containment check here cannot be
+              #      tricked by '..'.
+              #   2. This branch fires ONLY when _cpr_canon_parent is empty
+              #      -- an EXISTING symlinked parent that escapes
+              #      .planning has a non-empty _cpr_canon_parent and takes
+              #      the resolve-then-contain branch above instead, where
+              #      it is still rejected (the WR-03 hole stays closed).
+              #   3. The lexical root is $REPO_ROOT/.planning (D-05, reused
+              #      verbatim, not a bare '*/.planning/*' glob), so a
+              #      vendored 'vendor/foo/.planning/newdir/X-PLAN.md' whose
+              #      parent does not exist still does not bypass.
+              case "$_cpr_file_parent" in
+                /*) _cpr_lex_parent="$_cpr_file_parent" ;;
+                *) _cpr_lex_parent="$REPO_ROOT/$_cpr_file_parent" ;;
+              esac
+              if _is_contained "$_cpr_lex_parent" "$REPO_ROOT/.planning"; then
+                exit 0
+              fi
+            fi
+            ;;
+        esac
+        ;;
+    esac
+  fi
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 # _match_phase_dir <num> — tri-state status contract (resolver_defects item 6).
@@ -410,6 +491,21 @@ _cpr_block() {
     echo "   Phase:     $CURRENT_PHASE"
     [ -n "$CPR_FILE" ] && echo "   File:      $CPR_FILE"
     echo "   Missing:   $CURRENT_PHASE/<NN>-REVIEWS.md"
+    # Source tag (debug session codex-hook-not-firing, 2026-07-19): this
+    # script is invoked from TWO independent places that read structurally
+    # identical block text — an agent's own compliant bash call (AGENTS.md's
+    # "Pre-execution Gate" ritual) and codex-cli's NATIVE PreToolUse hook
+    # (via hook-wrapper-plan-review.sh, migration 0011/HOOK-03). Without a
+    # tag, a block observed in a live session is textually indistinguishable
+    # between "the model complied and self-checked" (prompt-based, NOT
+    # enforcement) and "the native hook denied the tool call independent of
+    # model compliance" (real enforcement) — exactly the false-positive this
+    # debug session exists to close. The wrapper sets
+    # GSD_PLAN_REVIEW_SOURCE=native-hook before invoking this script; every
+    # other caller (the agent's own bash ritual, a human at a shell) leaves
+    # it unset and gets the explicit default below, so the tag is always
+    # present, never silently absent.
+    echo "   Source:    ${GSD_PLAN_REVIEW_SOURCE:-agent-bash (direct invocation, not the native hook)}"
     echo ""
     echo "   Reason: $reason"
     echo ""

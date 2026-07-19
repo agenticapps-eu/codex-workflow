@@ -397,6 +397,53 @@ problems.
     walking and `[ -L ]`-testing each existing prefix directory without
     requiring the leaf to exist — is carried in Open follow-ups below.
 
+    **Reversed (Phase 12, WR-03):** 2026-07-17. The guard now canonicalizes
+    the `--file` value's parent directory (`_canon_dir`, the `cd ... && pwd
+    -P` idiom) and rejects a symlink-resolved escape via `_is_contained`
+    against `$REPO_ROOT/.planning` — reusing, not reinventing, the same
+    helpers the current-phase resolver already used (this decision's own
+    text above named that reuse as unavailable; it is now the shipped
+    mechanism). This is NOT the walk-each-prefix-component fix speculated
+    in the Open follow-up below (which is now superseded/resolved, not
+    merely satisfied) — parent-directory canonicalization resolves
+    symlinks anywhere in the parent chain in one shot without walking each
+    component individually. The lexical `..` check (pre-Phase-12
+    numbering, now `:166-176`) is retained as a defensive floor for
+    the not-yet-created-parent case, not removed. NOTE: this also tightens
+    the `*/.planning/*` bypass arm to `$REPO_ROOT/.planning` only — a
+    nested/vendored `vendor/foo/.planning/X-PLAN.md` no longer bypasses
+    (disclosed behavior change, not a silent regression). The dated
+    Correction section covering d.9 superseded + this reversal + the
+    global-vs-per-project fix lands in Phase 13 (DOC-03).
+
+    **Extended (Phase 12 gap-closure, 12-04):** 2026-07-17. Independent
+    verification (12-VERIFICATION.md, Priority Concern / WR-01) constructed
+    the exact case this reversal had not yet covered and found it still
+    exit-2-blocked: a `--file` value naming a plan artifact whose parent
+    directory does not exist yet (so `_canon_dir` returns empty and the
+    resolve-then-contain branch above never fires) fell through to
+    `resolve_phase`, which could resolve an UNRELATED active phase (a
+    phase dir with a `*-PLAN.md` but no `*-REVIEWS.md`) and block a
+    legitimate not-yet-created in-tree plan file — a regression from the
+    pre-Phase-12 script, which returned exit 0 for the identical input.
+    The guard now adds a lexical `$REPO_ROOT/.planning`-rooted fallback
+    that fires ONLY in that empty-`_canon_dir` branch: it accepts (exit 0)
+    when the un-canonicalized, lexical parent is contained under
+    `$REPO_ROOT/.planning`, restoring the pre-Phase-12 fail-safe-accept
+    (never exit-2-block a legitimate not-yet-created path). The invariant
+    from the first Reversed marker above is preserved, not reopened: this
+    fallback fires only when the parent does NOT exist, so an EXISTING
+    symlinked parent that resolves outside `.planning` still has a
+    non-empty `_canon_dir` and is still rejected by the resolve-then-
+    contain path (the WR-03 hole stays closed); and the fallback is rooted
+    at `$REPO_ROOT/.planning` specifically (the same D-05 root, not a bare
+    `*/.planning/*` glob), so a vendored `vendor/foo/.planning/...` whose
+    parent does not exist still does not bypass. Mutation-proven
+    RED (exit 2 with the fallback disabled) → GREEN (exit 0 restored) —
+    see `migrations/run-tests.sh`'s not-yet-created-dir fixture and
+    12-04-SUMMARY.md. No dated Correction section is opened here; that
+    still lands in Phase 13 (DOC-03).
+
 ## Consequences
 
 Phases 00-07 stay legacy and grandfathered. Phase 08 is grandfathered
@@ -440,6 +487,11 @@ reconstructed by hand.
   decision 12 records why: the gate is agent-mediated, so this guard is
   hygiene against an accidental over-broad bypass, not a boundary against a
   hostile caller.
+
+  **Resolved (Phase 12):** shipped as parent-directory canonicalization
+  (`_canon_dir`/`_is_contained` against `$REPO_ROOT/.planning`), not the
+  walk-each-prefix-component approach speculated above — see decision 12's
+  Reversed marker.
 
 - **D-02's native `PreToolUse` surface** (decision 9) as the documented
   upgrade path to real enforcement, pointing at the same verifier — note
@@ -519,3 +571,51 @@ reconstructed by hand.
 - **Migrating `.planning/phases/` 00-07 to GSD-native layout** — closes
   ADR-0007 point 4 non-compliance; deliberately out of scope for this
   phase (D-18).
+
+## Correction
+
+**Dated 2026-07-18 (Phase 13, HOOK-01/DOC-03).** This section is an in-place
+addition to this existing ADR, not a new ADR number — this repo's numbering
+convention (REV-04, `docs/decisions/README.md`) treats ADR and migration IDs
+as independent, always-qualified sequences, and a Correction section edits
+the ADR it corrects in place, exactly as Phase 12 already did twice on
+decision 12 below.
+
+1. **Decision 9 is SUPERSEDED.** Migration 0011 (Phase 13, HOOK-03) wires
+   the plan-review gate onto codex-cli's native `PreToolUse` runtime hook
+   surface, installed project-scoped, and the gate now blocks
+   unconditionally at that surface — retiring decision 9's agent-mediated-
+   only binding (`AGENTS.md` ritual text plus a verifier script an agent
+   must choose to invoke). This does NOT retroactively validate decision
+   9's rejection of option B at the time: the trust-ledger and
+   self-scoping concerns it named were real considerations, confirmed as
+   real gates by Phase 13's own spike findings
+   (`13-01-SPIKE-FINDINGS.md`) — a two-gate model (project trust +
+   per-hook `trusted_hash`) that had to be understood and designed around,
+   not a phantom risk decision 9 invented. What no longer holds is
+   decision 9's specific factual premise, corrected in item 3 below.
+
+2. **Decision 12 was already REVERSED.** The `--file` bypass's
+   symlink-traversal limitation decision 12 originally accepted as a known,
+   documented gap was reversed by Phase 12 (WR-03) and further extended by
+   Phase 12's own gap-closure (12-04) — see the existing `Reversed (Phase
+   12, WR-03)` and `Extended (Phase 12 gap-closure, 12-04)` markers inline
+   on decision 12 above, dated 2026-07-17, for the reversal's full
+   mechanics. This Correction section records that reversal's existence
+   only, to satisfy DOC-03's dated-Correction-section requirement — it does
+   not repeat or re-explain the guard mechanics decision 12's own inline
+   markers already document.
+
+3. **Factual correction: native hooks are project-scoped, not only
+   global.** Decision 9's premise that Codex's native `PreToolUse` surface
+   is "global rather than per-project" is FALSE as of codex-cli 0.144.4 and
+   should not be relied on going forward. `<repo>/.codex/hooks.json` and
+   `<repo>/.codex/config.toml` are both documented, discovered,
+   project-scoped layers (developers.openai.com/codex/hooks,
+   developers.openai.com/codex/config-advanced), loaded IN ADDITION to the
+   global `~/.codex/hooks.json`/`~/.codex/config.toml` layers, with project
+   entries taking precedence on conflict. Migration 0011 (HOOK-03) uses
+   exactly this project-scoped layer — the one decision 9 believed did not
+   exist — which is what makes the unconditional block in item 1 possible
+   without decision 9's original global-scope, fires-in-every-repo
+   objection applying.

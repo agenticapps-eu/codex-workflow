@@ -101,7 +101,7 @@ milestone and most benefits from a CI-verified baseline.
 
 - [x] **Phase 10: CI That Can Prove Failure** - Replace the Phase-0 placeholder workflow with real, remote CI that runs the full suite and is proven able to go red (completed 2026-07-16)
 - [x] **Phase 11: Migration Chain Repair** - Heal migration 0007's chain break for real installs and close MIGR-08's residual coverage gap (gaps found 2026-07-16 for SC#3/MIGR-11 recovery runbook; closed via plans 11-04/11-05, re-verified 4/4) (completed 2026-07-17)
-- [ ] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes
+- [x] **Phase 12: Path Safety & Review Debt** - Real symlink-escape guard for `--file`, plus the four independently-scoped 09-REVIEW.md fixes (gap found 2026-07-17 — WR-03's not-yet-created-dir path fell through to exit-2 when an unreviewed phase was active, contradicting the fail-safe truth; closed via plan 12-04's lexical `$REPO_ROOT/.planning`-rooted fallback, mutation-proven, 13/13 must-haves) (completed 2026-07-17)
 - [ ] **Phase 13: Native Enforcement — Plan-Review Hook** - Bind the plan-review gate to codex-cli's native `PreToolUse` surface, project-scoped, superseding ADR-0009 d.9
 - [ ] **Phase 14: Paired §11 Markers** - Explicit start/end markers bound the managed §11 block, retiring the inference-based defect class AG-01 belongs to
 
@@ -197,7 +197,18 @@ closed with their own proof — not batched into one undifferentiated cleanup.
      number can no longer be conflated (REV-04) — the exact hazard this
      roadmapper was told to honor when assigning Phase 11/13/14's new migration
      numbers.
-**Plans**: TBD
+**Plans**: 3 plans
+- [x] 12-01-PLAN.md — WR-03: augment the `--file` guard with parent-dir
+  canonicalize-and-contain (reusing `_canon_dir`/`_is_contained`, lexical `..`
+  floor retained), two RED-before-GREEN fixtures (symlinked-parent escape/inside,
+  sibling-prefix collision), and the minimal in-place ADR-0009 d.12 Reversed marker
+- [x] 12-02-PLAN.md — REV-01/REV-02/REV-03: remove mirror-derived stdout from
+  `validate-0009-anchor.sh` (+ determinism grep test), delimiter-aware
+  `extract_step_block` (+ synthetic 10+-step fixture), CASE 1 strictly-smaller-count
+  line-drop assertion — each independently mutation-proven
+- [x] 12-03-PLAN.md — REV-04: normative ADR-NNNN vs migration-NNNN numbering
+  convention in `docs/decisions/README.md` (worked example: ADR-0010 documents
+  migration 0009)
 **Notes**: This phase's ADR-0009 touch (recording WR-03's d.12 reversal) is
 sequenced to land **before** Phase 13's ADR-0009 touch, per research guidance —
 avoids two PRs racing the same file region. DOC-03's full dated Correction
@@ -236,12 +247,27 @@ ADR-0009 lands last; DOC-03 is mapped there for coverage accounting, not here.
      (WR-03's real guard, Phase 12), and the factual correction of the "native
      hooks are global rather than per-project" claim (falsified by codex-cli's
      project-scoped `.codex/hooks.json` layer).
-**Plans**: TBD
-**Notes**: Research/spike-needed phase. Begin execution with the empirical
-trust-ledger spike (Success Criterion 1) before finalizing wrapper/migration
-design — recommend `--research-phase` or a dedicated spike plan first. The new
-migration installed here uses the next available migration ID, kept distinct
-from any ADR number (REV-04).
+**Plans**: 5 plans (4 waves; spike-gated design per plan-time option (a))
+- [x] 13-01-PLAN.md — Trust-ledger + apply_patch SPIKE (SC#1): runs RESEARCH.md's
+  8-step protocol against SCRATCH repos, resolves the hash-input, one-gate-or-two,
+  default-trust, and apply_patch-coverage unknowns, freezes 13-01-SPIKE-FINDINGS.md
+  with the Matcher decision downstream plans read (HOOK-01) [wave 1, standalone]
+- [x] 13-02-PLAN.md — HOOK-02 wrapper (`hook-wrapper-plan-review.sh`) execing the
+  unchanged check-plan-review.sh + fail-CLOSED mutation test (SC#3: empty-stderr
+  RED -> non-empty GREEN) [wave 2, depends 13-01]
+- [x] 13-03-PLAN.md — HOOK-03 migration 0011: merge-don't-clobber PreToolUse into
+  project-scoped `.codex/hooks.json` + `[features] hooks=true` in `.codex/config.toml`,
+  version lockstep to 0.8.0, test_migration_0011 + SC#4-negative [wave 3, depends 13-01/02]
+- [x] 13-04-PLAN.md — DOC-03 (SC#5): dated ADR-0009 `## Correction` (d.9 superseded,
+  d.12 reversed-by-reference, global-vs-project factual fix) + grep-assertion test [wave 4, depends 13-03]
+- [ ] 13-05-PLAN.md — HOOK-01 live block (SC#2 + SC#4-positive): Pitfall-4 pre-step,
+  install 0011, human-observed native denial of a disallowed edit end-to-end [wave 4, depends 13-03]
+**Notes**: Research/spike-needed phase. Execution begins with the empirical
+trust-ledger spike (13-01, Success Criterion 1); 13-02/13-03's matcher/parse logic
+is spike-gated (each halts and routes to `--gaps` if the spike falsified more than
+the matcher value). SC#2 and SC#4-positive are irreducibly manual (13-05's
+human-observed runbook), never faked as automated tests. The new migration (0011)
+uses the next available migration ID, kept distinct from any ADR number (REV-04).
 
 ### Phase 14: Paired §11 Markers
 **Goal**: The managed §11 block's extent is bounded by explicit markers, not
@@ -291,8 +317,8 @@ migration ID, kept distinct from any ADR number (REV-04).
 | 9.1 §11 Strip Runaway (INSERTED)                | v0.7.0    | 7/7             | Complete    | 2026-07-15 |
 | 10. CI That Can Prove Failure                   | v0.8.0    | 2/2 | Complete    | 2026-07-16 |
 | 11. Migration Chain Repair                      | v0.8.0    | 5/5 | Complete   | 2026-07-17 |
-| 12. Path Safety & Review Debt                   | v0.8.0    | 0/TBD           | Not started | -          |
-| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 0/TBD           | Not started | -          |
+| 12. Path Safety & Review Debt                   | v0.8.0    | 4/4 | Complete    | 2026-07-17 |
+| 13. Native Enforcement — Plan-Review Hook        | v0.8.0    | 4/5 | In Progress|  |
 | 14. Paired §11 Markers                          | v0.8.0    | 0/TBD           | Not started | -          |
 
 ## Known Follow-ups
