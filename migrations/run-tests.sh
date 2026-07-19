@@ -5435,10 +5435,12 @@ test_migration_0011() {
   ( cd "$sbx" && git init -q )
 
   # Decoy vendor hooks.json — a PRE-EXISTING unrelated vendor's PreToolUse
-  # entry that must survive the merge (T-13-04). Matches this repo's own
-  # live multi-vendor hooks.json shape (13-RESEARCH.md).
+  # entry that must survive the merge (T-13-04). Uses the NESTED matcher-group
+  # schema ({"hooks":[{"type","command"}]}), which is what codex-cli actually
+  # loads and what this machine's live ~/.codex/hooks.json carries; the flat
+  # form is silently dropped (migration 0011 ## Correction, 2026-07-19).
   cat > "$sbx/.codex/hooks.json" <<'JSON'
-{"hooks":{"PreToolUse":[{"matcher":"Bash","type":"command","command":"/opt/vendor/some-other-hook.sh"}]}}
+{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/opt/vendor/some-other-hook.sh"}]}]}}
 JSON
 
   # Decoy config.toml — an unrelated [some_other] table that must survive
@@ -5459,17 +5461,40 @@ TOML
     _m0011_ok 1 "Step 1: .hooks.PreToolUse has exactly 2 entries after apply (decoy + wrapper)"
   fi
 
-  if ( cd "$sbx" && jq -e '.hooks.PreToolUse[] | select(.command == "/opt/vendor/some-other-hook.sh")' .codex/hooks.json >/dev/null 2>&1 ); then
+  if ( cd "$sbx" && jq -e '.hooks.PreToolUse[] | (.hooks // [])[] | select(.command == "/opt/vendor/some-other-hook.sh")' .codex/hooks.json >/dev/null 2>&1 ); then
     _m0011_ok 0 "Step 1: pre-existing decoy vendor PreToolUse entry survives the merge (T-13-04)"
   else
     _m0011_ok 1 "Step 1: pre-existing decoy vendor PreToolUse entry survives the merge (T-13-04)"
   fi
 
   if ( cd "$sbx" && jq -e --arg cmd "$WRAPPER_PATH" \
-       '.hooks.PreToolUse[] | select(.command == $cmd and .matcher == "apply_patch")' .codex/hooks.json >/dev/null 2>&1 ); then
+       '.hooks.PreToolUse[] | select(.matcher == "apply_patch") | (.hooks // [])[] | select(.command == $cmd and .type == "command")' .codex/hooks.json >/dev/null 2>&1 ); then
     _m0011_ok 0 "Step 1: wrapper PreToolUse entry (matcher=apply_patch) present after apply"
   else
     _m0011_ok 1 "Step 1: wrapper PreToolUse entry (matcher=apply_patch) present after apply"
+  fi
+
+  # SCHEMA REGRESSION GUARD (migration 0011 ## Correction, 2026-07-19).
+  # The original migration wrote the entry FLAT — {"matcher","type","command"}
+  # with no nested `hooks` array. codex-cli drops such an entry silently: no
+  # error, no warning, and `/hooks` does not count it, so the gate ships inert
+  # while every filesystem-level post-check still passes. The assertion above
+  # would go RED on that regression, but only implicitly; this one names the
+  # defect directly so a future reader sees WHY the shape matters.
+  if ( cd "$sbx" && jq -e --arg cmd "$WRAPPER_PATH" \
+       '[.hooks.PreToolUse[] | select(.command == $cmd)] | length == 0' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: wrapper entry is NOT in the silently-dropped flat schema (no group-level .command)"
+  else
+    _m0011_ok 1 "Step 1: wrapper entry is NOT in the silently-dropped flat schema (no group-level .command)"
+  fi
+
+  # The matcher group must carry its command in a nested `hooks` ARRAY — the
+  # exact shape codex-cli loads. Asserted structurally, not just by lookup.
+  if ( cd "$sbx" && jq -e --arg cmd "$WRAPPER_PATH" \
+       '.hooks.PreToolUse[] | select(.matcher == "apply_patch") | (.hooks | type == "array") and ((.hooks | length) >= 1)' .codex/hooks.json >/dev/null 2>&1 ); then
+    _m0011_ok 0 "Step 1: apply_patch matcher group carries a nested hooks[] array (codex-cli load shape)"
+  else
+    _m0011_ok 1 "Step 1: apply_patch matcher group carries a nested hooks[] array (codex-cli load shape)"
   fi
 
   # Idempotent re-apply — no duplicate entry. Mirrors test_migration_0008's
@@ -5546,11 +5571,16 @@ TOML
     _m0011_ok 1 "SC#4-negative: second repo has no .codex/hooks.json before any apply (clean state)"
   fi
 
+  # Searches BOTH schemas — group-level `.command` (the dropped flat form) and
+  # the nested `hooks[].command` (the real load shape). An absence assertion
+  # that checks only one shape can pass while an entry in the other shape is
+  # sitting right there, which would make this negative half vacuously true.
   if [ ! -f "$sbx2/.codex/hooks.json" ] || ! jq -e --arg cmd "$WRAPPER_PATH" \
-       '.hooks.PreToolUse[]? | select(.command == $cmd)' "$sbx2/.codex/hooks.json" >/dev/null 2>&1; then
-    _m0011_ok 0 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence)"
+       '[.hooks.PreToolUse[]? | (.command // empty), ((.hooks // [])[]? | .command)] | index($cmd)' \
+       "$sbx2/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0011_ok 0 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence, both schemas)"
   else
-    _m0011_ok 1 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence)"
+    _m0011_ok 1 "SC#4-negative: second, unrelated repo carries NO plan-review PreToolUse entry (asserted by absence, both schemas)"
   fi
 }
 
@@ -5657,6 +5687,126 @@ STUB
       PASS=$((PASS+1))
     else
       echo "  ${RED}FAIL${RESET} contract: mutation did not reproduce the RED (fail-open) state — rc=$red_rc, stderr='$red_stderr' (expected rc=2, empty stderr)"
+      FAIL=$((FAIL+1))
+    fi
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Native-hook vs agent-bash Source tag (debug session codex-hook-not-firing,
+# 2026-07-19). Root cause of that session: a block observed in a live codex
+# transcript was textually indistinguishable between "the model's own
+# AGENTS.md-mandated bash self-check ran check-plan-review.sh and blocked"
+# (prompt-based, NOT enforcement — hypothesis 5) and "codex-cli's native
+# PreToolUse dispatch denied an apply_patch call independent of model
+# compliance" (real enforcement — HOOK-03's whole purpose). This suite pins
+# the fix: check-plan-review.sh's _cpr_block() now always emits a `Source:`
+# line, defaulting to "agent-bash" and switching to "native-hook" only when
+# GSD_PLAN_REVIEW_SOURCE=native-hook is set — which only
+# hook-wrapper-plan-review.sh sets, and only when it execs the gate. It also
+# regression-guards the sed portability fix found while building this suite:
+# CPR_FILE derivation used a GNU-only `\|` BRE alternation that silently
+# never matched on BSD/macOS sed, so `--file` was never threaded through on
+# this operator's own machine — `sed -E` fixes it for both dialects.
+# ─────────────────────────────────────────────────────────────────────────────
+
+test_hook_native_source_evidence() {
+  echo ""
+  echo "${YELLOW}=== check-plan-review.sh / hook-wrapper — native-hook vs agent-bash Source tag (codex-hook-not-firing) ===${RESET}"
+
+  local tmp; tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  mkdir -p "$tmp/.planning/phases" "$tmp/err"
+  local errdir="$tmp/err"
+  local s phasedir e
+
+  # ── Direct invocation (mirrors the agent's own AGENTS.md bash ritual) ──────
+  # No GSD_PLAN_REVIEW_SOURCE set — must default to "agent-bash", never omit
+  # the tag, never silently say "native-hook" for a plain direct call.
+
+  s="$tmp/direct"
+  phasedir="$(_cpr_enf_phase "$s" "08-direct-source")"
+  e="$errdir/direct.err"
+  _cpr_case "direct call: no *-REVIEWS.md -> exit 2" "$s" 2 --err-out "$e"
+  _cpr_check_contains "direct call: Source tag defaults to agent-bash" "$e" "Source:    agent-bash"
+  if grep -qF -- "Source:    native-hook" "$e"; then
+    echo "  ${RED}FAIL${RESET} direct call: Source tag must NOT read native-hook (env unset)"
+    FAIL=$((FAIL+1))
+  else
+    echo "  ${GREEN}PASS${RESET} direct call: Source tag does not falsely claim native-hook"
+    PASS=$((PASS+1))
+  fi
+
+  # ── GSD_PLAN_REVIEW_SOURCE=native-hook set directly on check-plan-review.sh ─
+  # (isolates the _cpr_block() half of the contract from the wrapper).
+
+  s="$tmp/tagged"
+  phasedir="$(_cpr_enf_phase "$s" "08-tagged-source")"
+  e="$errdir/tagged.err"
+  ( cd "$s" && GSD_PLAN_REVIEW_SOURCE=native-hook bash "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ) >/dev/null 2>"$e"
+  local tagged_rc=$?
+  if [ "$tagged_rc" = "2" ]; then
+    echo "  ${GREEN}PASS${RESET} GSD_PLAN_REVIEW_SOURCE=native-hook: still blocks (exit=2)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} GSD_PLAN_REVIEW_SOURCE=native-hook: expected exit=2, got exit=$tagged_rc"
+    FAIL=$((FAIL+1))
+  fi
+  _cpr_check_contains "GSD_PLAN_REVIEW_SOURCE=native-hook: Source tag reads native-hook" "$e" "Source:    native-hook"
+
+  # ── End-to-end through hook-wrapper-plan-review.sh ──────────────────────────
+  # A realistic apply_patch PreToolUse payload (same shape 13-05-LIVE-SESSION.md
+  # section 3 captured), run with a scratch CODEX_HOME carrying only the real
+  # check-plan-review.sh so the wrapper's $GATE resolves. Never touches the
+  # operator's real ~/.codex/hook-wrapper-plan-review.log (CODEX_HOME is
+  # this test's own tmp dir).
+
+  if ! command -v jq >/dev/null 2>&1; then
+    echo "  ${YELLOW}SKIP${RESET} jq not available — wrapper end-to-end Source/log test not run"
+    SKIP=$((SKIP+1))
+  else
+    s="$tmp/wrapper-e2e"
+    phasedir="$(_cpr_enf_phase "$s" "08-wrapper-e2e")"
+    local codexhome="$tmp/codexhome"
+    mkdir -p "$codexhome/skills/agentic-apps-workflow/scripts"
+    cp "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" \
+       "$codexhome/skills/agentic-apps-workflow/scripts/check-plan-review.sh"
+
+    local payload wrapper_out wrapper_rc logfile
+    payload='{"tool_name":"apply_patch","tool_input":{"command":"*** Begin Patch\n*** Add File: NOTES-scratch.md\n+hello\n*** End Patch"}}'
+    wrapper_out="$(cd "$s" && printf '%s' "$payload" | CODEX_HOME="$codexhome" bash "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh")"
+    wrapper_rc=$?
+    logfile="$codexhome/hook-wrapper-plan-review.log"
+
+    if [ "$wrapper_rc" = "0" ]; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: deny-via-JSON path exits 0 (load-bearing contract)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: expected exit=0 (deny expressed via JSON), got exit=$wrapper_rc"
+      FAIL=$((FAIL+1))
+    fi
+
+    if printf '%s' "$wrapper_out" | grep -qF 'Source:    native-hook'; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: deny JSON reason carries Source: native-hook"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: deny JSON reason missing Source: native-hook — got: $wrapper_out"
+      FAIL=$((FAIL+1))
+    fi
+
+    if printf '%s' "$wrapper_out" | grep -qF 'File:      NOTES-scratch.md'; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: --file derivation survives portable sed fix (BSD/GNU)"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: --file was not derived (sed portability regression) — got: $wrapper_out"
+      FAIL=$((FAIL+1))
+    fi
+
+    if [ -f "$logfile" ] && grep -q 'tool_name=apply_patch' "$logfile"; then
+      echo "  ${GREEN}PASS${RESET} wrapper e2e: self-evidencing invocation log records tool_name=apply_patch"
+      PASS=$((PASS+1))
+    else
+      echo "  ${RED}FAIL${RESET} wrapper e2e: invocation log missing or missing tool_name=apply_patch — $(cat "$logfile" 2>/dev/null || echo '<no log file>')"
       FAIL=$((FAIL+1))
     fi
   fi
@@ -5825,6 +5975,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "hook-wrapper-plan-review" ]; then
   test_hook_wrapper_stderr_contract
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "hook-native-source" ]; then
+  test_hook_native_source_evidence
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "adr-0009-correction" ]; then

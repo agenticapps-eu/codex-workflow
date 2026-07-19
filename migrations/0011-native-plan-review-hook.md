@@ -54,6 +54,47 @@ carries `"matcher": "apply_patch"` — STEP 7 of the spike proved `apply_patch`
 IS covered by `PreToolUse` on codex-cli 0.144.4; no `Bash`-matcher arm is
 needed (RESEARCH.md Open Question 1).
 
+## Correction — 2026-07-19 (live verification, debug session `codex-hook-not-firing`)
+
+The first live end-to-end verification of this migration (plan `13-05`, on
+codex-cli 0.144.6) found that **as originally authored, this migration installed
+a hook that never fired.** Two stacked defects, both now fixed above:
+
+1. **Malformed entry schema (silent).** Step 1 wrote the entry FLAT —
+   `{"matcher","type","command"}` — but codex-cli expects the matcher group to
+   carry a nested `hooks` array: `{"matcher", "hooks":[{"type","command"}]}`.
+   A malformed entry is **dropped with no error and no warning**: `/hooks`
+   simply did not count it (`PreToolUse: Installed 2` — exactly the two
+   pre-existing global hooks). Corrected in Step 1's Idempotency check, Apply,
+   Rollback, and Post-check 1, and pinned by `run-tests.sh`
+   (`test_migration_0011` asserts the nested shape explicitly, so a regression
+   to the flat form fails the suite rather than shipping silently).
+
+2. **Gate B trust left un-surfaced.** The original Skip-cases called the
+   interactive hook-trust "not this migration's concern". That framing is what
+   made the failure invisible: with the schema fixed the entry loaded but sat
+   at `Installed 3, Active 2, Review 1` — **installed but not permitted to
+   run** — and an untrusted hook enforces nothing while looking installed. The
+   migration still (correctly) does not automate the trust action, but it must
+   not treat it as out of scope: Post-check 4 now REQUIRES the operator to
+   confirm `Active`, and Step 3's version seal is explicitly not a claim that
+   enforcement is live.
+
+**Why the spike missed both.** 13-01-SPIKE-FINDINGS.md validated the mechanism
+in a throwaway repo where the operator had granted hook trust by hand — that
+trust entry is still visible in `~/.codex/config.toml`
+(`[hooks.state."/private/tmp/gsd-phase13-spike/spike-repo/.codex/hooks.json:pre_tool_use:0:0"]`).
+The spike's conclusion was true **of the spike repo** and did not transfer,
+because the step that made it true was never carried into the migration. A
+spike that hand-configures its environment must record that configuration as a
+migration requirement, not just its own result.
+
+**Verified fixed:** with both corrections applied, a disallowed `apply_patch`
+edit was denied end-to-end in a live operator-observed session — codex reported
+`PreToolUse hook (blocked)`, the wrapper's own `Source: native-hook` label
+appeared in the denial, `~/.codex/hook-wrapper-plan-review.log` recorded
+`tool_name=apply_patch`, and the target file was never created.
+
 **The one-time interactive hook-trust action is NOT automated here, and must
 never be.** codex-cli's trust ledger is two independent gates — project trust
 (`[projects.<path>] trust_level`) and per-hook trust
@@ -109,11 +150,16 @@ occupy index 0):
 CODEX="${CODEX_HOME:-$HOME/.codex}"
 WRAPPER="$CODEX/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
 jq -e --arg cmd "$WRAPPER" \
-   '(.hooks.PreToolUse // [])[] | select(.command == $cmd)' \
+   '(.hooks.PreToolUse // [])[] | (.hooks // [])[] | select(.command == $cmd)' \
    .codex/hooks.json >/dev/null 2>&1
 ```
 (Returns 0 when the wrapper's entry already exists — a prior run of this
 migration, or a hand-installed identical entry; this step is then a no-op.)
+
+**Note the nested `(.hooks // [])[]` hop.** A matcher group holds its commands
+in a nested `hooks` array; the command is NOT a group-level key. Reading it at
+the group level (the pre-2026-07-19 form) never matches, which would make this
+check report "absent" on every run and append a duplicate entry each time.
 
 **Pre-condition:** the wrapper ships (checked in pre-flight); `jq` available.
 
@@ -132,8 +178,13 @@ fi
 # pre-existing unrelated vendor's PreToolUse entries or other hook-event
 # groups in the SAME file. `(. // [])` handles the first-run case where
 # `.hooks.PreToolUse` does not exist at all yet (T-13-04).
+#
+# SCHEMA (corrected 2026-07-19): the matcher group carries a NESTED `hooks`
+# array — {"matcher": ..., "hooks": [{"type","command"}]}. The flat form
+# {"matcher","type","command"} is silently DROPPED by codex-cli: no error, no
+# warning, and `/hooks` simply does not count the entry. See ## Correction.
 jq --arg cmd "$WRAPPER" \
-   '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{"matcher":"apply_patch","type":"command","command":$cmd}])' \
+   '.hooks.PreToolUse = ((.hooks.PreToolUse // []) + [{"matcher":"apply_patch","hooks":[{"type":"command","command":$cmd}]}])' \
    .codex/hooks.json > .codex/hooks.json.tmp \
   && mv .codex/hooks.json.tmp .codex/hooks.json
 ```
@@ -144,8 +195,12 @@ never touch a sibling vendor's entries or event groups (T-13-04):
 ```bash
 CODEX="${CODEX_HOME:-$HOME/.codex}"
 WRAPPER="$CODEX/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+# Drops the whole matcher GROUP whose nested hooks array carries the wrapper's
+# command. A sibling vendor's group — even one sharing the same matcher — is
+# selected on its own nested commands and therefore preserved.
 jq --arg cmd "$WRAPPER" \
-   '.hooks.PreToolUse = [(.hooks.PreToolUse // [])[] | select(.command != $cmd)]
+   '.hooks.PreToolUse = [(.hooks.PreToolUse // [])[]
+       | select(([(.hooks // [])[] | .command] | index($cmd)) == null)]
     | if (.hooks.PreToolUse // []) == [] then del(.hooks.PreToolUse) else . end
     | if (.hooks // {}) == {} then del(.hooks) else . end' \
    .codex/hooks.json > .codex/hooks.json.tmp \
@@ -252,13 +307,18 @@ step (no target project has one; see 0008's `## Notes`).
 ## Post-checks
 
 ```bash
-# 1. hooks.json carries the wrapper's PreToolUse entry, matcher apply_patch
-#    (ALWAYS true on success — sibling vendor entries, if any, are untouched
-#    but not asserted here since their presence is install-specific).
+# 1. hooks.json carries the wrapper's PreToolUse entry, matcher apply_patch,
+#    in the NESTED schema (ALWAYS true on success — sibling vendor entries, if
+#    any, are untouched but not asserted here since their presence is
+#    install-specific). The `.hooks[]` hop is load-bearing: it is what fails
+#    if the entry regresses to the silently-dropped flat form (## Correction).
 CODEX="${CODEX_HOME:-$HOME/.codex}"
 WRAPPER="$CODEX/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
 jq -e --arg cmd "$WRAPPER" \
-   '(.hooks.PreToolUse // [])[] | select(.command == $cmd and .matcher == "apply_patch")' \
+   '(.hooks.PreToolUse // [])[]
+      | select(.matcher == "apply_patch")
+      | (.hooks // [])[]
+      | select(.command == $cmd and .type == "command")' \
    .codex/hooks.json >/dev/null
 
 # 2. config.toml's [features] table carries hooks = true (ALWAYS true on success)
@@ -271,6 +331,33 @@ awk '
 
 # 3. Project version record bumped (ALWAYS true on success)
 grep -q '^0.8.0$' .codex/workflow-version.txt
+```
+
+### 4. REQUIRED operator check — the hook must be ACTIVE, not merely installed
+
+**Steps 1-3 passing does NOT mean the gate enforces anything.** An installed
+but untrusted hook is inert, and looks identical to a working one from the
+filesystem side. This check is the difference between "wired" and "enforcing",
+and it cannot be automated — Gate B is an interactive human decision by design.
+
+Run `codex` in the project, then `/hooks`, and read the `PreToolUse` row:
+
+| Reading | Meaning | Action |
+|---|---|---|
+| `Review 1` / warning `1 hook needs review before it can run` | Installed but **INERT — enforces nothing** | Approve the entry ending `hook-wrapper-plan-review.sh` |
+| `Active` count includes this hook, `Review 0` | Enforcing | Done |
+| Count unchanged from before the migration | Entry not parsed at all | Schema regression — see `## Correction` |
+
+Optional hard proof that the hook actually dispatches (not just that codex
+lists it): the wrapper appends one line per invocation, before any decision
+logic, to `${CODEX_HOME:-$HOME/.codex}/hook-wrapper-plan-review.log`. A line
+reading `tool_name=apply_patch` after an attempted edit is positive evidence
+the NATIVE hook ran — and is the only signal that cannot be confused with the
+prompt-based gate in `AGENTS.md`, whose block output is otherwise near-identical.
+
+```bash
+tail -3 "${CODEX_HOME:-$HOME/.codex}/hook-wrapper-plan-review.log" 2>/dev/null \
+  || echo "(no invocations recorded yet)"
 ```
 
 - Drift test green: this repo's own scaffolder trigger skill's SKILL.md
@@ -296,11 +383,18 @@ would make skip-with-warning recovery a no-op that reports success).
 - **No wrapper installed** → pre-flight aborts (`exit 4`) before any step
   runs — a hooks.json entry pointing at a missing wrapper is a gate that
   silently never fires (T-08-25's identical framing, applied here to HOOK-03).
-- **Hook not yet interactively trusted (Gate B)** → not this migration's
-  concern. The files are wired regardless; firing requires the operator's
-  one-time interactive trust action (see `## Notes`) — exactly the same
-  "config wired, invocation-time behavior handled separately" split 0008's
-  own skip-cases section draws for missing verifier CLIs.
+- **Hook not yet interactively trusted (Gate B)** → the migration completes,
+  but **enforcement is NOT yet live and the migration must say so.** This was
+  previously worded as "not this migration's concern"; that framing is exactly
+  what let an inert hook ship and be mistaken for a working one (see
+  `## Correction`). The trust action itself still cannot and must not be
+  automated — Gate B is an interactive human decision by design — but it is
+  now a REQUIRED, surfaced completion step (Post-check 4), not a footnote.
+  Distinguish this from 0008's "missing verifier CLI" split: there, the absent
+  piece announces itself loudly at invocation time. Here, an untrusted hook
+  fails **silently and open** — no error, no warning, and a `/hooks` row that
+  looks installed. Silent-open failure is the one case a migration may not
+  leave to the reader to notice.
 
 ## Compatibility
 
