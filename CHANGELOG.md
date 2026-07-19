@@ -16,11 +16,85 @@ in every shipped artifact's frontmatter.
 - Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
-- Native `~/.codex/hooks.json` `PreToolUse` binding for the plan-review gate
-  (D-02, ADR-0009 decision 9) — until it lands the gate is agent-mediated, not
-  enforced.
 - Real CI: `.github/workflows/ci.yml` is still the Phase 0 placeholder and
   verifies nothing; `migrations/run-tests.sh` runs only locally.
+
+## [0.9.0] — 2026-07-19
+
+### Changed
+
+- **The always-loaded `AGENTS.md` carried ~150 lines that only bind once a code
+  task is underway, and four of the five blocks were already duplicated in the
+  trigger skill** (migration `0012`). Core spec **0.10.0** added an
+  "Instruction-surface economy (eager vs lazy)" SHOULD to §12 (core ADR-0020),
+  extending §12 from *where in* the eager file prose sits to *what belongs in it
+  at all*: the always-loaded file carries the §11 canonical block plus a short
+  pointer to the trigger skill; procedural content lives in the lazily-loaded
+  skill.
+
+  `AGENTS.md` is injected on **every** turn, including turns that never touch
+  code, so its whole content is re-billed per turn. The §02 gate table, task-size
+  routing, the §15 ritual tail and the plan-review procedure all already existed
+  in `skills/agentic-apps-workflow/SKILL.md` — the plan-review section was
+  **byte-identical** between the two files, and §15 had been obliged to live in
+  the skill by core §15 since `0007`. Only the session-handoff protocol genuinely
+  moved; step 1 places it in the skill before step 2 removes it from `AGENTS.md`,
+  so the contract is never absent from both at once.
+
+  `AGENTS.md` goes **269 → 120 lines**.
+
+  **Enforcement did not move — only prose.** §12 is explicit that a host whose
+  runtime enforces a gate programmatically keeps the hook wiring where the
+  runtime needs it. The plan-review gate is the case in point: its *procedure*
+  moved to the skill, while `.codex/hooks.json`, `hook-wrapper-plan-review.sh`
+  and `check-plan-review.sh` are untouched — a test asserts it. Removing the
+  prose weakens no gate; the hook is what blocks, and it still does.
+
+  **The installer template is deliberately left heavy.** Slimming it too was
+  tried and is wrong: this host installs by **replay**, so
+  `templates/agents-md-additions.md` is an *input to the chain*, not the end
+  state, and migrations `0007`/`0008`/`0010` read their sections out of it.
+  Removing them breaks those immutable migrations — `0010` would silently insert
+  nothing, regressing the very D-06 defect it exists to heal, and a project that
+  stopped at `0010` would end up with §15 in neither file. A fresh install
+  applies the heavy template early and `0012` slims the result at the end of the
+  same replay, so it lands slim either way. The suite caught this.
+
+### Fixed
+
+- **The conformance citation had been stale by six spec versions.**
+  `implements_spec` read **0.4.0** while the repo already satisfied everything
+  through 0.9.1. Audited 2026-07-19: §02's `plan-review` gate (0.5.0), §15
+  knowledge capture (0.7.0), §04's red-flag composition rules (0.8.0) and §08's
+  setup end-state amendment (0.9.0) were all already satisfied by shipped
+  implementation.
+
+  **§14 (0.6.0) was the one real gap — and it was a declaration gap, not a code
+  gap.** This scaffolder builds no LLM prompts from non-self-authored values, so
+  §14's trigger condition cannot occur and it qualifies for trivial conformance
+  — but §09 requires the host to *say so*, and it never did. That undeclared
+  state was the sole substantive barrier to any claim at or above 0.6.0. Now
+  declared in `docs/ENFORCEMENT-PLAN.md` and the trigger skill's new
+  `## Spec deltas` section, with downstream coverage delegated to
+  `injection-guard`. Migration `0012` step 5 **refuses to advance the claim**
+  unless step 4 (the declaration) has landed.
+
+  Claim advances **0.4.0 → 0.10.0** on `skills/agentic-apps-workflow/SKILL.md`
+  only — spec/09 makes that file the normative carrier. The gate, GSD-entry and
+  lifecycle skills keep `implements_spec: 0.4.0`: they cite the *gate contract*
+  they implement, not the host claim, and those contracts are unchanged. A test
+  pins that distinction so a future bulk sed cannot collapse it.
+
+  Also corrected while here: `docs/ENFORCEMENT-PLAN.md` records §08 as satisfied
+  **by replay**. Core's own CHANGELOG (v0.9.0) asserts this host "installs from a
+  snapshot" and therefore carries pre-0.9.0 §08 exposure — that is false. Setup
+  walks `0000`→latest step by step, there is no `check-snapshot-parity.sh`, and
+  CI runs only `run-tests.sh`. Replay is §08's first-listed strategy, so the
+  drift-guard obligation never applied here.
+
+  Suite: **453 → 468 PASS / 0 FAIL / 1 SKIP** (15 new `0012` assertions, whose
+  transform is extracted from the migration document and executed so the test
+  cannot drift from what ships).
 
 ## [0.7.0] — 2026-07-15
 
