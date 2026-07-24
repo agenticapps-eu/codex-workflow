@@ -3990,6 +3990,56 @@ test_migration_0013() {
     rm -rf "$tmp"
   fi
 
+  # ── The agent-agnostic FLOOR: pre-commit + CI driver ──────────────────────
+  # The per-agent hook is faster feedback; these two are the guarantee, because
+  # a PreToolUse hook cannot gate the session that installed it. Untested, the
+  # "floor" is a claim rather than a control.
+  local precommit="$REPO_ROOT/bin/git-hooks/pre-commit"
+  local ciDriver="$REPO_ROOT/bin/openspec-gate-ci.sh"
+  if [ ! -x "$precommit" ] || [ ! -x "$ciDriver" ]; then
+    _m0013_fail "bin/git-hooks/pre-commit or bin/openspec-gate-ci.sh missing/not executable"
+  else
+    tmp="$(mktemp -d)"
+    (
+      cd "$tmp" && git init -q . \
+        && git config user.email t@t && git config user.name t \
+        && git commit -q --allow-empty -m base
+    )
+    install -m 0755 "$precommit" "$tmp/.git/hooks/pre-commit"
+    local rc
+
+    # No spec slot -> the floor must not block ordinary work.
+    ( cd "$tmp" && echo x > a.txt && git add a.txt \
+      && OPENSPEC_CHANGE_GATE="$gate" git commit -q -m "no slot" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: pre-commit allows a commit when the repo has no openspec/ (exit 0, got $rc)"
+
+    mkdir -p "$tmp/openspec/changes/add-thing"
+    ( cd "$tmp" && echo y > b.txt && git add b.txt \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m "unreviewed" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -ne 0 ] && echo 0 || echo 1)" "floor: pre-commit BLOCKS code staged under an unreviewed active change (non-zero, got $rc)"
+
+    # Authoring the change itself must never be blocked.
+    ( cd "$tmp" && git reset -q HEAD b.txt; echo z > openspec/changes/add-thing/proposal.md \
+      && git add openspec && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m "author the change" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: pre-commit allows a commit that stages ONLY openspec/ artifacts (exit 0, got $rc)"
+
+    printf '# r\n\n## Reviewer: gemini\nx\n\n## Reviewer: claude\nx\n' > "$tmp/openspec/changes/add-thing/REVIEWS.md"
+    ( cd "$tmp" && git add -A \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m "reviewed" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: pre-commit allows code once validate is green and 2 reviewers exist (exit 0, got $rc)"
+
+    # The documented override must actually work, or operators reach for
+    # --no-verify and lose the log line entirely.
+    ( cd "$tmp" && rm -f openspec/changes/add-thing/REVIEWS.md && echo w > c.txt && git add -A \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true GSD_SKIP_REVIEWS=1 git commit -q -m "override" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: GSD_SKIP_REVIEWS=1 overrides the pre-commit block (exit 0, got $rc)"
+
+    # CI driver: same gate, PR-diff file set instead of the staged set.
+    ( cd "$tmp" && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true bash "$ciDriver" HEAD~1 ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -ne 0 ] && echo 0 || echo 1)" "floor: the CI driver blocks the same unreviewed change (non-zero, got $rc)"
+    rm -rf "$tmp"
+  fi
+
   # ── Live repo is at the 1.0.0 end state (dogfooding) ───────────────────────
   if jq -e '.lifecycle.validate.change_gate and .lifecycle.validate.multi_ai_review and .front_end == "openspec" and .implements_spec == "1.0.0"' \
        "$REPO_ROOT/.planning/config.codex.json" >/dev/null 2>&1 \
