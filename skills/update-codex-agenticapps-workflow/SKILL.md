@@ -1,7 +1,7 @@
 ---
 name: update-codex-agenticapps-workflow
-version: 0.1.0
-implements_spec: 0.4.0
+version: 1.0.0
+implements_spec: 1.0.0
 description: |
   Update an installed codex-workflow project to the current scaffolder
   version by applying pending migrations between the project's
@@ -12,7 +12,9 @@ description: |
   migrations in `${CODEX_HOME}/skills/update-codex-agenticapps-workflow/migrations/`,
   pre-flights required external skills, applies each step with diff
   preview + per-step confirm, bumps the version on success, commits
-  atomically. Supports `--dry-run` for diff-only output.
+  atomically. Supports `--dry-run` for diff-only output. Carries the
+  planning→openspec recipe (`recipes/0001-planning-to-openspec.md`) for
+  projects crossing the 0.x → 1.0.0 front-end change.
 ---
 
 # update-codex-agenticapps-workflow
@@ -172,6 +174,37 @@ on).
   the durable record; missing the bump leaves the project in an
   inconsistent state where the next update would re-apply the
   migration.
+
+## The 0.9.0 → 1.0.0 transition (migration `0013`)
+
+`0013` is the largest migration in the chain: it replaces the **planning**
+front end (GSD phases → OpenSpec changes) while leaving the **execution**
+discipline untouched. Three things about it differ from an ordinary step.
+
+1. **It has a companion recipe, and the migration does not run it.**
+   `0013` installs the machinery — the spec slot, the §18 change-gate at all
+   three surfaces, the collapsed gate set, the lifecycle config. Reconstructing
+   `openspec/specs/` from a project's existing `.planning/` history is a
+   separate, **human-supervised** job: `recipes/0001-planning-to-openspec.md`,
+   resolved at
+   `${CODEX_HOME:-$HOME/.codex}/skills/update-codex-agenticapps-workflow/recipes/`
+   (a committed symlink, same convention as `migrations`). Offer it after
+   `0013` completes; never run its Tier 2 unattended. Its merge-not-mirror rule
+   matters: one-phase-one-spec just recreates `.planning/`'s fragmentation
+   inside `specs/`.
+
+2. **`.planning/` is moved, never deleted** — and on this host two files stay
+   behind: `.planning/config.json` (knowledge capture, §15) and
+   `.planning/config.codex.json` (gate bindings) are runtime config, not
+   history. The recipe's Step 1 note covers this.
+
+3. **The hook needs the operator, and the migration cannot do it.** After
+   `0013`, tell the user to start a fresh Codex session and run `/hooks` to
+   confirm the openspec-gate entry is **Active**, not "Review". An untrusted
+   hook enforces nothing while looking installed — verified the hard way in
+   phase 13. Until it is trusted, the git `pre-commit` hook and the CI check
+   are the enforcement. Post-checks that only assert the entry EXISTS are not
+   sufficient; `0013`'s post-checks require the trust verification explicitly.
 
 ## Notes for the Codex host
 

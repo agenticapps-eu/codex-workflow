@@ -1,12 +1,15 @@
 ---
 name: setup-codex-agenticapps-workflow
-version: 0.1.0
-implements_spec: 0.4.0
+version: 1.0.0
+implements_spec: 1.0.0
 description: |
   Bootstrap a fresh project with the codex-workflow scaffolding —
   apply the baseline migration to install the trigger skill's
   required project-side artifacts (AGENTS.md sections, .planning/config.codex.json,
-  .codex/workflow-config.md, docs/decisions/, .codex/workflow-version.txt).
+  .codex/workflow-config.md, docs/decisions/, .codex/workflow-version.txt),
+  then walk the chain to the current version — which scaffolds the OpenSpec
+  spec slot, installs the §18 change-gate at all three surfaces (PreToolUse
+  hook, git pre-commit, CI), and lays down the collapsed 1.0.0 gate set.
   Use when a project is freshly cloned or initialized and the user
   asks to "set up the workflow", "add agenticapps workflow", "enable
   codex-workflow", "install the discipline layer", "scaffold this
@@ -119,6 +122,21 @@ review.
    - `AGENTS.md` contains the section heading
      `## Knowledge Capture — Ritual Tail (spec §15)` inside the marker block.
 
+   When the chain reaches `1.0.0` (migration `0013`), also confirm the
+   OpenSpec end state:
+   - `openspec/` carries the three-slot layout (`specs/`, `changes/`,
+     `changes/archive/`) and `openspec validate --all` runs clean
+   - `test -x "$HOME/.agenticapps/bin/openspec-change-gate.sh"`
+   - `.codex/hooks.json` names `hook-wrapper-openspec-gate.sh` in a
+     **nested** `{"matcher", "hooks":[{"type","command"}]}` group — the flat
+     form is dropped by codex-cli with no error and no warning
+   - a `pre-commit` hook is installed in the project's git hooks dir
+   - `jq -e '.lifecycle.validate.change_gate' .planning/config.codex.json`
+   - the gate blocks by direct invocation:
+     `printf '{"tool":"edit","tool_input":{"file_path":"x.go"}}' | ~/.agenticapps/bin/openspec-change-gate.sh`
+     exits 0 with no active change, and 2 once a change is open without
+     `REVIEWS.md`
+
    > **Note — where §11's placement comes from (do not add it here).**
    > Setup deliberately carries **no §11 Coding Discipline placement logic**.
    > `0000-baseline.md`'s **Step 3** (`:102`) is a plain append of
@@ -145,9 +163,22 @@ review.
    ```
 
 10. **Surface follow-ups.** Tell the user:
-    - The project is now at `codex-workflow v0.1.0`
-    - Next step: run `/prompts:gsd-discuss-phase 1` to start a planning
-      session for the first phase
+    - The project is now at the current `codex-workflow` version (the
+      baseline lands `0.1.0`; the chain carries it to `1.0.0`)
+    - **Trust the hook.** Start a fresh Codex session, run `/hooks`, and
+      confirm the openspec-gate entry is **Active**, not "Review". An
+      untrusted hook enforces nothing while looking installed — the git
+      pre-commit and CI checks cover the gap until it is trusted.
+    - Next step: open the first change — `$openspec-propose` (or
+      `openspec new change <slug>`), then `openspec validate --all`, then
+      `codex-openspec-change-review` before any code. See
+      [`docs/WORKFLOW.md`](../../docs/WORKFLOW.md).
+    - If the project has existing `.planning/` history, run the
+      **planning→openspec recipe** (core `docs/recipes/0001-planning-to-openspec.md`,
+      carried by `$update-codex-agenticapps-workflow`) to seed
+      `openspec/specs/` — merging related phases into coherent
+      capabilities, never one-phase-one-spec. `.planning/` is moved to
+      `docs/legacy-planning/`, never deleted.
     - Future scaffolder updates: run
       `$update-codex-agenticapps-workflow` periodically; the skill
       reads `.codex/workflow-version.txt` and applies pending
@@ -155,9 +186,12 @@ review.
 
 ## Required evidence (per spec/06)
 
-- `.codex/workflow-version.txt` exists with content `0.1.0`
-- `.planning/config.codex.json` is valid JSON with all `hooks` keys from
-  the template
+- `.codex/workflow-version.txt` exists with content `0.1.0` immediately
+  after the baseline, and the chain's latest `to_version` once the full
+  replay completes
+- `.planning/config.codex.json` is valid JSON — with the `hooks` keys from
+  the template at `0.1.0`, and the `lifecycle` tree (`front_end`,
+  `openspec`, `lifecycle.validate.change_gate`) once `0013` has applied
 - `AGENTS.md` contains the marker pair
   `<!-- BEGIN: agentic-apps-workflow sections -->` ... `<!-- END: agentic-apps-workflow sections -->`
 - `docs/decisions/README.md` exists
