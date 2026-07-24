@@ -126,7 +126,10 @@ review.
    > so setup lands the project at `0.1.0` with no §11 block and no anchor
    > rule of its own. §11 arrives via **migration `0001`** in the subsequent
    > update chain, and its placement (above any leading GitNexus region) is
-   > healed by **migration `0009`**. The anchor rule has exactly one source:
+   > healed by **migration `0009`**. GitNexus itself was removed from every
+   > live surface at workflow `1.0.0` (ADR-0011), so a *new* project never
+   > grows that region — `0009` stays in the chain for projects that already
+   > carry one. The anchor rule has exactly one source:
    > the migration chain. If you are here to change where §11 lands, this is
    > the wrong file — see
    > [`docs/decisions/0010-region-aware-spec-11-placement.md`](../../docs/decisions/0010-region-aware-spec-11-placement.md)
