@@ -1,5 +1,17 @@
 # codex-workflow as a binding (not a re-port)
 
+> **Amendment — v1.0.0 (ADR-0011).** The **rule** below is unchanged and is the
+> whole point of this document: bind upstream, generate per host, never
+> re-port. Only its *subject* moved. At v1.0.0 the **planning** upstream is
+> **OpenSpec** (`@fission-ai/openspec`, installed via `install.sh`, initialised
+> with `openspec init --tools codex --profile core`), not the GSD phase engine.
+> Superpowers is unchanged and remains the execution upstream. Core spec §16
+> states the same rule for OpenSpec that ADR-0007 stated for GSD, so this is a
+> continuation rather than a reversal. The GSD layer below is retained as the
+> 0.x record; for the current picture read
+> [`WORKFLOW.md`](WORKFLOW.md) and
+> [ADR-0011](decisions/0011-openspec-superpowers-adoption.md).
+
 As of this change, `codex-workflow` no longer re-implements GSD or Superpowers
 for Codex. It **binds** to the maintained upstream distributions and ships only
 the genuinely-AgenticApps layer on top. See
