@@ -3688,11 +3688,19 @@ test_migration_0012() {
   fi
 
   # 10. Relocated procedures present in the trigger skill.
+  #
+  # RELAXED at 1.0.0 (migration 0013): 0012's invariant is that these PROCEDURES
+  # live in the lazily-loaded trigger skill rather than the eager AGENTS.md. The
+  # multi-AI review procedure still does — but 0013 retargets it from a GSD
+  # `*-PLAN.md` to the active OpenSpec change, and §17 forbids the old
+  # "Pre-execution Gate — Plan Review" NAME under 1.0.0. Matching either heading
+  # keeps the real assertion (the procedure is in the skill) and drops the part
+  # that was only ever a snapshot of what it was called that week.
   if grep -q '^## Session handoff$' "$skill" \
      && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$skill" \
-     && grep -q '^## Pre-execution Gate — Plan Review (spec §02)$' "$skill" \
+     && grep -qE '^## (Pre-execution Gate — Plan Review \(spec §02\)|Stage 2 — Validate \+ multi-AI change review \(spec §17 / §18\))$' "$skill" \
      && grep -q '^## Instruction surface — eager vs lazy (spec §12)$' "$skill"; then
-    echo "  ${GREEN}PASS${RESET} handoff, §15 tail, plan-review and §12 rationale in trigger skill"; PASS=$((PASS+1))
+    echo "  ${GREEN}PASS${RESET} handoff, §15 tail, change-review and §12 rationale in trigger skill"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} a relocated procedure is missing from the trigger skill"; FAIL=$((FAIL+1))
   fi
