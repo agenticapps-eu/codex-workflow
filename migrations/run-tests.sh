@@ -2649,7 +2649,7 @@ test_check_plan_review_enforcement() {
   # relative to that root (e.g. .planning/phases/08-block-basic), not the
   # sandbox's own absolute $phasedir.
   _cpr_check_contains "block: stderr names the resolved phase dir" "$e" ".planning/phases/08-block-basic"
-  _cpr_check_contains "block: stderr names codex-plan-review remedy" "$e" "codex-plan-review"
+  _cpr_check_contains "block: stderr names codex-openspec-change-review remedy" "$e" "codex-openspec-change-review"
   _cpr_check_contains "block: stderr names GSD_SKIP_REVIEWS hatch" "$e" "GSD_SKIP_REVIEWS"
   _cpr_check_contains "block: stderr names multi-ai-review-skipped hatch" "$e" "multi-ai-review-skipped"
 
@@ -3382,7 +3382,7 @@ MD
 # check-plan-review.sh — producer <-> verifier contract suite (phase 08, plan 02)
 #
 # Reads the REAL repo-root artifacts (this repo's own 08-REVIEWS.md and the
-# codex-plan-review skill's reviews-skeleton) rather than inline fixtures --
+# codex-openspec-change-review skill's reviews-skeleton) rather than inline fixtures --
 # deliberately, per this plan's <action>: an inline copy of the schema only
 # proves the verifier parses the test author's idea of the schema. If either
 # real artifact is absent, these cases FAIL (never SKIP) -- their absence is
@@ -3398,7 +3398,7 @@ test_check_plan_review_contract() {
   mkdir -p "$tmp/.planning/phases"
 
   local real_reviews="$REPO_ROOT/.planning/phases/08-plan-review-gate/08-REVIEWS.md"
-  local skill_md="$REPO_ROOT/skills/codex-plan-review/SKILL.md"
+  local skill_md="$REPO_ROOT/skills/codex-openspec-change-review/SKILL.md"
 
   # ── Real-artifact round trip ─────────────────────────────────────────────────
 
@@ -3542,7 +3542,7 @@ test_check_plan_review_contract() {
     ( cd "$s3/.planning" && ln -sf "phases/08-skeleton" current-phase )
     _cpr_case "contract: skeleton with reviewers: [gemini, gemini] -> exit 2 (vendor-diversity spoof)" "$s3" 2
   else
-    echo "  ${RED}FAIL${RESET} contract: skills/codex-plan-review/SKILL.md missing (always a FAIL, never skipped)"
+    echo "  ${RED}FAIL${RESET} contract: skills/codex-openspec-change-review/SKILL.md missing (always a FAIL, never skipped)"
     FAIL=$((FAIL+1))
   fi
 
@@ -3705,17 +3705,37 @@ test_migration_0012() {
   fi
 
   # 12. Claim advanced, and ONLY on the normative carrier.
-  if grep -q '^implements_spec: 0.10.0$' "$skill" \
+  #
+  # RELAXED at 1.0.0 (migration 0013): this check originally pinned the live
+  # trigger skill to the exact string `implements_spec: 0.10.0`, which made it
+  # a snapshot of 0012's end state rather than an assertion about 0012's SCOPE.
+  # The durable invariant is the one 0012 actually established: the §09
+  # conformance citation advanced past 0.4.0 on the trigger skill ONLY, and no
+  # gate skill's own contract citation was collaterally dragged along with it.
+  # (0013 leaves gate skills at 0.4.0 deliberately — the §02 gate contracts they
+  # fulfil are unchanged under 1.0.0 §17; only the host's citation moves.)
+  if grep -qE '^implements_spec: (0\.10\.0|1\.0\.0)$' "$skill" \
      && grep -q '^implements_spec: 0.4.0$' "$REPO_ROOT/skills/codex-cso/SKILL.md"; then
-    echo "  ${GREEN}PASS${RESET} claim 0.10.0 on the trigger skill; gate skills still cite their contract"; PASS=$((PASS+1))
+    echo "  ${GREEN}PASS${RESET} claim advanced on the trigger skill; gate skills still cite their contract"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} claim not advanced, or a gate skill's contract citation was collaterally bumped"; FAIL=$((FAIL+1))
   fi
 
   # 13. Enforcement untouched — the point of the whole scope note.
-  if grep -q 'hook-wrapper-plan-review.sh' "$REPO_ROOT/.codex/hooks.json" \
-     && [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ]; then
-    echo "  ${GREEN}PASS${RESET} plan-review hook wiring untouched by the prose relocation"; PASS=$((PASS+1))
+  #
+  # RELAXED at 1.0.0 (migration 0013): 0012's claim was "the PROSE moved, the
+  # enforcement did not." That claim is about 0012, and it still holds — but the
+  # original check spelled it as "hooks.json names hook-wrapper-plan-review.sh",
+  # which 0013 legitimately changes when it retargets the hook to the §18
+  # OpenSpec change-gate. Asserting the frozen wrapper NAME would now forbid a
+  # later migration from ever retargeting enforcement, which is not what this
+  # test is for. The durable invariant: a PreToolUse wrapper is still wired, and
+  # its verifier script still exists on disk. Enforcement was never dropped —
+  # only ever retargeted.
+  if grep -qE 'hook-wrapper-(plan-review|openspec-gate)\.sh' "$REPO_ROOT/.codex/hooks.json" \
+     && [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ] \
+     && [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh" ]; then
+    echo "  ${GREEN}PASS${RESET} PreToolUse enforcement still wired (0.x verifier + 1.0.0 change-gate wrapper both present)"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} plan-review enforcement disturbed — prose moved but so did the hook"; FAIL=$((FAIL+1))
   fi
@@ -3824,7 +3844,7 @@ test_repo_layout() {
     skills/codex-ts-declare-first/templates/example.test.ts \
     skills/codex-ts-declare-first/templates/example.impl.ts \
     skills/agentic-apps-workflow/scripts/check-plan-review.sh \
-    skills/codex-plan-review/SKILL.md \
+    skills/codex-openspec-change-review/SKILL.md \
     migrations/0008-plan-review-gate.md \
     docs/decisions/0009-plan-review-gate.md \
     skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh \
