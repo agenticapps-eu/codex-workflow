@@ -1,0 +1,39 @@
+name: openspec-gate
+
+# The agent-agnostic enforcement floor for the §18 OpenSpec change-gate.
+#
+# The per-agent PreToolUse hook (.codex/hooks.json) gives fast feedback but is
+# loaded at session start and cannot gate the session that installed it. This
+# job — together with the git pre-commit hook — is the floor: it catches code
+# pushed by ANY agent or a human.
+#
+# It no-ops on a repo with no openspec/changes/ (see bin/openspec-gate-ci.sh),
+# so it is safe to enable before the spec slot is initialised.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0   # the CI driver diffs against the base ref
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the OpenSpec CLI
+        run: npm i -g @fission-ai/openspec
+
+      - name: Run the change gate over the PR diff
+        # Passed via env, never interpolated into the shell line (workflow
+        # injection hygiene), even though base.sha is a git SHA.
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash bin/openspec-gate-ci.sh "${BASE_SHA:-HEAD~1}"

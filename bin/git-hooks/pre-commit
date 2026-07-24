@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# pre-commit — agent-agnostic floor for the §18 OpenSpec change-gate.
+#
+# The per-agent hooks (Claude PreToolUse, opencode plugin, Codex hooks.json)
+# give fast feedback but each is loaded at session start and cannot gate the
+# session that installed it. This git pre-commit hook is the floor: it catches
+# code committed by ANY agent or a human, including the installing session.
+#
+# It reuses the SAME enforcement script (openspec-change-gate.sh, §18): for each
+# staged file that is NOT an OpenSpec artifact, it pipes a synthesized payload
+# to the gate; if the gate blocks (exit 2), the commit is refused.
+#
+# Bypass (documented, same posture as the per-agent escape hatch):
+#   GSD_SKIP_REVIEWS=1 git commit ...      # deliberate, logged override
+#   git commit --no-verify ...             # git's own bypass
+#
+# Resolution order for the gate script: $OPENSPEC_CHANGE_GATE,
+# ~/.agenticapps/bin/openspec-change-gate.sh, then repo-local bin/.
+set -u
+
+GATE=""
+for c in "${OPENSPEC_CHANGE_GATE:-}" \
+         "$HOME/.agenticapps/bin/openspec-change-gate.sh" \
+         "$(git rev-parse --show-toplevel 2>/dev/null)/bin/openspec-change-gate.sh"; do
+  [ -n "$c" ] && [ -x "$c" ] && { GATE="$c"; break; }
+done
+# No gate installed → nothing to enforce (fail open; the CI check still runs).
+[ -n "$GATE" ] || exit 0
+
+# No openspec/ → repo hasn't adopted the spec slot yet → nothing to gate.
+[ -d "openspec/changes" ] || exit 0
+
+blocked=0
+# Staged, added/copied/modified files only.
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  case "$f" in openspec/*) continue ;; esac   # authoring the change is exempt
+  payload="{\"tool\":\"edit\",\"tool_input\":{\"file_path\":\"$f\"}}"
+  if ! printf '%s' "$payload" | "$GATE"; then
+    blocked=1
+    break   # one block is enough; the gate already explained why on stderr
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM)
+
+if [ "$blocked" -ne 0 ]; then
+  echo "pre-commit: blocked by the OpenSpec change-gate (§18)." >&2
+  echo "  The active change must pass 'openspec validate --all' AND carry" >&2
+  echo "  REVIEWS.md with >=2 '## Reviewer:' sections before code is committed." >&2
+  echo "  Override (logged): GSD_SKIP_REVIEWS=1 git commit ...   or   git commit --no-verify" >&2
+  exit 1
+fi
+exit 0

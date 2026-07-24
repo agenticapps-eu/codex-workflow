@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/Users/donald/.codex/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+            "command": "/Users/donald/.codex/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
           }
         ]
       }
