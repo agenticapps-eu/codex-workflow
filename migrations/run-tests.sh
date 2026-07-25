@@ -4116,143 +4116,189 @@ test_migration_0013() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# test_gate_known_gaps (GAP-01) — pin the shared gate's KNOWN DEFECTS
+# test_migration_0014 — the canonical §18 gate, vendored and proven
 #
-# This repo ships bin/openspec-change-gate.sh byte-identical to the copy
-# opencode merged, because §18's design is ONE shared enforcement script. That
-# copy has four verified defects (docs/GATE-KNOWN-GAPS.md). They are not patched
-# here: patching locally would fork the shared script a fifth way, and
-# agenticapps-workflow-core owns the canonical fix.
+# Supersedes test_gate_known_gaps. That function pinned the gate's sha256 and
+# reported four defects as KNOWN-GAP, because the canonical fix did not exist
+# and patching locally would have forked the shared script a fifth way. The
+# canonical landed (core#33, ADR-0022), so the gaps are now REGRESSIONS, and
+# this function asserts them as such.
 #
-# So this function asserts the defects are STILL PRESENT, exactly as documented,
-# and reports each as KNOWN-GAP rather than PASS. That is deliberate:
+# Four legs, in order of how much they can be trusted:
 #
-#   - A silent defect is the thing that bites. A pinned, reproduced, labelled
-#     one is tracked work.
-#   - The sha256 pin means the moment anyone re-syncs the gate, this FAILS and
-#     demands every reproduction be re-verified. A gap must never be assumed
-#     fixed because the script moved.
+#   1. CONFORMANCE (unconditional). Score the vendored gate with the vendored
+#      harness. The bar is "zero failing rows", never a literal count — the
+#      harness grows, and a hardcoded number reads like verification while
+#      verifying less than the instrument offers.
+#   2. PROVENANCE (unconditional). The sidecar manifest records core's commit
+#      and each vendored file's sha256. This runs with no core checkout, which
+#      is the common CI case, and is what remains of the old integrity pin.
+#   3. BYTE-IDENTITY (conditional). Compare against a real core checkout when
+#      one resolves. SKIPs loudly when it does not — a silent pass and a
+#      verified match must never look alike.
+#   4. UNCOVERED REGRESSIONS (unconditional). GAP-1 and GAP-4 are fixed by the
+#      canonical but covered by NO harness row. Without these two assertions a
+#      future re-vendor could regress them and still score every declared row
+#      green.
 #
-# When the canonical lands: re-run every case, flip each to a hard assertion in
-# test_migration_0013, and delete docs/GATE-KNOWN-GAPS.md.
+# The vendored files carry NO local header. A "vendored from <commit>" comment
+# would itself break the byte-identity it claimed to record, which is why the
+# provenance lives in tools/core-vendor.manifest instead.
 # ─────────────────────────────────────────────────────────────────────────────
-_gap() {  # _gap <expected-current-exit> <actual> <label>
-  if [ "$2" = "$1" ]; then
-    echo "  ${YELLOW}KNOWN-GAP${RESET} $3 (still exit $2, as recorded)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} $3 — behaviour CHANGED (expected exit $1, got $2)."
-    echo "         Re-verify docs/GATE-KNOWN-GAPS.md before trusting this."
-    FAIL=$((FAIL+1))
-  fi
+_m0014_core_root() {   # echo a core checkout path, or nothing
+  local c
+  for c in "${AGENTICAPPS_CORE_ROOT:-}" \
+           "$REPO_ROOT/../agenticapps-workflow-core"; do
+    [ -n "$c" ] && [ -d "$c/reference-implementations/openspec-change-gate" ] && { printf '%s' "$c"; return; }
+  done
 }
 
-test_gate_known_gaps() {
+_m0014_manifest_field() {   # _m0014_manifest_field <key>
+  grep -m1 "^$1=" "$REPO_ROOT/tools/core-vendor.manifest" 2>/dev/null | cut -d= -f2-
+}
+
+test_migration_0014() {
   echo ""
-  echo "${YELLOW}=== Shared change-gate — pinned known gaps (docs/GATE-KNOWN-GAPS.md) ===${RESET}"
+  echo "${YELLOW}=== Migration 0014 — canonical §18 change-gate, vendored from core ===${RESET}"
 
   local gate="$REPO_ROOT/bin/openspec-change-gate.sh"
-  local doc="$REPO_ROOT/docs/GATE-KNOWN-GAPS.md"
-  local pinned="a32678b32c40fb0f2ba1740b9663c178687bf99ef10821c88a77c52c1bbdfdb0"
+  local harness="$REPO_ROOT/tools/change-gate-conformance.sh"
+  local manifest="$REPO_ROOT/tools/core-vendor.manifest"
 
-  if [ ! -f "$doc" ]; then
-    echo "  ${RED}FAIL${RESET} docs/GATE-KNOWN-GAPS.md missing — the gaps are undocumented but still shipped"
+  # ── Leg 0: the instrument and the provenance record must both exist ────────
+  if [ ! -x "$harness" ]; then
+    echo "  ${RED}FAIL${RESET} tools/change-gate-conformance.sh missing/not executable — the gate cannot be scored, so nothing below is trustworthy"
+    FAIL=$((FAIL+1)); return
+  fi
+  if [ ! -f "$manifest" ]; then
+    echo "  ${RED}FAIL${RESET} tools/core-vendor.manifest missing — vendored files with no recorded provenance"
     FAIL=$((FAIL+1)); return
   fi
 
-  # 1. The fingerprint pin. A changed gate means someone re-synced (or patched
-  #    locally); either way every gap below must be re-verified by a human.
-  local actual; actual="$(shasum -a 256 "$gate" 2>/dev/null | cut -d' ' -f1)"
-  if [ "$actual" = "$pinned" ]; then
-    echo "  ${GREEN}PASS${RESET} gate fingerprint matches the pin in docs/GATE-KNOWN-GAPS.md"
+  # ── Leg 1: CONFORMANCE — zero failing rows, whatever the row count is ──────
+  local out rows_failed rows_total
+  out="$(bash "$harness" "$gate" 2>&1)"
+  rows_failed="$(printf '%s' "$out" | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
+  rows_total="$(printf '%s' "$out" | sed -n 's/.*── \([0-9]*\) passed, [0-9]* failed, [0-9]* inconclusive of \([0-9]*\) rows.*/\2/p' | tail -1)"
+  if [ "${rows_failed:-x}" = "0" ]; then
+    echo "  ${GREEN}PASS${RESET} conformance: 0 failing rows of ${rows_total:-?} (bar is zero-failures, not a fixed count)"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} gate fingerprint CHANGED — expected $pinned, got ${actual:-<none>}."
-    echo "         The gate was re-synced or patched. Re-run every reproduction in"
-    echo "         docs/GATE-KNOWN-GAPS.md, flip the fixed ones to hard assertions in"
-    echo "         test_migration_0013, and update or delete that file. Do NOT just"
-    echo "         re-pin the hash."
-    FAIL=$((FAIL+1)); return
-  fi
-
-  # 2. Also pin that the doc still names all four, so a gap cannot be quietly
-  #    dropped from the record while it is still live in the script.
-  local n; n="$(grep -c '^### GAP-[1-4] ' "$doc" 2>/dev/null || echo 0)"
-  if [ "$n" = "4" ]; then
-    echo "  ${GREEN}PASS${RESET} all four gaps are still recorded in docs/GATE-KNOWN-GAPS.md"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} docs/GATE-KNOWN-GAPS.md records $n/4 gaps — one was dropped from the record"
+    echo "  ${RED}FAIL${RESET} conformance: ${rows_failed:-<unparsed>} failing rows of ${rows_total:-?}"
+    printf '%s\n' "$out" | grep -E '^  FAIL' | sed 's/^/         /'
     FAIL=$((FAIL+1))
   fi
 
+  # ── Leg 2: PROVENANCE — sha256s hold, and ONE core commit for both files ───
+  # Per-file identity cannot catch a gate from commit A paired with a harness
+  # from commit B; a single core_commit for the whole manifest makes that
+  # combination unrepresentable rather than merely detectable.
+  local commit; commit="$(_m0014_manifest_field core_commit)"
+  if [ -n "$commit" ]; then
+    echo "  ${GREEN}PASS${RESET} manifest names a single core commit (${commit:0:12})"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} tools/core-vendor.manifest has no core_commit"
+    FAIL=$((FAIL+1))
+  fi
+
+  local bad=0 f expect actual
+  while read -r f expect; do
+    [ -n "$f" ] || continue
+    actual="$(shasum -a 256 "$REPO_ROOT/$f" 2>/dev/null | awk '{print $1}')"
+    if [ "$actual" != "$expect" ]; then
+      echo "  ${RED}FAIL${RESET} $f does not match its manifest sha256 — it was edited locally, or the manifest is stale"
+      echo "         expected $expect"
+      echo "         actual   ${actual:-<file missing>}"
+      bad=1
+    fi
+  done < <(grep '^file=' "$manifest" | sed -E 's/^file=([^ ]+) sha256=(.*)$/\1 \2/')
+  if [ "$bad" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} every vendored file matches its recorded sha256"
+    PASS=$((PASS+1))
+  else
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Leg 3: BYTE-IDENTITY vs core — conditional, and LOUD when skipped ──────
+  local core; core="$(_m0014_core_root)"
+  if [ -z "$core" ]; then
+    echo "  ${YELLOW}SKIP${RESET} byte-identity vs core: no checkout at \$AGENTICAPPS_CORE_ROOT or $REPO_ROOT/../agenticapps-workflow-core"
+    echo "         (legs 1, 2 and 4 still ran — this leg proves ORIGIN, they prove BEHAVIOUR)"
+    SKIP=$((SKIP+1))
+  elif ! git -C "$core" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    echo "  ${YELLOW}SKIP${RESET} byte-identity vs core: checkout at $core does not contain commit $commit (fetch it to enable this leg)"
+    SKIP=$((SKIP+1))
+  else
+    # Compare against the RECORDED COMMIT via git show, never against the
+    # working tree. A core checkout is a live workspace: it may sit on a feature
+    # branch, mid-TDD, with uncommitted edits. Comparing against whatever
+    # happens to be checked out makes this leg non-deterministic and can report
+    # divergence from a file that was never published — observed 2026-07-25,
+    # when core was on fix/gate-symlinked-root-exemption with a dirty gate.
+    local d=0 cf
+    for cf in "reference-implementations/openspec-change-gate/openspec-change-gate.sh:$gate" \
+              "tools/change-gate-conformance.sh:$harness"; do
+      local src="${cf%%:*}" dst="${cf#*:}"
+      if ! git -C "$core" show "$commit:$src" 2>/dev/null | cmp -s - "$dst"; then
+        echo "  ${RED}FAIL${RESET} ${dst#"$REPO_ROOT"/} differs from core $src at ${commit:0:12}"
+        d=1
+      fi
+    done
+    if [ "$d" -eq 0 ]; then
+      echo "  ${GREEN}PASS${RESET} both vendored files are byte-identical to core at ${commit:0:12}"
+      PASS=$((PASS+1))
+    else
+      echo "         A host-local fix is how five copies diverged (issue #32). Change it in core, add a harness row, re-vendor."
+      FAIL=$((FAIL+1))
+    fi
+  fi
+
+  # ── Leg 4: the two regressions NO harness row covers ───────────────────────
+  # Verified 2026-07-25: the pre-adoption 164-line copy returned 0 and 2 here,
+  # the inverse of correct, and scored 28/28-minus-12 without either showing up.
   local tmp; tmp="$(mktemp -d)"
   ( cd "$tmp" && git init -q . )
-  mkdir -p "$tmp/openspec/changes/active-change" "$tmp/sub/dir" "$tmp/src/openspec"
+  mkdir -p "$tmp/openspec/changes/active-change" "$tmp/sub/dir"
+  : > "$tmp/openspec/changes/active-change/proposal.md"
   local rc
 
-  # ── GAP-1: cwd-relative resolution -> fails open from a subdirectory ────────
-  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
-    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  if [ "$rc" -eq 2 ]; then
-    echo "  ${GREEN}PASS${RESET} control: from the repo root the gate still BLOCKS (exit 2)"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} control: the gate no longer blocks from the repo root (exit $rc) — the gate is not working at all"
-    FAIL=$((FAIL+1))
-  fi
-
+  # GAP-1 — $ROOT resolution, not $PWD. The PreToolUse hook's cwd is the
+  # session's, so a cwd-relative gate fails open from anywhere below the root.
   printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
     | ( cd "$tmp/sub/dir" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  _gap 0 "$rc" "GAP-1: same repo, same unreviewed change, run from sub/dir -> ALLOWS"
-
-  # ── GAP-2: the openspec/** exemption matches any component named openspec ──
-  printf '{"tool":"edit","tool_input":{"file_path":"src/openspec/app.ts"}}' \
-    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  _gap 0 "$rc" "GAP-2: src/openspec/app.ts is exempt (live bypass — ordinary source, not a change artifact)"
-
-  printf '{"tool":"edit","tool_input":{"file_path":"/tmp/openspec/evil.ts"}}' \
-    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  _gap 0 "$rc" "GAP-2: an absolute path OUTSIDE the repo under openspec/ is exempt"
-
-  # ── GAP-3: reviewer counting counts headings, not independent reviewers ────
-  printf '# r\n\n## Reviewer: gemini\nx\n\n## Reviewer: gemini\ny\n' \
-    > "$tmp/openspec/changes/active-change/REVIEWS.md"
-  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
-    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  _gap 0 "$rc" "GAP-3: two headings from ONE vendor satisfy the >=2 INDEPENDENT reviewers rule"
-
-  printf '# r\n\nExample:\n\n```markdown\n## Reviewer: gemini\n## Reviewer: claude\n```\n\nNo reviews were run.\n' \
-    > "$tmp/openspec/changes/active-change/REVIEWS.md"
-  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
-    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  _gap 0 "$rc" "GAP-3: headings inside a FENCED example block count as real reviews"
-  rm -f "$tmp/openspec/changes/active-change/REVIEWS.md"
-
-  # ── GAP-4: unparseable stdin reaches policy instead of failing open ────────
-  printf '' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  if [ "$rc" -eq 0 ]; then
-    echo "  ${GREEN}PASS${RESET} control: empty stdin fails OPEN (exit 0) — §18 parse-error rule holds here"
+  if [ "$rc" -eq 2 ]; then
+    echo "  ${GREEN}PASS${RESET} GAP-1: blocks a code edit from a subdirectory (gate resolves \$ROOT, not \$PWD)"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} control: empty stdin no longer fails open (exit $rc)"
+    echo "  ${RED}FAIL${RESET} GAP-1 REGRESSED: code edit from a subdirectory returned $rc, expected 2"
     FAIL=$((FAIL+1))
   fi
 
+  # GAP-4 — fail open on a PARSE error, never on policy. Whitespace-containing
+  # non-JSON must not be split into a plausible path and evaluated.
   printf 'not json at all' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-  _gap 2 "$rc" "GAP-4: whitespace-containing non-JSON reaches POLICY and blocks (§18 says fail open on parse error)"
+  if [ "$rc" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} GAP-4: 'not json at all' fails OPEN (parse error, not policy)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} GAP-4 REGRESSED: unparseable stdin returned $rc, expected 0"
+    FAIL=$((FAIL+1))
+  fi
 
   rm -rf "$tmp"
 
-  # 3. The wrapper cannot paper over GAP-1 either — it does not cd to the repo
-  #    root before invoking the gate. Recorded so the fix lands in ONE place
-  #    (the canonical gate) rather than being scattered per host.
+  # ── Leg 5: the codex wrapper must NOT own root resolution ──────────────────
+  # Same assertion the 0013-era test made, opposite reasoning. Then: "GAP-1 is
+  # unfixed and the fix belongs in the canonical, not here." Now: the canonical
+  # HAS the fix, so a wrapper that also cd'd would be duplicating gate logic in
+  # a host adapter — the divergence D1 exists to prevent.
   if ! grep -q 'cd "\$(git rev-parse --show-toplevel' \
        "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"; then
-    echo "  ${YELLOW}KNOWN-GAP${RESET} GAP-1: the codex wrapper does not cd to the repo root either (fix belongs in the canonical gate, not here)"
+    echo "  ${GREEN}PASS${RESET} the codex wrapper leaves root resolution to the gate"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} the wrapper now cds to the repo root — GAP-1 was patched per-host; confirm that is intended and update docs/GATE-KNOWN-GAPS.md"
+    echo "  ${RED}FAIL${RESET} the codex wrapper cds to the repo root — that is the gate's job now; host adapters must not re-implement gate logic"
     FAIL=$((FAIL+1))
   fi
 }
@@ -6718,8 +6764,8 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "0013" ]; then
   test_migration_0013
 fi
 
-if [ -z "$FILTER" ] || [ "$FILTER" = "gate-gaps" ]; then
-  test_gate_known_gaps
+if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
+  test_migration_0014
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
