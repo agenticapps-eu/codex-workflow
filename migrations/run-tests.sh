@@ -4350,6 +4350,26 @@ test_migration_0014_floors() {
   grep -q -- '--ci' "$ci";         _m0014f_ok $? "CI driver invokes the gate's --ci mode"
   ! grep -q 'tool_input' "$ci";    _m0014f_ok $? "CI driver synthesizes no tool-call payload"
   grep -q 'change-gate-conformance.sh' "$ci"; _m0014f_ok $? "CI driver scores the gate before trusting its verdict"
+  grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$ci"; _m0014f_ok $? "CI driver defaults OPENSPEC_GATE_SELF to codex"
+  grep -qE 'OPENSPEC_GATE_SELF: *codex' "$REPO_ROOT/.github/workflows/openspec-gate.yml"
+  _m0014f_ok $? "the CI workflow sets OPENSPEC_GATE_SELF: codex in its job env"
+  grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
+  _m0014f_ok $? "the PreToolUse wrapper defaults OPENSPEC_GATE_SELF to codex"
+  # CI must NOT resolve the shared path: a runner has no ~/.agenticapps/bin/,
+  # and enforcing with a copy it never scored would defeat the harness step.
+  # Strip comments before matching: the driver DOCUMENTS why it avoids the
+  # shared path, and a naive grep would read that explanation as the defect.
+  ! sed 's/#.*//' "$ci" | grep -q 'agenticapps/bin'
+  _m0014f_ok $? "CI driver resolves the REPO-LOCAL gate, never the shared install (code, not comments)"
+
+  # The two local surfaces must agree on what a well-formed marker is. If the
+  # hook accepted a marker the pre-commit rejected, the trust decision would
+  # depend on which surface you happened to hit.
+  local pc_marker hw_marker
+  pc_marker="$(grep -c 'has_valid_marker' "$pc")"
+  hw_marker="$(grep -c 'has_valid_marker' "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh")"
+  _m0014f_ok "$([ "$pc_marker" -gt 0 ] && [ "$hw_marker" -gt 0 ] && echo 0 || echo 1)" \
+    "both local surfaces marker-check the shared copy (pre-commit=$pc_marker, wrapper=$hw_marker refs)"
 
   # ── Behavioural: a real commit, refused ────────────────────────────────────
   local tmp; tmp="$(mktemp -d)"
@@ -4641,6 +4661,9 @@ test_repo_layout() {
     migrations/0011-native-plan-review-hook.md \
     migrations/0013-bind-openspec-v1.md \
     bin/openspec-change-gate.sh \
+    bin/install-gate.sh \
+    tools/change-gate-conformance.sh \
+    tools/core-vendor.manifest \
     bin/reviewer-cli.sh \
     bin/openspec-gate-ci.sh \
     bin/git-hooks/pre-commit \
@@ -4651,7 +4674,6 @@ test_repo_layout() {
     docs/WORKFLOW.md \
     docs/recipes/0001-planning-to-openspec.md \
     docs/decisions/0011-openspec-superpowers-adoption.md \
-    docs/GATE-KNOWN-GAPS.md \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
