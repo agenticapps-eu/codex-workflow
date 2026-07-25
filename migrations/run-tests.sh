@@ -4630,6 +4630,134 @@ STUB
   rm -rf "$tmp"
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# test_migration_0015 — the canonical review PRODUCER's wrapper, vendored
+#
+# The §18 gate CONSUMES review evidence; bin/reviewer-cli.sh PRODUCES it. Core
+# published the consumer (core#33) and left the producer forked, and on
+# 2026-07-25 that fired: a sibling installer delivered the correctly-arbitrated
+# 1.2.2 gate and, in the SAME run, blind-installed its 3-arm wrapper over this
+# repo's 4-arm one. The `opencode` arm vanished and the next review that asked
+# for it got `unknown vendor` mid-run — recorded as "reviewer unavailable" and
+# waved through with one fewer opinion. Core#41; answered by core#42.
+#
+# The gate survived that same run because it carries `# gate-version:` and every
+# host arbitrates on it. This file had no marker. That single difference is the
+# entire content of the incident, which is why leg 2 below is unconditional.
+#
+# A drifted CONSUMER fails loudly. A drifted PRODUCER reports clean while
+# degrading the evidence the consumer then accepts — so it gets the same bar.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0015_core_root() {   # echo a core checkout that actually has the wrapper
+  local c
+  for c in "${AGENTICAPPS_CORE_ROOT:-}" \
+           "$REPO_ROOT/../agenticapps-workflow-core"; do
+    [ -n "$c" ] && [ -d "$c/reference-implementations/reviewer-cli" ] && { printf '%s' "$c"; return; }
+  done
+}
+
+test_migration_0015() {
+  echo ""
+  echo "${YELLOW}=== Migration 0015 — canonical reviewer-cli, vendored from core ===${RESET}"
+
+  local cli="$REPO_ROOT/bin/reviewer-cli.sh"
+  local harness="$REPO_ROOT/tools/reviewer-cli-conformance.sh"
+  local manifest="$REPO_ROOT/tools/core-vendor.manifest"
+
+  # ── Leg 0: the instrument must exist before anything it says means anything ─
+  if [ ! -x "$harness" ]; then
+    echo "  ${RED}FAIL${RESET} tools/reviewer-cli-conformance.sh missing/not executable — the wrapper cannot be scored"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # ── Leg 1: CONFORMANCE — zero failing rows, whatever the row count is ───────
+  # The bar is never a literal count. Core owns the harness and grows it; a
+  # hardcoded number would read like verification while verifying less than the
+  # instrument offers, and would go stale the moment core adds a row.
+  local out rows_failed rows_passed
+  out="$(bash "$harness" "$cli" 2>&1)"
+  rows_failed="$(printf '%s' "$out" | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
+  rows_passed="$(printf '%s' "$out" | sed -n 's/.*TOTAL: \([0-9]*\) passed, [0-9]* failed.*/\1/p' | tail -1)"
+  if [ "${rows_failed:-x}" = "0" ]; then
+    echo "  ${GREEN}PASS${RESET} conformance: 0 failing rows of $(( ${rows_passed:-0} + 0 )) (bar is zero-failures, not a fixed count)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} conformance: ${rows_failed:-<unparsed>} failing rows (${rows_passed:-?} passed)"
+    printf '%s\n' "$out" | grep -E '^  FAIL' | sed 's/^/         /'
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Leg 2: the VERSION MARKER — unconditional, and the whole of core#41 ─────
+  # Without it every installer on the machine reads 0.0.0 and cannot refuse a
+  # downgrade. Well-formedness matters as much as presence: the installer treats
+  # anything that is not three dot-separated integers as 0.0.0, so a marker it
+  # cannot parse is not a marker.
+  if grep -qE '^# reviewer-cli-version: [0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' "$cli" 2>/dev/null; then
+    echo "  ${GREEN}PASS${RESET} wrapper carries a well-formed # reviewer-cli-version: marker"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} bin/reviewer-cli.sh has no well-formed '# reviewer-cli-version: N.N.N' marker"
+    echo "         Every host writes ~/.agenticapps/bin/reviewer-cli.sh. Unmarked reads as 0.0.0,"
+    echo "         so no installer can refuse a downgrade — that is core#41 exactly."
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Leg 3: manifest COVERAGE — every vendored file, under ONE commit ────────
+  # Consistency among the entries is NOT sufficient: a manifest listing two of
+  # four files is internally consistent while recording nothing about the two it
+  # omits. 0014's leg 2 already verifies each listed file's sha256; this leg
+  # verifies the LIST, which is the half that cannot be inferred from the
+  # entries present.
+  local commit; commit="$(_m0014_manifest_field core_commit)"
+  local commits_n; commits_n="$(grep -c '^core_commit=' "$manifest" 2>/dev/null || echo 0)"
+  local missing="" f
+  for f in bin/openspec-change-gate.sh tools/change-gate-conformance.sh \
+           bin/reviewer-cli.sh tools/reviewer-cli-conformance.sh; do
+    grep -q "^file=$f " "$manifest" 2>/dev/null || missing="$missing $f"
+  done
+  if [ "$commits_n" = "1" ] && [ -z "$missing" ]; then
+    echo "  ${GREEN}PASS${RESET} manifest lists all four vendored files under one core commit (${commit:0:12})"
+    PASS=$((PASS+1))
+  else
+    [ "$commits_n" = "1" ] || echo "  ${RED}FAIL${RESET} manifest names $commits_n core_commit entries — exactly one must cover every file"
+    [ -z "$missing" ]      || echo "  ${RED}FAIL${RESET} manifest does not list:$missing"
+    echo "         A file vendored from core with no manifest entry has no recorded provenance,"
+    echo "         and the same-commit invariant cannot speak about a file it never names."
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Leg 4: BYTE-IDENTITY vs core — conditional, and LOUD when skipped ───────
+  # Compare against the RECORDED COMMIT via `git show`, never the working tree:
+  # a core checkout is a live workspace and may sit mid-change on a branch.
+  local core; core="$(_m0015_core_root)"
+  if [ -z "$core" ]; then
+    echo "  ${YELLOW}SKIP${RESET} byte-identity vs core: no checkout at \$AGENTICAPPS_CORE_ROOT or $REPO_ROOT/../agenticapps-workflow-core"
+    echo "         (legs 1-3 still ran — this leg proves ORIGIN, they prove BEHAVIOUR)"
+    SKIP=$((SKIP+1))
+  elif ! git -C "$core" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    echo "  ${YELLOW}SKIP${RESET} byte-identity vs core: checkout at $core does not contain commit $commit (fetch it to enable this leg)"
+    SKIP=$((SKIP+1))
+  else
+    local d=0 cf
+    for cf in "reference-implementations/reviewer-cli/reviewer-cli.sh:$cli" \
+              "tools/reviewer-cli-conformance.sh:$harness"; do
+      local src="${cf%%:*}" dst="${cf#*:}"
+      if ! git -C "$core" show "$commit:$src" 2>/dev/null | cmp -s - "$dst"; then
+        echo "  ${RED}FAIL${RESET} ${dst#"$REPO_ROOT"/} differs from core $src at ${commit:0:12}"
+        d=1
+      fi
+    done
+    if [ "$d" -eq 0 ]; then
+      echo "  ${GREEN}PASS${RESET} wrapper and harness are byte-identical to core at ${commit:0:12}"
+      PASS=$((PASS+1))
+    else
+      echo "         A private copy of a file at a SHARED path is not a fork, it is a race (core#41)."
+      echo "         Change it in core, add a harness row, re-vendor."
+      FAIL=$((FAIL+1))
+    fi
+  fi
+}
+
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
@@ -7097,6 +7225,7 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
   test_migration_0014
   test_migration_0014_floors
   test_migration_0014_arbitration
+  test_migration_0015
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
