@@ -60,19 +60,45 @@ code edit while an active change is unvalidated or unreviewed:
 | `GSD_SKIP_REVIEWS=1` | allow — documented, **logged** override |
 | Unparseable input | allow — fail-open on *parse* error only, never on policy |
 
-One script owns that table: `bin/openspec-change-gate.sh`, installed to
-`~/.agenticapps/bin/` and byte-identical across every AgenticApps host. It is
-wired at three surfaces:
+One script owns that table: `bin/openspec-change-gate.sh`. Since 1.1.0 it is
+**vendored byte-identical from `agenticapps-workflow-core`** and never edited
+here — a host-local fix is how five divergent copies ended up on one machine,
+none conformant (ADR-0012). Behaviour changes go to core with a matching
+conformance-harness row, then we re-vendor. It is wired at three surfaces:
 
 1. **`.codex/hooks.json`** — a `PreToolUse` hook on `apply_patch`, via
-   `hook-wrapper-openspec-gate.sh`. Fastest feedback.
-2. **`.git/hooks/pre-commit`** — catches any agent, and humans.
-3. **`.github/workflows/openspec-gate.yml`** — catches everything else.
+   `hook-wrapper-openspec-gate.sh`. Fastest feedback. **Hook mode.**
+2. **`.git/hooks/pre-commit`** — catches any agent, and humans. **`--pre-commit`.**
+3. **`.github/workflows/openspec-gate.yml`** — catches everything else. **`--ci`.**
 
 2 and 3 are the *guarantee*; 1 is a convenience on top. A `PreToolUse` hook is
 loaded at session start and **cannot gate the session that installed it**, so
 an agent-level hook alone would leave a hole exactly when the workflow is being
 adopted.
+
+Three things about that wiring are easy to assume wrongly:
+
+- **`--ci` is whole-repo, not diff-scoped.** Any active change lacking two
+  reviewers fails the build *even if the pull request did not touch it*. So a
+  docs-only PR can go red, and a proposal-only PR is red until its `REVIEWS.md`
+  lands. That is the rule working: reviews come before code, so the red window
+  is the window in which the change is genuinely not ready to merge.
+- **Each surface resolves a different copy, deliberately.** CI uses the
+  repo-local vendored gate — the one it just scored with the harness, since a
+  runner has no `~/.agenticapps/bin/` and enforcing with an unscored copy would
+  defeat the check. The two local surfaces prefer the shared install, so one
+  machine-wide upgrade reaches every repo.
+- **The shared copy is trusted only if it carries a `# gate-version:` marker.**
+  All four hosts write that one path and only this one arbitrates so far, so a
+  sibling can blind-write its unmarked pre-canonical copy over it. Without the
+  marker check, shared-first resolution would run your floors on the gate this
+  workflow replaced. `install.sh` refuses to downgrade the shared path for the
+  same reason.
+
+The gate's conformance is **executed, not claimed**: CI runs
+`tools/change-gate-conformance.sh` against the vendored gate before trusting its
+verdict, and every declared row must pass. The bar is zero failures rather than
+a fixed count, so a re-vendored harness with more rows raises it automatically.
 
 ### Two codex specifics that are easy to get wrong
 

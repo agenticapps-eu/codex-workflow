@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 1.0.0
+version: 1.1.0
 implements_spec: 1.0.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
@@ -533,7 +533,27 @@ the relocation.
 ## Spec deltas (spec 1.0.0)
 
 Per core spec §09, a host names every requirement it does not satisfy verbatim,
-with rationale. Audited 2026-07-24.
+with rationale. Audited 2026-07-24; re-audited 2026-07-25 for §18 (ADR-0012).
+
+- **§18 change-gate — satisfied, and no longer implemented here.**
+  `bin/openspec-change-gate.sh` is vendored **byte-identical** from core's
+  reference implementation (core#33 / ADR-0022), alongside
+  `tools/change-gate-conformance.sh`; provenance is recorded in
+  `tools/core-vendor.manifest` rather than a header, because a "vendored from
+  `<commit>`" comment would break the byte-identity it claimed to record.
+  Conformance is **executed, not asserted**: CI scores every declared harness
+  row before the gate's verdict is trusted, and the bar is zero failures rather
+  than a fixed count so a grown harness raises it automatically. All three
+  surfaces use real mode dispatch — hook, `--pre-commit`, `--ci` — and `--ci` is
+  whole-repo. The prior hand-maintained copy scored 16 of 28 and carried three
+  live bypasses; the two defects core's harness does *not* cover (GAP-1, GAP-4)
+  are pinned by assertions this repo owns. **Residual, disclosed:** the shared
+  `~/.agenticapps/bin/` path is written by all four hosts and only this one
+  arbitrates by `# gate-version:` so far, so a sibling can still overwrite it for
+  every other repo on the machine. This host's own surfaces are defended — they
+  reject an unmarked shared copy and fall back to the vendored one — but a
+  marked-but-older sibling copy is still trusted. Closing it fully needs all four
+  hosts adopted (core#34).
 
 - **§14 prompt-injection — trivially conformant.** This scaffolder builds no LLM
   prompts from non-self-authored values, so §14's trigger condition cannot occur;

@@ -16,8 +16,70 @@ in every shipped artifact's frontmatter.
 - Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
-- Real CI: `.github/workflows/ci.yml` is still the Phase 0 placeholder and
-  verifies nothing; `migrations/run-tests.sh` runs only locally.
+- Reconcile `bin/reviewer-cli.sh` fleet drift: this repo ships a superset (adds
+  `claude` + `opencode` arms), opencode ships the smaller one, and both install
+  to the same global path — last-writer-wins, backward-compatible in one
+  direction only.
+- Adopt core's in-flight symlinked-root exemption fix once it lands as a new
+  `gate-version` (core `fix/gate-symlinked-root-exemption`). Re-vendoring is a
+  copy plus a green suite — that is the point of 1.1.0.
+- Upstream: propose harness rows for GAP-1 and GAP-4. Core's implementation
+  fixes both; core's harness covers neither, so every host is unprotected
+  against a regression in them.
+
+## [1.1.0] — 2026-07-25
+
+Vendors the **canonical §18 change-gate** from `agenticapps-workflow-core`
+(core#33 / ADR-0022) via migration `0014`, and stops maintaining a copy. See
+[ADR-0012](docs/decisions/0012-vendor-canonical-change-gate.md).
+
+### Fixed
+
+- **Three live bypasses of the change-gate.** `src/openspec/app.ts`,
+  `/tmp/openspec/evil.ts` and `..`-escaping paths were treated as exempt change
+  artifacts; reviewer counting counted headings, so one vendor reviewing twice
+  or a fenced example block cleared the "≥2 independent reviewers" rule with
+  zero reviews performed; and a change author's own review counted toward the
+  threshold, which the §02 evidence verifier rejects.
+- **GAP-1** — the gate resolved `$PWD` rather than the repo root, so the
+  `PreToolUse` hook failed open from any subdirectory.
+- **GAP-4** — whitespace-containing non-JSON on stdin reached policy and
+  blocked, inverting §18's rule to fail open on a *parse* error and never on
+  policy.
+- **`GSD_SKIP_REVIEWS=1` no longer overrides a red `openspec validate`.** The
+  hatch bypasses the review clause only.
+
+### Added
+
+- `tools/change-gate-conformance.sh` — core's executable conformance harness,
+  vendored and run in CI **before** the gate's verdict is trusted. A drifted
+  gate passes every repo it guards while enforcing nothing.
+- `tools/core-vendor.manifest` — sidecar provenance (core commit + per-file
+  sha256), so the vendored files stay byte-identical and carry no local header.
+- `bin/install-gate.sh` — `# gate-version:` arbitration. The installer now
+  **refuses to downgrade** the shared `~/.agenticapps/bin/` gate, atomically and
+  under a bounded-retry lock. This is the fix for the hazard issue #26 was filed
+  about: four hosts write one path, so without arbitration it is
+  last-writer-wins.
+- Marker-validated shared-gate resolution on the local surfaces, and
+  `OPENSPEC_GATE_SELF=codex` set explicitly by all three.
+
+### Changed
+
+- **`--ci` is whole-repo, not diff-scoped.** An unreviewed active change now
+  fails the build even when the pull request did not touch it, and a
+  proposal-only PR is red until its `REVIEWS.md` lands. Stricter than the driver
+  it replaces, and what §18 actually requires.
+- Both floors are thin wrappers on the gate's real modes. They previously
+  synthesized a hook payload per file — which enforced, but not in a way §18's
+  "demonstrable by direct script invocation" clause accepts, and which left the
+  gate's own `--pre-commit`/`--ci` paths unexercised by this host.
+
+### Removed
+
+- `docs/GATE-KNOWN-GAPS.md` and `test_gate_known_gaps`. The sha256 pin existed
+  to force re-verification when the canonical landed; it has landed. History is
+  preserved in ADR-0012.
 
 ## [1.0.0] — 2026-07-24
 
