@@ -4317,6 +4317,87 @@ test_migration_0014() {
   fi
 }
 
+# test_migration_0014_floors — the agent-agnostic floor, on REAL mode dispatch
+#
+# Before this change both floors synthesized one fake hook payload per file and
+# piped it to the gate in hook mode. That DID enforce — two live commit refusals
+# are on record — but §18 requires the gate be "demonstrable by direct script
+# invocation", and enforcement reached by fabricating a payload is not that. It
+# also meant the gate's own --pre-commit and --ci code paths were never exercised
+# by this host at all, which is why 12 harness rows could fail unnoticed.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0014f_ok() {  # _m0014f_ok <0|1> <label>
+  if [ "$1" = "0" ]; then echo "  ${GREEN}PASS${RESET} $2"; PASS=$((PASS+1));
+  else echo "  ${RED}FAIL${RESET} $2"; FAIL=$((FAIL+1)); fi
+}
+
+test_migration_0014_floors() {
+  echo ""
+  echo "${YELLOW}=== Migration 0014 — floors use the gate's real modes ===${RESET}"
+
+  local pc="$REPO_ROOT/bin/git-hooks/pre-commit"
+  local ci="$REPO_ROOT/bin/openspec-gate-ci.sh"
+  local gate="$REPO_ROOT/bin/openspec-change-gate.sh"
+  local rc
+
+  # ── Structural: no fabricated payloads, real modes, explicit self ──────────
+  grep -q -- '--pre-commit' "$pc"; _m0014f_ok $? "pre-commit invokes the gate's --pre-commit mode"
+  ! grep -q 'tool_input' "$pc";    _m0014f_ok $? "pre-commit synthesizes no tool-call payload"
+  grep -q 'OPENSPEC_GATE_SELF=codex' "$pc"; _m0014f_ok $? "pre-commit sets OPENSPEC_GATE_SELF=codex itself (not inherited)"
+  grep -q -- '--ci' "$ci";         _m0014f_ok $? "CI driver invokes the gate's --ci mode"
+  ! grep -q 'tool_input' "$ci";    _m0014f_ok $? "CI driver synthesizes no tool-call payload"
+  grep -q 'change-gate-conformance.sh' "$ci"; _m0014f_ok $? "CI driver scores the gate before trusting its verdict"
+
+  # ── Behavioural: a real commit, refused ────────────────────────────────────
+  local tmp; tmp="$(mktemp -d)"
+  (
+    cd "$tmp" && git init -q . \
+      && git config user.email t@t && git config user.name t \
+      && git commit -q --allow-empty -m base
+  )
+  mkdir -p "$tmp/openspec/changes/add-thing"
+  : > "$tmp/openspec/changes/add-thing/proposal.md"
+  install -m 0755 "$pc" "$tmp/.git/hooks/pre-commit"
+
+  printf 'package main\n' > "$tmp/main.go"
+  local head_before head_after
+  head_before="$(git -C "$tmp" rev-parse HEAD)"
+  ( cd "$tmp" && git add main.go \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m code ) >/dev/null 2>&1; rc=$?
+  head_after="$(git -C "$tmp" rev-parse HEAD)"
+  _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: commit of code under an unreviewed change is REFUSED (rc=$rc)"
+  _m0014f_ok "$([ "$head_before" = "$head_after" ] && echo 0 || echo 1)" "floor: HEAD did not move"
+
+  # Only openspec/ staged -> allowed, and reached via mode dispatch rather than
+  # the parse-error fail-open the old driver relied on.
+  ( cd "$tmp" && git reset -q && git add openspec \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m spec ) >/dev/null 2>&1; rc=$?
+  _m0014f_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" "floor: a commit staging ONLY openspec/ artifacts is allowed (rc=$rc)"
+
+  # ── Absent gate -> fail OPEN with a warning (spec's explicit exception) ────
+  local err; err="$tmp/err.txt"
+  ( cd "$tmp" && git add -A \
+      && OPENSPEC_CHANGE_GATE="$tmp/definitely-not-here" HOME="$tmp/nohome" \
+         bash "$pc" ) >/dev/null 2>"$err"; rc=$?
+  _m0014f_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" "floor: no gate resolvable -> fails OPEN (exit 0, got $rc)"
+  grep -qi 'warn\|not found\|not gated' "$err"; _m0014f_ok $? "floor: the absent-gate path warns on stderr rather than passing silently"
+
+  # ── A shared copy with no version marker must NOT be trusted ───────────────
+  # The transitional defence: the other three hosts do not arbitrate yet, so any
+  # of them can blind-write its unmarked pre-#33 gate over the shared path. A
+  # marker is what every post-#33 conformant gate carries and every pre-adoption
+  # copy lacks.
+  mkdir -p "$tmp/fakehome/.agenticapps/bin"
+  printf '#!/usr/bin/env bash\n# no marker here\nexit 0\n' > "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
+  chmod +x "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
+  ( cd "$tmp" && git reset -q && git add main.go \
+      && HOME="$tmp/fakehome" OPENSPEC_BIN=true bash "$pc" ) >/dev/null 2>"$err"; rc=$?
+  _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: an UNMARKED shared gate is ignored — falls back to repo-local and still blocks (rc=$rc)"
+  grep -qi 'marker\|unmarked\|falling back' "$err"; _m0014f_ok $? "floor: the fallback warns that the shared copy was rejected"
+
+  rm -rf "$tmp"
+}
+
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
@@ -6780,6 +6861,7 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
   test_migration_0014
+  test_migration_0014_floors
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
