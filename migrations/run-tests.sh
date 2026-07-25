@@ -7487,6 +7487,9 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
   test_migration_0014
   test_migration_0014_floors
   test_migration_0014_arbitration
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0015" ]; then
   test_migration_0015
   test_migration_0015_arbitration
   test_migration_0015_surfaces

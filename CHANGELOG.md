@@ -78,6 +78,93 @@ in every shipped artifact's frontmatter.
   give it a version marker, and add a small conformance harness. Fixing it in
   this repo alone would make a fourth copy.
 
+  **Answered by core#42 and adopted in 1.2.0 below** — the ask was granted
+  verbatim, including the merge composition. Waiting was the right call: this
+  repo's superset is now gone in favour of the canonical, and the fleet converged
+  on one file instead of four.
+
+## [1.2.0] — 2026-07-25
+
+Adopts the canonical review **producer**. 1.1.0 adopted the canonical consumer
+of review evidence — the §18 gate — and left the thing that produces it forked.
+
+### Added
+
+- **`bin/reviewer-cli.sh`** — core's wrapper, vendored byte-identically at
+  `# reviewer-cli-version: 1.0.0` from `reference-implementations/reviewer-cli/`
+  (core#42), replacing this repo's hand-maintained copy. Installed to the shared
+  `~/.agenticapps/bin/` by `install.sh`, which now **arbitrates on the version
+  marker and refuses to downgrade**, exactly as it already did for
+  `# gate-version:`.
+
+  That arbitration is the entire point. Core#41 was one installer run delivering
+  the correctly-arbitrated `1.2.2` gate and blind-installing a 3-arm wrapper over
+  the 4-arm one **in the same run** — one shared artifact upgraded, the other
+  silently downgraded, because only one had a marker.
+
+  Measured, with core's harness at `60cd83f`:
+
+  | copy | before | after |
+  |---|---|---|
+  | `codex-workflow` (this repo) | 13 / 14 | **14 / 14** |
+  | `~/.agenticapps/bin/` (shared) | 12 / 14 | **14 / 14** on next `install.sh` |
+
+  This repo's copy was behaviourally the **superset** — four arms, stdin pinned
+  on every one — and failed exactly one row: the marker. Behaviour was never the
+  problem; provenance was.
+
+- **`tools/reviewer-cli-conformance.sh`** — core's 14-row harness, vendored
+  alongside the wrapper and run in CI **before** the gate step. A drifted
+  consumer fails loudly; a drifted producer reports clean while supplying less of
+  the evidence the consumer accepts.
+
+### Changed
+
+- **`bin/install-gate.sh` takes `--marker <name>`**, defaulting to
+  `gate-version`. One implementation of parse → compare → refuse-downgrade →
+  `mkdir` lock → atomic temp+`mv`, now serving two artifacts. The label in its
+  log lines is derived from the marker rather than passed as a second flag.
+
+  Not duplicated into a second installer: that would copy the comparison, the
+  lock, the GNU/BSD `stat` handling and the atomic write, and a fix applied to
+  one copy and not the other is divergence at the exact surface this un-diverges.
+  The gate's call site is byte-identical, so `test_migration_0014_arbitration`
+  (19 rows) was regression cover for the refactor without being edited.
+
+- **`tools/core-vendor.manifest`** advances `750da2e` → `60cd83f` and covers
+  **four** files under one commit. Advancing it meant re-verifying the two it
+  already covered rather than carrying them forward on faith — core#42 touched
+  neither gate file, both sha256s are unchanged, and 0014 still scores 37/37.
+
+- **The producer refuses an unmarked shared wrapper.**
+  `skills/codex-openspec-change-review/SKILL.md` prefers the shared copy only
+  when it carries a **well-formed** marker (three dot-separated integers, the
+  same thing the installer means). `opencode-workflow` still ships a 9/14
+  unmarked copy and does not arbitrate, so that path can still be clobbered by a
+  host this repo does not control.
+
+  A marker is a plain comment; this check discriminates canonical from
+  pre-canonical and verifies nothing. The **installer's** separate use of the
+  same marker to compare versions is a weak form of version provenance with its
+  own residual — a host publishing a lying `9.9.9` defeats it. Both are stated in
+  the spec rather than left to inference.
+
+### Notes
+
+Three review rounds, two of them REQUEST-CHANGES from both reviewers, and the
+change is materially different for it: a bundled `change-gate` spec correction
+was dropped entirely, a `--label` parameter was removed, four scenarios were
+added, and one TDD row was found to be untestable **as written** — task 1.5's RED
+did not reproduce, because "one commit, every listed file verifies" was already
+true of the two-file manifest. Full transcripts in
+`openspec/changes/archive/2026-07-25-adopt-canonical-reviewer-cli/REVIEWS.md`.
+
+Suite: 571 → **599 PASS / 0 FAIL / 1 SKIP**.
+
+Two holes are named rather than implied — `opencode-workflow` has not adopted,
+and the `change-gate` spec still says "vendor header" where the implementation
+uses the manifest sidecar. Both are tracked in migration 0015's follow-ups.
+
 ## [1.1.0] — 2026-07-25
 
 Vendors the **canonical §18 change-gate** from `agenticapps-workflow-core`

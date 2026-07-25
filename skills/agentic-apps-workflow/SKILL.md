@@ -1,6 +1,6 @@
 ---
 name: agentic-apps-workflow
-version: 1.1.0
+version: 1.2.0
 implements_spec: 1.0.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
