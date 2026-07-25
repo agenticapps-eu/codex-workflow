@@ -1,0 +1,40 @@
+schema: spec-driven
+
+# Project context — surfaced to any agent creating artifacts here (core §16).
+context: |
+  codex-workflow is the SCAFFOLDER that ships the AgenticApps spec-first
+  workflow for the OpenAI Codex CLI host. It is markdown and shell: skills,
+  migrations, and a bash test harness. There is no UI, no database, and no
+  TypeScript beyond inert template fixtures — so the conditional gates
+  (design, db, qa, ts-declare) cannot fire here, and §14 prompt-injection is
+  trivially conformant. See docs/ENFORCEMENT-PLAN.md.
+
+  It implements agenticapps-workflow-core v1.0.0 (§16-§19) and self-applies
+  its own workflow. The lifecycle is propose -> validate -> execute -> archive,
+  then ship as a separate act. No code is edited under an open change until
+  `openspec validate --all` is green AND REVIEWS.md carries >=2 reviewers;
+  that is enforced by ~/.agenticapps/bin/openspec-change-gate.sh at three
+  surfaces (PreToolUse hook, git pre-commit, CI).
+
+  Conventions: conventional commits; feature branches and PRs, never direct to
+  main; ADRs in docs/decisions/ for every locked design decision; changes to
+  the standard ship as a numbered migration in migrations/ with tests in
+  migrations/run-tests.sh, which must stay green (currently 514 PASS / 0 FAIL).
+  Supersede, never delete: historical migrations and ADRs stay as provenance.
+
+  The repo keeps its own .planning/ tree in place as development history — the
+  §19 Tier-0 move to docs/legacy-planning/ binds product repos, not this one.
+
+rules:
+  proposal:
+    - Name the spec section(s) the change implements (e.g. core §17, §18).
+    - State what does NOT change — this repo's changes are usually surgical.
+  design:
+    - Record rejected alternatives, not just the chosen one; an ADR follows.
+  specs:
+    - A requirement here is a guarantee about the WORKFLOW this repo ships,
+      not about a product it builds.
+  tasks:
+    - Any change to a migration or a gate script needs a matching assertion in
+      migrations/run-tests.sh. Extract-and-execute the real Apply block; do not
+      re-implement it inline.

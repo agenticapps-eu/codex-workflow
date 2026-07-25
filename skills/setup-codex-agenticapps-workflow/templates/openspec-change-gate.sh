@@ -1,0 +1,1 @@
+../../../bin/openspec-change-gate.sh

@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+# pre-commit — agent-agnostic floor for the §18 OpenSpec change-gate.
+#
+# The per-agent hooks (Claude PreToolUse, opencode plugin, Codex hooks.json)
+# give fast feedback but each is loaded at session start and cannot gate the
+# session that installed it — and none of them exists at all for a human with an
+# editor. This hook is the floor: it catches code committed by ANY agent or
+# person, including the installing session.
+#
+# It is a THIN WRAPPER. All verdict logic lives in openspec-change-gate.sh,
+# which is vendored byte-identical from agenticapps-workflow-core and must never
+# be re-implemented here. This script resolves a gate and delegates:
+#
+#   exec "$GATE" --pre-commit        exit 0 = allow commit, exit 1 = block
+#
+# It previously synthesized a fake PreToolUse payload per staged file and piped
+# each to the gate in HOOK mode. That enforced — two live commit refusals are on
+# record — but §18 requires the gate be "demonstrable by direct script
+# invocation with simulated payloads", and enforcement reached by fabricating a
+# payload is not that. It also left the gate's own --pre-commit code path
+# unexercised by this host, which is how 12 conformance rows failed unnoticed
+# for as long as they did.
+#
+# Bypass (documented, same posture as the per-agent escape hatch):
+#   GSD_SKIP_REVIEWS=1 git commit ...   # bypasses the REVIEW clause only —
+#                                       # a red `openspec validate` still blocks
+#   git commit --no-verify ...          # git's own bypass
+set -u
+
+# ─────────────────────────────────────────────────────────────────────────────
+# This host's identity, so its own reviews do not satisfy the threshold.
+# Set here rather than inherited: a human running `git commit` has no such
+# variable in their environment, and a floor that counts codex's own reviews
+# while CI does not is exactly the surface-dependent enforcement this gate
+# exists to remove.
+# ─────────────────────────────────────────────────────────────────────────────
+export OPENSPEC_GATE_SELF="${OPENSPEC_GATE_SELF:-codex}"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Gate resolution: explicit override, then the SHARED install, then repo-local.
+#
+# Shared-first is deliberate — one machine-wide upgrade should reach every repo
+# on the machine. But the shared path is written by all four AgenticApps host
+# installers, and so far only this one arbitrates by `# gate-version:`. Any
+# sibling can still blind-write its unmarked, pre-canonical copy over ours, and
+# a naive shared-first resolution would then run this repo's floor on the very
+# gate this workflow replaced.
+#
+# So the shared copy is trusted ONLY if it carries a well-formed marker: exactly
+# three dot-separated integers, the same shape install.sh arbitrates on. Every
+# post-canonical gate has one; every pre-adoption copy lacks one. That does NOT
+# distinguish newer from older — a marked-but-older sibling copy is still
+# trusted — but it closes the case that actually exists today.
+# ─────────────────────────────────────────────────────────────────────────────
+has_valid_marker() {
+  local v dots
+  v="$(grep -m1 '^# gate-version:' "$1" 2>/dev/null | sed 's/^# gate-version:[[:space:]]*//' | tr -d '[:space:]')"
+  case "$v" in
+    ''|*[!0-9.]*) return 1 ;;
+  esac
+  dots="$(printf '%s' "$v" | tr -cd '.' | wc -c | tr -d ' ')"
+  [ "$dots" = "2" ] || return 1
+  case "$v" in .*|*.|*..*) return 1 ;; esac
+  return 0
+}
+
+GATE=""
+if [ -n "${OPENSPEC_CHANGE_GATE:-}" ]; then
+  if [ -x "$OPENSPEC_CHANGE_GATE" ]; then
+    # An explicit override is the operator's deliberate choice and is used
+    # as-is, with no marker check — second-guessing it would make the escape
+    # hatch unusable for the case it exists for.
+    GATE="$OPENSPEC_CHANGE_GATE"
+  else
+    printf 'openspec-gate: WARNING — $OPENSPEC_CHANGE_GATE=%s is not executable; falling through.\n' \
+      "$OPENSPEC_CHANGE_GATE" >&2
+  fi
+fi
+
+if [ -z "$GATE" ]; then
+  shared="$HOME/.agenticapps/bin/openspec-change-gate.sh"
+  if [ -x "$shared" ]; then
+    if has_valid_marker "$shared"; then
+      GATE="$shared"
+    else
+      printf 'openspec-gate: WARNING — the shared gate at %s carries no valid "# gate-version:" marker.\n' "$shared" >&2
+      printf 'openspec-gate:           It predates the canonical implementation, or a host that does not arbitrate\n' >&2
+      printf 'openspec-gate:           versions overwrote it. Falling back to this repo'\''s vendored copy.\n' >&2
+    fi
+  fi
+fi
+
+if [ -z "$GATE" ]; then
+  repo_local="$(git rev-parse --show-toplevel 2>/dev/null)/bin/openspec-change-gate.sh"
+  [ -x "$repo_local" ] && GATE="$repo_local"
+fi
+
+if [ -z "$GATE" ]; then
+  # Fail OPEN on a missing gate. A commit hook that hard-fails because tooling
+  # is absent trains people to reach for --no-verify, which disables the floor
+  # permanently. CI is the surface that cannot be bypassed, and it fails closed.
+  printf 'openspec-gate: WARNING — no change-gate found (checked $OPENSPEC_CHANGE_GATE, ~/.agenticapps/bin/, repo bin/).\n' >&2
+  printf 'openspec-gate:           Commit is NOT gated. Run install.sh to restore the floor.\n' >&2
+  exit 0
+fi
+
+exec "$GATE" --pre-commit

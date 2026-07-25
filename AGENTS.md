@@ -4,10 +4,11 @@ This is the **scaffolder repo** that ships the AgenticApps spec-first
 workflow for the OpenAI Codex CLI host. It self-applies its own
 workflow per Phase 6 of the build-out.
 
-The trigger skill, gate skills, GSD entry points, and lifecycle skills
-this repo authors are linked into `${CODEX_HOME:-$HOME/.codex}/skills/`
-via `install.sh` (run from this repo's root). Codex auto-discovers
-them on next session start.
+The trigger skill and the gate skills this repo authors are linked into
+`${CODEX_HOME:-$HOME/.codex}/skills/` via `install.sh` (run from this
+repo's root). Codex auto-discovers them on next session start. The same
+script binds the OpenSpec CLI (the planning front end) and installs the
+§18 change-gate.
 
 The version of `codex-workflow` this repo's own development is
 asserted against is recorded at `.codex/workflow-version.txt`.
@@ -98,18 +99,31 @@ session-level discipline the model brings to every diff.
 ## Development Workflow
 
 This repo uses the AgenticApps spec-first workflow on the OpenAI Codex
-CLI host. On any code-touching task the `agentic-apps-workflow` trigger
-skill activates, emits the canonical commitment ritual before any tool
-call, and carries the gate bindings, task-size routing, the plan-review
-procedure, and the knowledge-capture ritual — read them there, not here.
-Project-specific bindings live in `.planning/config.codex.json`; gates
-that do not fire on this project are documented in
-`docs/ENFORCEMENT-PLAN.md`. Do not bypass a gate — accept-via-ADR is the
-override path. The plan-review gate is additionally enforced
-programmatically by a `PreToolUse` hook (`.codex/hooks.json`), which is
-unaffected by where the prose lives. Spec:
-[`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core).
-Version stamp: `.codex/workflow-version.txt`.
+CLI host. Product work moves through the **OpenSpec change lifecycle** —
+propose → validate → Superpowers-execute → archive — and shipping (the
+git commit / PR) is a separate act from archiving. `openspec/specs/` is
+the durable statement of what the product guarantees; `openspec/changes/`
+holds in-flight deltas; `changes/archive/` is history. Full explainer:
+[`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+
+On any code-touching task the `agentic-apps-workflow` trigger skill
+activates, emits the canonical commitment ritual before any tool call,
+and carries the gate bindings, task-size routing, the stage-2
+change-review procedure, and the knowledge-capture ritual — read them
+there, not here. Project-specific bindings live in
+`.planning/config.codex.json`; gates that do not fire on this project are
+documented in `docs/ENFORCEMENT-PLAN.md`. Do not bypass a gate —
+accept-via-ADR is the override path.
+
+No code is edited under an open change until `openspec validate --all` is
+green **and** the change carries `REVIEWS.md` with ≥2 independent
+reviewers. That is enforced programmatically three ways: a `PreToolUse`
+hook (`.codex/hooks.json`), a git `pre-commit` hook, and CI — all calling
+the same `openspec-change-gate.sh`. The hook is faster feedback; the
+pre-commit and CI checks are the guarantee, because a hook cannot gate the
+session that installed it. Spec:
+[`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
+v1.0.0 §16–§19. Version stamp: `.codex/workflow-version.txt`.
 
 ## Session handoff
 

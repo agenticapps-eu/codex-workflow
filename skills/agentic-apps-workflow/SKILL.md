@@ -1,7 +1,7 @@
 ---
 name: agentic-apps-workflow
-version: 0.9.0
-implements_spec: 0.10.0
+version: 1.1.0
+implements_spec: 1.0.0
 description: |
   Enforces the AgenticApps spec-first workflow on Codex. This skill MUST
   activate whenever the user asks Codex to implement, build, code, fix,
@@ -11,7 +11,8 @@ description: |
   making technical decisions. Use this even when the user just says
   "start working" or references a Linear / Asana / Jira / GitHub issue
   number. The skill emits the workflow commitment ritual, picks task
-  size, routes to the right GSD entry-point skill, and binds every spec
+  size, routes the work through the OpenSpec change lifecycle
+  (propose → validate → execute → archive → ship), and binds every spec
   gate to the upstream Superpowers skill or codex-* gate-fulfilling
   skill that satisfies it.
 ---
@@ -21,34 +22,47 @@ description: |
 This is the trigger skill for the AgenticApps spec-first workflow on
 the OpenAI Codex CLI host. It is a `full`-conformance implementation of
 [`agenticapps-workflow-core`](https://github.com/agenticapps-eu/agenticapps-workflow-core)
-v0.10.0. The frontmatter `implements_spec: 0.10.0` is the conformance
+v1.0.0. The frontmatter `implements_spec: 1.0.0` is the conformance
 citation per spec/09.
 
-The claim advanced `0.4.0 → 0.10.0` at host v0.9.0 (migration `0012`). The
-citation had been stale by six spec versions: §02's `plan-review` gate (0.5.0),
-§15 knowledge capture (0.7.0), §04's red-flag composition rules (0.8.0) and
-§08's setup end-state amendment (0.9.0) were all already satisfied by shipped
-implementation. §14 (0.6.0) was the one real gap and is declared below; §12's
-0.10.0 instruction-surface economy is satisfied by that same migration.
+The claim advanced `0.10.0 → 1.0.0` at host v1.0.0 (migration `0013`):
+core spec v1.0.0 replaced the **planning** front end — §16 (OpenSpec spec
+slot), §17 (lifecycle & gate mapping), §18 (retargeted change-gate), §19
+(spec-vs-process placement & Linear coupling). The **execution**
+discipline is unchanged: §01/§03/§04/§05/§06/§11 carry forward verbatim.
+See [ADR-0011](../../docs/decisions/0011-openspec-superpowers-adoption.md).
 
 This repo is a **thin binding**, not a re-port (see
 [`docs/BINDING.md`](../../docs/BINDING.md) and
 [ADR-0007](../../docs/decisions/0007-bind-upstream-gsd.md)). Two upstreams
 provide the heavy lifting and are installed alongside this repo:
 
-- **GSD** (`/prompts:gsd-discuss-phase` / `/prompts:gsd-plan-phase` /
-  `/prompts:gsd-execute-plan`, plus roadmap/milestone/progress prompts and
-  the `.planning/` project state) — from `get-shit-done-codex` (TÂCHES
-  lineage), installed as Codex **prompts** under `$CODEX_HOME/prompts`.
+- **OpenSpec** — the planning front end and the spec slot
+  (`openspec/specs/` + `changes/` + `changes/archive/`). A standalone,
+  agent-agnostic CLI (`npm i -g @fission-ai/openspec`); agents just call
+  it. `install.sh` runs `openspec init --tools codex --profile core`,
+  which generates this host's command surface.
 - **Superpowers** (TDD, brainstorming, verification, code review,
   finishing-branch, systematic-debugging) — the Superpowers distribution
   for Codex. Gates that duplicate Superpowers bind to `superpowers:*`.
 
+**Installed OpenSpec CLI version: 1.6.0** (spec §16 MUST — a host records
+the CLI version it implements against). Where this prose and the installed
+CLI disagree on a file name or a subcommand, **the CLI wins**; the
+three-slot model and the done-ness rule are what remain normative.
+
+> **The GSD phase engine is retired as the planning driver.** GSD's
+> *capabilities* moved (plan → propose, verify → Superpowers verification,
+> ship → archive + the kept ship mechanics); the driver is gone. The
+> `.planning/` tree is never deleted — on a target project it is retained
+> as effort history (§19; see the planning→openspec recipe carried by the
+> setup/update skills). This scaffolder keeps its own `.planning/` in place.
+
 This repo ships only the AgenticApps layer: this trigger skill plus the
-gstack/AgenticApps gates that have **no** GSD/Superpowers equivalent
+gstack/AgenticApps gates that have **no** OpenSpec/Superpowers equivalent
 (`codex-cso`, `codex-qa`, `codex-design-shotgun`, `codex-design-critique`,
 `codex-database-sentinel-audit`, `codex-impeccable-audit`,
-`codex-spec-review`, `codex-ts-declare-first`).
+`codex-openspec-change-review`, `codex-ts-declare-first`).
 
 The body of this skill follows the structure required by the core
 spec: the four canonical-prose blocks (Step 0, Rationalization Table,
@@ -99,40 +113,76 @@ violation.
 |---|---|---|
 | **Tiny** | One-line typo, comment edit, README tweak, no behavior change | `superpowers:verification-before-completion` |
 | **Small** | Single-file logic change, isolated bug fix, ≤ ~20 lines diff | `superpowers:test-driven-development` → `superpowers:verification-before-completion` → `superpowers:finishing-a-development-branch` |
-| **Medium** | Multi-file feature, new endpoint, new component, new test class | `/prompts:gsd-discuss-phase` → `/prompts:gsd-plan-phase` → `/prompts:gsd-execute-plan` (auto-invokes the gate skills bound in Step 3). **Mandatory (non-skippable):** the Stage-2 `code-review` gate (`superpowers:requesting-code-review`) and an ADR in `docs/decisions/` for any locked design decision |
+| **Medium** | Multi-file feature, new endpoint, new component, new test class | Open a **change**: `$openspec-propose` → `openspec validate --all` → `codex-openspec-change-review` → `$openspec-apply-change` (fires the Step 3 gates) → `$openspec-archive-change` → ship. **Mandatory (non-skippable):** the Stage-2 `code-review` gate (`superpowers:requesting-code-review`) and an ADR in `docs/decisions/` for any locked design decision |
 | **Large** | Cross-cutting refactor, new service, new data shape, new infrastructure | Medium's list plus `codex-cso`, `codex-database-sentinel-audit`, `codex-impeccable-audit` per gate triggers in Step 3 |
 
 If the request matches multiple rows, pick the higher one. The
 commitment block in Step 0 names the chosen size — this commits you to
 the row's invocation list.
 
-**Medium/large enforcement (spec §6 / standard §6).** For medium and
-large tasks the independent Stage-2 code-review gate is required and a
-decision captured only in `CONTEXT.md` is **not** sufficient — a locked
-design decision (ordering, schema, algorithm/policy choice, API shape)
-MUST also land as an ADR. `superpowers:verification-before-completion`
-refuses to mark the phase complete if either the review evidence or a
-required ADR is missing. Tiny/small tasks are exempt.
+**Tiny/small do not need a change.** The §18 gate is permissive out of a
+change (no active change → allow), mirroring §02's out-of-phase
+permissiveness. Medium and large DO: they change what the product
+guarantees, so they get a spec delta and a review before code.
+
+**Medium/large enforcement (spec §17).** For medium and large tasks the
+independent Stage-2 code-review gate is required and a decision captured
+only in the change's `design.md` is **not** sufficient — a locked design
+decision (ordering, schema, algorithm/policy choice, API shape) MUST also
+land as an ADR. `superpowers:verification-before-completion` refuses to
+mark the change complete if either the review evidence or a required ADR
+is missing. Tiny/small tasks are exempt.
 
 ---
 
 ## Step 2 — Route to the right entry point
 
-AgenticApps gate skills are invoked as `$skill-name` Codex skills. The
-GSD entry points are **Codex custom prompts** invoked as `/prompts:gsd-*`
-— `get-shit-done-codex` (TÂCHES lineage) installs them under
-`$CODEX_HOME/prompts` (e.g. `/prompts:gsd-discuss-phase`,
-`/prompts:gsd-plan-phase`, `/prompts:gsd-execute-plan`, plus
-`/prompts:gsd-new-project`, `/prompts:gsd-create-roadmap`,
-`/prompts:gsd-progress`). This repo does **not** ship them (see ADR-0007).
-Note there is **no** `gsd-quick` or `gsd-execute-phase` prompt in this
-distribution (execute is `gsd-execute-plan`), and **no** `gsd-debug` —
-bug tasks route straight to `superpowers:systematic-debugging`.
+The lifecycle has four stages (spec §17). Everything the product
+guarantees moves through them in order:
 
-The Step 1 size decision and this Step 2 routing form one branchy
-workflow. The flowchart below is the decision skeleton (per spec §12);
-the tables that follow carry the criteria — when a task matches two
-rows, judgment picks the higher one (the labeled fallback edge).
+**1 · propose → 2 · validate → 3 · Superpowers-execute → 4 · archive**,
+then **ship** as a separate act.
+
+### The codex command surface (verified, CLI 1.6.0)
+
+`openspec init --tools codex --profile core` does **not** generate
+`/opsx:*` slash commands on this host — it writes **six project-local
+skills** into the repo's `.codex/skills/`, which Codex discovers and which
+you invoke as `$<name>`:
+
+| Skill | Lifecycle stage |
+|---|---|
+| `$openspec-explore` | 0 · ideate an open-ended change (optional) |
+| `$openspec-propose` | 1 · propose (proposal + design + spec delta + tasks) |
+| `$openspec-update-change` | 1 · amend an artifact mid-flight |
+| `$openspec-apply-change` | 3 · implement the tasks |
+| `$openspec-sync-specs` | 4 · fold the delta into `specs/` |
+| `$openspec-archive-change` | 4 · move the change to `changes/archive/` |
+
+This is the §16 "CLI is authoritative over prose" rule in action: the core
+standard describes `/opsx:*` commands, the installed CLI generates skills
+on codex, and the host records the divergence. The CLI verbs
+(`openspec new change <slug>`, `validate --all`, `show`, `status`,
+`list`, `archive <slug>`) work identically for any agent or human and are
+the fallback if the skills are not present.
+
+These generated skills are **regenerable output**, not vendored artifacts —
+they are gitignored in this repo and recreated by `openspec init`/`update`.
+Never hand-edit them.
+
+### Routing table
+
+| User intent | Entry point |
+|---|---|
+| Tiny or small task | invoke gate skills directly per Step 1 — no change needed |
+| Bug or unexpected behavior | `superpowers:systematic-debugging` (a fix that changes a product guarantee still needs a change) |
+| Surface open questions before proposing | `superpowers:brainstorming`, then `$openspec-explore` |
+| Open a unit of product work | `$openspec-propose` (or `openspec new change <slug>`) |
+| Check the change is well-formed | `openspec validate --all` |
+| Get the pre-code adversarial review | `codex-openspec-change-review` (writes `REVIEWS.md`) |
+| Implement the tasks | `$openspec-apply-change` + the Step 3 execution gates |
+| Fold the delta and close the change | `$openspec-sync-specs` → `$openspec-archive-change` |
+| Ship | `superpowers:finishing-a-development-branch` (commit / PR / changelog) |
 
 ```mermaid
 flowchart TD
@@ -141,97 +191,85 @@ flowchart TD
   kind -->|build / change / refactor| size{Task size? Step 1}
   size -->|tiny| tiny[superpowers:verification-before-completion → commit]
   size -->|small| small[superpowers:test-driven-development → superpowers:verification-before-completion → superpowers:finishing-a-development-branch]
-  size -->|medium or large| disc["/prompts:gsd-discuss-phase {N}"]
+  size -->|medium or large| propose["1 · $openspec-propose"]
   size -.->|ambiguous: matches two rows → pick the HIGHER size| size
-  disc --> plan["/prompts:gsd-plan-phase {N}"]
-  plan --> exec["/prompts:gsd-execute-plan"]
+  propose --> validate["2 · openspec validate --all"]
+  validate -->|red| propose
+  validate -->|green| review["2 · codex-openspec-change-review → REVIEWS.md >= 2 reviewers"]
+  review -->|REQUEST-CHANGES| propose
+  review -->|APPROVE| gate{{"§18 change-gate: validate green AND >= 2 reviewers"}}
+  gate -->|blocked| review
+  gate -->|allowed| exec["3 · $openspec-apply-change"]
   exec --> gates{Gate trigger fires? Step 3}
   gates -->|yes| gaterun[Run the bound superpowers:* or codex-* gate skill]
   gaterun --> exec
-  gates -->|all clear| close[superpowers:finishing-a-development-branch]
+  gates -->|all clear| arch["4 · $openspec-sync-specs → $openspec-archive-change"]
+  arch --> close[superpowers:finishing-a-development-branch]
   tiny --> report[REPORT: commitment list satisfied]
   small --> report
   close --> report
   dbg --> report
 ```
 
-| User intent | Entry point |
-|---|---|
-| Tiny or small task | invoke gate skills directly per Step 1 — no GSD orchestration |
-| Bug or unexpected behavior | `superpowers:systematic-debugging` (this GSD distribution ships no `gsd-debug` prompt) |
-| Surface open questions before planning | `/prompts:gsd-discuss-phase {N}` |
-| Author a phase plan | `/prompts:gsd-plan-phase {N}` |
-| Execute a planned phase | `/prompts:gsd-execute-plan` |
-| Project/roadmap bookkeeping | `/prompts:gsd-new-project`, `/prompts:gsd-create-roadmap`, `/prompts:gsd-progress` |
-
-`{N}` is the phase number from the project's `ROADMAP.md`.
-`/prompts:gsd-execute-plan` (GSD, upstream) is the heavyweight
-orchestrator: it walks each plan in the phase, fires the applicable gates
-from Step 3, and refuses to mark any task complete without verification
-evidence (per spec/06).
+**`archive ≠ ship` (spec §17, normative).** `$openspec-archive-change`
+folds the delta and moves the change directory and produces **no git
+commit**. Shipping is the separate git act with its own gate
+(`branch-close` / PR). Never collapse the two into one step.
 
 ---
 
 ## Step 3 — Gate-to-skill bindings
 
-The 16 gates from
-[spec/02-hook-taxonomy.md](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/spec/02-hook-taxonomy.md)
-are bound on the Codex host as follows. This table is the host's
-binding contract for `full` conformance per spec/09. Gates that have a
-Superpowers equivalent bind to `superpowers:*` (installed by the
-Superpowers-for-Codex distribution); the rest bind to this repo's
-`codex-*` gstack gates.
+Spec §17 remaps the §02 gate taxonomy onto the OpenSpec lifecycle with
+three fates: **collapsed** (a lifecycle stage now does the job),
+**retained** (survives unchanged as an execution gate), **conditional**
+(retained, fires only on its trigger). This table is the host's binding
+contract for `full` conformance per spec/09.
 
-### Pre-execution
+### Collapsed into stage 2 (validate)
 
-| Gate | Bound skill | Notes |
-|---|---|---|
-| plan-review | `codex-plan-review` | Fires before the phase's first code-touching edit; writes `<NN>-REVIEWS.md` with ≥2 independent external reviewers. See §"Pre-execution Gate — Plan Review (spec §02)" below for the invocation ritual (it moved here from `AGENTS.md` at v0.9.0); enforcement is the `PreToolUse` hook in `.codex/hooks.json` |
+| §02 gate | Where it lives now |
+|---|---|
+| `spec-review` | `openspec validate --all` — the machine check of the delta against the spec slot. The `codex-spec-review` skill is deleted. |
+| `plan-review` | The §18 change-gate **predicate**: validate green AND `REVIEWS.md` ≥ 2 reviewers, produced by `codex-openspec-change-review`. It is **not** a separately-named gate — §17 forbids that under 1.0.0 — but the adversarial multi-AI review itself is fully retained. |
 
-### Pre-phase
-
-| Gate | Bound skill | Notes |
-|---|---|---|
-| `brainstorm-ui` | `superpowers:brainstorming` | Same skill covers UI and architecture; body branches on the prompt |
-| `brainstorm-architecture` | `superpowers:brainstorming` | |
-| `design-shotgun` | `codex-design-shotgun` | Generates ≥3 visual variants and writes them into `CONTEXT.md` |
-| `design-critique` | `codex-design-critique` | Impeccable-style critique against an existing `UI-SPEC.md` |
-
-### Per-task / execution
+### Retained — always
 
 | Gate | Bound skill | Notes |
 |---|---|---|
-| `tdd` | `superpowers:test-driven-development` (strengthened by `codex-ts-declare-first` for new TS modules) | Produces a `test(RED):` + `feat(GREEN):` commit pair atomically; for a new TypeScript module's API surface (spec §13) the strengthening adds a `declare(ts):` commit before RED, giving three atomic commits `declare(ts):` → `test(ts):` (RED) → `feat(ts):` (GREEN) — refuses to collapse declare + impl into one commit |
-| `ui-preview` | `codex-qa` (preview mode) | Per-task pre-commit screenshot mode of the same QA skill; the qa skill body branches on `mode=preview` vs `mode=phase-qa` |
-| `verification` | `superpowers:verification-before-completion` | Refuses task completion when `must_have` evidence is missing |
+| `tdd` | `superpowers:test-driven-development` (strengthened by `codex-ts-declare-first` for new TS modules) | `test(RED):` + `feat(GREEN):` commit pair, atomically. For a new TypeScript module's API surface (spec §13) the strengthening adds a `declare(ts):` commit before RED — three atomic commits, never collapsed |
+| `verification` | `superpowers:verification-before-completion` | Refuses task completion when `must_have` evidence is missing (spec §06) |
+| `code-review` | `superpowers:requesting-code-review` | Stage 3, independent context via `codex exec --model …` per [ADR-0002](../../docs/decisions/0002-stage2-independent-reviewer-on-codex.md). **`validate` is a spec check, not a code review, and never discharges this.** Mandatory for medium/large |
+| `security` | `codex-cso` | **Always-on** for product repos. Fires on any change touching auth, storage, request handling, secrets, or an LLM trust boundary. Carries §14's evidence obligation on LLM-scoped changes. Never conditional-away |
+| `branch-close` | `superpowers:finishing-a-development-branch` | Stage 4 ship. The PR body links the archived change (`changes/archive/<date>-<slug>/`) and its evidence |
 
-### Post-phase
+### Conditional — fires only when the change's surface triggers it
 
-| Gate | Bound skill | Notes |
+| Gate | Bound skill | Trigger |
 |---|---|---|
-| `spec-review` | `codex-spec-review` | Stage 1; writes `## Stage 1 — Spec compliance` into `REVIEW.md` |
-| `code-review` | `superpowers:requesting-code-review` | Stage 2; spawns an independent reviewer via `codex exec --model …` per [ADR-0002](../../docs/decisions/0002-stage2-independent-reviewer-on-codex.md). Mandatory (non-skippable) for medium/large per Step 1 |
-| `security` | `codex-cso` | OWASP-aligned security audit; writes `SECURITY.md` |
-| `database-security` | `codex-database-sentinel-audit` | Same skill, "in-phase" mode |
-| `qa` | `codex-qa` | Phase-level browser-driven QA mode (distinct from `ui-preview` mode) |
-| `impeccable-audit` | `codex-impeccable-audit` | Visual quality audit per [ADR-0011](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0011-impeccable-design-quality-gate.md) |
-| `db-pre-launch-audit` | `codex-database-sentinel-audit` | Same skill, "pre-launch" mode |
+| `brainstorm-ui` | `superpowers:brainstorming` | The change has a UI surface; feeds `design.md` |
+| `brainstorm-architecture` | `superpowers:brainstorming` | The change adds a service / model / integration / data shape |
+| `design-shotgun` | `codex-design-shotgun` | UI change with no design contract yet (≥3 variants) |
+| `design-critique` | `codex-design-critique` | UI change with an existing design contract |
+| `impeccable-audit` | `codex-impeccable-audit` | The change alters a shipping visual surface — retained on the ADR-0021 **measured trial** (MEASUREMENT.md), not on conviction |
+| `ui-preview` | `codex-qa` (preview mode) | A frontend component / route / visual surface changed |
+| `qa` | `codex-qa` (phase-qa mode) | The change ships user-visible behavior AND a dev server is reachable |
+| `database-security` | `codex-database-sentinel-audit` (in-phase) | The change touches SQL, schema, RLS, definer functions, or storage policy |
+| `db-pre-launch-audit` | `codex-database-sentinel-audit` (pre-launch) | Before first production launch / after a major DB migration |
 
-### Finishing
+### Demoted to a lint
 
-| Gate | Bound skill | Notes |
-|---|---|---|
-| `branch-close` | `superpowers:finishing-a-development-branch` | Composes the PR description from the phase artifacts |
+| Gate | Binding |
+|---|---|
+| `ts-declare` (§13) | `codex-ts-declare-first` runs as a **CI lint / tdd-strengthener** on TS changes, not a standalone gate |
 
 The `superpowers:systematic-debugging` skill is not bound to a spec gate —
-it is invoked directly for bug / unexpected-behavior tasks (this GSD
-distribution ships no `gsd-debug` prompt) for the four-phase
-Observe → Hypothesize → Test → Conclude protocol.
+it is invoked directly for bug / unexpected-behavior tasks for the
+four-phase Observe → Hypothesize → Test → Conclude protocol.
 
-A gate fires when its trigger condition (per spec/02) is met. The
-trigger skill does not pre-fire gates whose conditions cannot be met
-(e.g. `database-security` is not invoked on a phase that does not
-touch DB code).
+A gate fires when its trigger condition is met. The trigger skill does not
+pre-fire gates whose conditions cannot be met (e.g. `database-security` is
+not invoked on a change that does not touch DB code).
 
 ---
 
@@ -241,15 +279,22 @@ Every non-trivial decision lands as an ADR in
 `docs/decisions/NNNN-{slug}.md`. Use the existing ADRs in
 [`docs/decisions/`](../../docs/decisions/) as the shape reference (see
 [ADR-0001](../../docs/decisions/0001-codex-skill-naming.md) for the
-canonical layout). Generic and database-acceptance ADR templates from
-`agenticapps-workflow-core/templates/` are deferred — copy from
-`docs/decisions/0001-*.md` until the core templates land.
+canonical layout).
 
-**For medium and large tasks an ADR is mandatory** whenever the phase
+**For medium and large tasks an ADR is mandatory** whenever the change
 locks a design decision (per Step 1). A decision recorded only in the
-phase `CONTEXT.md` does not satisfy the requirement;
+change's `design.md` does not satisfy the requirement;
 `superpowers:verification-before-completion` treats a missing ADR as a
 verification failure.
+
+**Placement (spec §19).** Before writing prose, ask: *is this a product
+guarantee, or a way of working?* A product guarantee — something a user or
+downstream system can rely on, that would be a bug if violated — belongs in
+`openspec/specs/<capability>/spec.md` as a requirement. A way of working
+belongs in `AGENTS.md` as process. A record of past effort belongs in
+history (`docs/legacy-planning/` on a migrated project). An ADR is
+process/record; the product invariants it references are what get
+normatively specified.
 
 ADR-0012 governs the database-sentinel acceptance template. When that
 gate fires, copy its ADR shape from
@@ -265,10 +310,11 @@ into `docs/decisions/` as a new numbered entry.
 | "This task is too small for the commitment ritual" | The ritual takes 15 seconds. Skipping it is how discipline erodes. Emit the block. |
 | "Skill is obvious, no need to announce it" | The announcement IS the commitment. Announcement → consistency pressure → compliance. |
 | "TDD is impractical for frontend" | Snapshot tests, `/browse` screenshot diffs, visual regression count as TDD. Write the test first. |
-| "I've already thought about alternatives" | If you didn't write them down, you didn't consider them. List ≥2 in RESEARCH.md. |
-| "Two-stage review is excessive" | Stage 1 catches spec drift, Stage 2 catches code-quality drift. Different failures, different agents. |
+| "I've already thought about alternatives" | If you didn't write them down, you didn't consider them. List ≥2 in the change's `design.md`. |
+| "Two-stage review is excessive" | Stage 2 catches spec drift before code; stage 3 catches code-quality drift. Different failures, different agents. |
 | "Dev server isn't worth booting for this change" | If you touched JSX/TSX, boot it. 30 seconds. |
 | "The user explicitly said ship fast" | Acknowledge urgency, explain risk in one sentence, offer minimum discipline that protects the critical path. |
+| "`openspec validate` is green, so the change is reviewed" | `validate` is a lint over structure. It reads no intent and no code. The review is a separate, independent condition. |
 
 ---
 
@@ -303,87 +349,94 @@ If any answer gives you pause, follow the protocol.
 
 ## Verification Check (host-specific)
 
-Before claiming any phase complete, run the following checks against
-the working tree. Each check is a permitted evidence shape per
-spec/06. Paths follow GSD's native phase-subdirectory layout: a phase
-lives in `.planning/phases/<NN>-<slug>/` (e.g. `03-checkout/`) holding
-GSD's `<NN>-CONTEXT.md`, `<NN>-<MM>-PLAN.md`, `<NN>-VERIFICATION.md`,
-`<NN>-<MM>-SUMMARY.md`, etc. The AgenticApps artifacts (`REVIEW.md`,
-`QA.md`, `DB-AUDIT.md`, `IMPECCABLE-AUDIT.md`, `screenshots/`) live
-**inside** that same phase directory — GSD writes the plan state, the
-AgenticApps layer adds its evidence alongside without reshaping it.
+Before claiming any change complete, run the following checks against
+the working tree. Each check is a permitted evidence shape per spec/06.
+A change lives in `openspec/changes/<slug>/` and holds the CLI's
+artifacts (`proposal.md`, `design.md`, the spec delta, `tasks.md`) plus
+the AgenticApps evidence written alongside them (`REVIEWS.md`,
+`REVIEW.md`, `SECURITY.md`, `QA.md`, `DB-AUDIT.md`,
+`IMPECCABLE-AUDIT.md`, `screenshots/`) — OpenSpec owns the change state,
+the AgenticApps layer adds its evidence without reshaping it.
+
+### The change validates
+
+```bash
+openspec validate --all || echo "MISS: the spec delta does not validate"
+```
 
 ### Commitment block was emitted
 
-A `.planning/phases/<NN>-<slug>/<NN>-CONTEXT.md` (or the phase summary)
-contains the `## Workflow commitment` block. If the agent did not emit
-it, the phase is non-conformant and Stage 1 review MUST flag it.
+The change's `proposal.md` (or `design.md`) contains the
+`## Workflow commitment` block. If the agent did not emit it, the change
+is non-conformant and the stage-3 review MUST flag it.
 
 ```bash
-grep -l '^## Workflow commitment$' .planning/phases/*/*-CONTEXT.md .planning/phases/*/*-SUMMARY.md 2>/dev/null \
-  || echo "MISS: commitment block not found in any phase artifact"
+grep -l '^## Workflow commitment$' openspec/changes/*/proposal.md openspec/changes/*/design.md 2>/dev/null \
+  || echo "MISS: commitment block not found in any change artifact"
+```
+
+### Pre-code review evidence exists and is independent
+
+```bash
+for d in openspec/changes/*/; do
+  case "$d" in openspec/changes/archive/) continue ;; esac
+  n=$(grep -cE '^##[[:space:]]+Reviewer:' "$d/REVIEWS.md" 2>/dev/null || echo 0)
+  [ "$n" -ge 2 ] || echo "MISS: $d has $n/2 reviewers — the §18 gate will block code edits"
+done
 ```
 
 ### TDD commit pairs exist for tasks marked `tdd="true"`
 
-For each plan with `tdd="true"`, the git history MUST contain a
-`test(RED):` commit followed by a `feat(GREEN):` commit (or host
-equivalent prefixes per spec/02 `tdd` gate).
-
 ```bash
 git log --oneline --grep '^test(RED)' | head
 git log --oneline --grep '^feat(GREEN)' | head
-# Both lists are expected to be non-empty for any phase containing a
-# TDD-flagged plan; pair them by chronological adjacency.
+# Both lists are expected to be non-empty for any change containing a
+# TDD-flagged task; pair them by chronological adjacency.
 ```
 
-### Stage 2 evidence is present and independent
+### Stage-3 code review is present and independent
 
-`.planning/phases/<NN>-<slug>/REVIEW.md` contains both `## Stage 1 —
-Spec compliance` and `## Stage 2 — Code quality`. Stage 2 was authored
-by an independent reviewer (per spec/07) — on Codex this means a `codex
-exec` child invocation logged for the phase or referenced by command in
-the REVIEW file. For medium/large tasks this file is mandatory (Step 1).
+`openspec/changes/<slug>/REVIEW.md` records the independent code-quality
+review of the implementation diff (spec §07) — on Codex a `codex exec`
+child invocation logged for the change or referenced by command in the
+file. For medium/large this file is mandatory (Step 1).
 
 ```bash
-phase="$1"   # e.g. 03-checkout
-grep -l '^## Stage 1 — Spec compliance' ".planning/phases/${phase}/REVIEW.md" \
-  && grep -l '^## Stage 2 — Code quality' ".planning/phases/${phase}/REVIEW.md" \
-  || echo "MISS: REVIEW.md is missing one of the two stages"
+grep -l '^## Code quality' openspec/changes/*/REVIEW.md 2>/dev/null \
+  || echo "MISS: no independent stage-3 code review recorded"
 ```
 
-### Per-`must_have` evidence in VERIFICATION.md
+### Every task is checked off with evidence
 
-Every `must_have` row in `.planning/phases/<NN>-<slug>/<NN>-VERIFICATION.md`
-has at least one Evidence subrow per spec/06. A `must_have` with zero
-Evidence rows is a verification failure.
+Every task in `tasks.md` is complete, and each carries at least one
+evidence line per spec/06. A completed task with zero evidence is a
+verification failure.
 
 ```bash
-awk '
-  /^### must_have:/ { must=$0; ev=0; next }
-  /^- Evidence:/ && must { ev++ ; next }
-  /^### / && must && !ev { print "MISS evidence: " must; must=""; ev=0 }
-  END { if (must && !ev) print "MISS evidence: " must }
-' .planning/phases/*/*-VERIFICATION.md
+grep -n '^- \[ \]' openspec/changes/*/tasks.md 2>/dev/null \
+  && echo "MISS: open tasks remain in the active change"
 ```
 
 ### ADR present for medium/large locked decisions
-
-A medium/large phase that locked a design decision has a matching ADR
-under `docs/decisions/`. A decision living only in the phase context is
-a verification failure (Step 4).
 
 ```bash
 ls docs/decisions/[0-9][0-9][0-9][0-9]-*.md >/dev/null 2>&1 \
   || echo "MISS: no ADR recorded — required for medium/large locked decisions"
 ```
 
-### `implements_spec` is current
+### The change reached done-ness before archiving (spec §16)
 
-The trigger skill's frontmatter MUST cite the spec version this
-project's contract is asserted against. If the project bumps to a
-newer core version, update the trigger skill's frontmatter and
-re-validate.
+A change is *done* only when **both** hold: the delta is folded into
+`openspec/specs/<capability>/spec.md`, **and** `openspec validate --all`
+is green. Folded-but-not-archived and archived-but-not-folded are both
+non-conforming half-states.
+
+```bash
+openspec list 2>/dev/null
+ls openspec/changes/archive/ 2>/dev/null
+```
+
+### `implements_spec` is current
 
 ```bash
 grep '^implements_spec:' "${CODEX_HOME:-$HOME/.codex}/skills/agentic-apps-workflow/SKILL.md"
@@ -397,8 +450,10 @@ After install via this scaffolder's `install.sh` (or by symlinking the
 `skills/agentic-apps-workflow/` directory into `$CODEX_HOME/skills/`),
 Codex auto-discovers this SKILL.md and routes to it on any code task
 matching the description in the frontmatter. `install.sh` also binds the
-upstreams (GSD via `get-shit-done-codex`; Superpowers for Codex)
-— see [`docs/BINDING.md`](../../docs/BINDING.md).
+upstreams (the OpenSpec CLI + its generated command surface; Superpowers
+for Codex) and installs the §18 change-gate — see
+[`docs/BINDING.md`](../../docs/BINDING.md) and
+[`docs/WORKFLOW.md`](../../docs/WORKFLOW.md).
 
 The skill stays loaded only during the triggering turn (per Codex's
 progressive-disclosure design); subsequent turns re-trigger when the
@@ -441,7 +496,8 @@ One paragraph on exactly where to pick up and what the first action should be.
 ```
 
 Keep it under 150 lines. Write the file directly — do not print it to the
-terminal.
+terminal. Reference the **active change** (`openspec/changes/<slug>/`) rather
+than a GSD phase — `STATE.md` and the phase engine are gone.
 
 The knowledge-capture ritual tail below runs **after** the handoff is written,
 never before.
@@ -452,30 +508,52 @@ never before.
 
 Spec 0.10.0 added an "Instruction-surface economy" SHOULD to §12: the
 always-loaded instruction file is re-billed on every turn, so it carries only
-what must be resident on *every* turn.
+what must be resident on *every* turn. Spec §19 extends the same test one step
+further — a *product guarantee* belongs in the spec slot, not in either file.
 
 `AGENTS.md` therefore carries the §11 canonical block (verbatim, behind its
 provenance anchor, near the top) plus two short pointers — this skill, and the
 session-handoff protocol. Everything procedural lives **here**, in the lazily
 loaded trigger skill, which loads on exactly the code-touching turns where those
 procedures bind: the Step 3 gate-binding table, Step 1 task-size routing, the
-session-handoff protocol, the §15 knowledge-capture ritual tail, and the §02
-plan-review gate procedure.
+session-handoff protocol, the §15 knowledge-capture ritual tail, and the stage-2
+change-review procedure.
 
 Before v0.9.0 all of it was duplicated into `AGENTS.md` — ~150 eager lines per
 turn, pushing the §11 block toward the mid-context position §12's placement
-advisory exists to avoid. The plan-review *procedure* moved; its **enforcement**
-did not. That gate is enforced programmatically by a `PreToolUse` hook
-(`.codex/hooks.json` → `hook-wrapper-plan-review.sh` → `check-plan-review.sh`,
-exit 0 = ALLOW / exit 2 = BLOCK), and §12 is explicit that hook wiring stays
-where the runtime needs it. Both files are untouched by the relocation.
+advisory exists to avoid. The review *procedure* moved; its **enforcement** did
+not. That gate is enforced programmatically by a `PreToolUse` hook
+(`.codex/hooks.json` → `hook-wrapper-openspec-gate.sh` →
+`openspec-change-gate.sh`, exit 0 = ALLOW / exit 2 = BLOCK), and §12 is explicit
+that hook wiring stays where the runtime needs it. Both files are untouched by
+the relocation.
 
 ---
 
-## Spec deltas (spec 0.10.0)
+## Spec deltas (spec 1.0.0)
 
 Per core spec §09, a host names every requirement it does not satisfy verbatim,
-with rationale. Audited 2026-07-19.
+with rationale. Audited 2026-07-24; re-audited 2026-07-25 for §18 (ADR-0012).
+
+- **§18 change-gate — satisfied, and no longer implemented here.**
+  `bin/openspec-change-gate.sh` is vendored **byte-identical** from core's
+  reference implementation (core#33 / ADR-0022), alongside
+  `tools/change-gate-conformance.sh`; provenance is recorded in
+  `tools/core-vendor.manifest` rather than a header, because a "vendored from
+  `<commit>`" comment would break the byte-identity it claimed to record.
+  Conformance is **executed, not asserted**: CI scores every declared harness
+  row before the gate's verdict is trusted, and the bar is zero failures rather
+  than a fixed count so a grown harness raises it automatically. All three
+  surfaces use real mode dispatch — hook, `--pre-commit`, `--ci` — and `--ci` is
+  whole-repo. The prior hand-maintained copy scored 16 of 28 and carried three
+  live bypasses; the two defects core's harness does *not* cover (GAP-1, GAP-4)
+  are pinned by assertions this repo owns. **Residual, disclosed:** the shared
+  `~/.agenticapps/bin/` path is written by all four hosts and only this one
+  arbitrates by `# gate-version:` so far, so a sibling can still overwrite it for
+  every other repo on the machine. This host's own surfaces are defended — they
+  reject an unmarked shared copy and fall back to the vendored one — but a
+  marked-but-older sibling copy is still trusted. Closing it fully needs all four
+  hosts adopted (core#34).
 
 - **§14 prompt-injection — trivially conformant.** This scaffolder builds no LLM
   prompts from non-self-authored values, so §14's trigger condition cannot occur;
@@ -486,13 +564,29 @@ with rationale. Audited 2026-07-19.
   prompts get §14 coverage via the `injection-guard` skill
   (agenticapps-observability), on the same delegation basis as §10. The `security`
   gate still carries §02's obligation to record §14 evidence when it fires on a
-  project with a prompt-building surface.
-- **Eight spec/02 gates whose trigger cannot occur here** (`brainstorm-ui`,
-  `design-shotgun`, `design-critique`, `ui-preview`, `qa`, `impeccable-audit`,
-  `database-security`, `db-pre-launch-audit`) are bound for downstream projects
-  but never fire on this UI-less, DB-less scaffolder. Enumerated with rationale in
+  project with a prompt-building surface. One §14-adjacent control IS live here:
+  `codex-openspec-change-review` writes an untrusted-content notice above every
+  verbatim third-party reviewer block, because reviewer output is exactly the
+  class of text a later agent could otherwise read as instructions.
+- **Nine spec/17 conditional gates whose trigger cannot occur here**
+  (`brainstorm-ui`, `design-shotgun`, `design-critique`, `ui-preview`, `qa`,
+  `impeccable-audit`, `database-security`, `db-pre-launch-audit`, and the
+  `ts-declare` lint) are bound for downstream projects but never fire on this
+  UI-less, DB-less, TS-less scaffolder. Enumerated with rationale in
   [docs/ENFORCEMENT-PLAN.md](../../docs/ENFORCEMENT-PLAN.md). Per spec/09 an
   omission whose trigger cannot occur does not downgrade `full` to `partial`.
+- **§16 spec slot — initialized, not yet seeded.** `install.sh` runs
+  `openspec init --tools codex --profile core`, producing the three-slot layout.
+  This scaffolder's own product surface is a workflow standard rather than a
+  running system, so `specs/` is seeded as the repo adopts the lifecycle for its
+  own work; the slot, the gate, and the lifecycle are installed and enforced from
+  1.0.0. Target projects seed `specs/` via the planning→openspec recipe carried
+  by the setup/update skills (§16 SHOULD).
+- **§19 `.planning/` retention — this scaffolder keeps its own in place.** §19's
+  Tier-0 move to `docs/legacy-planning/` binds a *product* repo adopting the spec
+  slot. This repo's `.planning/` is its own development history, its migration
+  tests read fixtures out of it, and the core standard's own guardrail is "keep
+  `.planning/` as backup". It is retained unmoved, and never deleted.
 - **§10 observability — satisfied by delegation**, not omitted: the generator
   obligation is met by the standalone `agenticapps-observability` skill. A
   satisfied MUST per §09, not a delta — recorded here only because readers look
@@ -512,10 +606,11 @@ Obsidian note per repo** in the operator's vault. It is the FINAL step of three
 rituals — run it AFTER, never before, the ritual's own artifact exists:
 
 1. **Session handoff** — after `.codex/session-handoff.md` is written.
-2. **Plan completion** — after a plan is marked complete under `.planning/`
-   (GSD `/prompts:gsd-plan-phase`).
-3. **Phase completion** — after the phase artifacts are committed
-   (GSD `/prompts:gsd-execute-plan`).
+2. **Change archived** — after `$openspec-archive-change` moves the change into
+   `openspec/changes/archive/<date>-<slug>/` (this replaces the 0.x "plan
+   completion" and "phase completion" triggers, which had no equivalent once the
+   phase engine retired).
+3. **Ship** — after the change's work is committed / the PR is opened.
 
 The vault write is machine-local: it MUST NEVER be committed to the repo, and
 it MUST NEVER fail, block, or roll back the ritual that triggered it — on any
@@ -552,7 +647,7 @@ Procedure (mechanical — follow exactly):
 4. **Prepend a Log entry** at the TOP of `## Log` (append-only — never edit or
    delete existing entries) with a heading of exactly this shape, `codex` as
    the host tag:
-   `### YYYY-MM-DD — <handoff|plan|phase> — <short title> (codex)`
+   `### YYYY-MM-DD — <handoff|change|ship> — <short title> (codex)`
    and the learnings as bullets beneath it.
 5. **Curate `## Key Learnings`:** dedupe, merge related items, promote log
    entries that earned it, demote or remove stale ones. Target ~10–20
@@ -575,40 +670,61 @@ codex and claude running in one working tree read the **same**
 See [ADR-0008](../../docs/decisions/0008-knowledge-capture.md) and core
 [ADR-0017](https://github.com/agenticapps-eu/agenticapps-workflow-core/blob/main/adrs/0017-knowledge-capture-obsidian.md).
 
-## Pre-execution Gate — Plan Review (spec §02)
+## Stage 2 — Validate + multi-AI change review (spec §17 / §18)
 
-Multi-AI plan review must run BEFORE execution begins. This gate exists
-because agent compliance alone did not hold: core ADR-0018 records that
+*(This section is the 1.0.0 retarget of what was `## Pre-execution Gate — Plan
+Review (spec §02)` through v0.9.0. The gate did not go away; its target moved
+from a GSD `*-PLAN.md` to the active OpenSpec change.)*
+
+Independent multi-AI review must run BEFORE any code is written. This gate
+exists because agent compliance alone did not hold: core ADR-0018 records that
 cparx phases 04.9 through 05 silently dropped this review for 8 consecutive
 phases, with no program ever catching the omission.
 
 Procedure (mechanical — follow exactly):
 
-1. **When** — before the FIRST code-touching edit of a phase. Not before
-   `.planning/` artifact edits; not once per edit.
-2. **Run the verifier** at the stable installed path
-   `${CODEX_HOME:-$HOME/.codex}/skills/agentic-apps-workflow/scripts/check-plan-review.sh`.
-   Always this path — never a path read out of the target repo's own config,
-   and never a relative path. The verifier locates the repo root itself, so
-   invoke it from wherever you are: no working-directory precondition applies.
-3. **Run it every time. Do not pre-judge whether it applies.** The agent's
-   job is to invoke. The verifier's job is to decide.
-4. **Exit 0 → proceed. Exit 2 → HARD STOP.** Do not edit code. Do not
+1. **When** — after `openspec validate --all` is green for the active change,
+   and before the FIRST code-touching edit. Not before edits to the change's
+   own artifacts (those are exempt); not once per edit.
+2. **The enforcement surface is `openspec-change-gate.sh`**, resolved at
+   `$HOME/.agenticapps/bin/openspec-change-gate.sh` (or `$OPENSPEC_CHANGE_GATE`,
+   or the repo's `bin/`). It reads a tool-call payload on stdin and exits
+   **0 = ALLOW / 2 = BLOCK**. You do not need to pre-judge whether the gate
+   applies — the `PreToolUse` hook invokes it on every `apply_patch`, and the
+   git `pre-commit` hook and CI invoke it again on every commit and PR.
+3. **Exit 0 → proceed. Exit 2 → HARD STOP.** Do not edit code. Do not
    auto-invoke external reviewers on your own initiative — that would ship
-   plan content to other vendors without consent. The verifier prints the
-   remedy; surface it to the operator and wait.
-5. **The remedy** is the `codex-plan-review` skill, which writes
-   `<NN>-REVIEWS.md` with at least 2 independent external reviewers.
+   change content to other vendors without consent. The gate prints the remedy;
+   surface it to the operator and wait.
+4. **The remedy** is the `codex-openspec-change-review` skill, which writes
+   `openspec/changes/<slug>/REVIEWS.md` with at least 2 independent external
+   reviewers, one `## Reviewer: <vendor>` heading each.
 
-**The verifier decides these for you** — you do not need to check any of
-these; run the script and it will exit 0 on its own when:
-- `GSD_SKIP_REVIEWS=1` is set, or a `multi-ai-review-skipped` marker exists
-  in the phase directory (both emergency-only, both announce themselves)
-- the phase is legacy bare-number layout, already shipped (a `*-SUMMARY.md`
-  is present), has no `*-PLAN.md` at all, or nothing resolves
+**The gate decides these for you** — run it and it exits 0 on its own when:
+- there is no active change (out-of-change edits are permitted, §18), or
+- the edit targets an OpenSpec artifact (`openspec/**`) — you must be able to
+  author the change while the gate is engaged, or
+- `GSD_SKIP_REVIEWS=1` is set (an emergency escape that announces itself in the
+  log), or
+- stdin is unparseable — the gate fails **open on parse error only**. Failing
+  open on *policy* (a missing review) would be non-conformant.
 
-Both `GSD_SKIP_REVIEWS` and the `multi-ai-review-skipped` marker are
-emergency-only escape hatches: each announces itself, and the marker file is
-visible to `git status` and expected to be committed with a rationale. A
-hatch is an auditable decision, not a silent bypass.
+`GSD_SKIP_REVIEWS` is an emergency-only escape hatch: it announces itself in
+the gate's log line and in `git commit`'s output. A hatch is an auditable
+decision, not a silent bypass.
 
+**Two facts about the codex wiring that must not be "simplified" away.** The
+hook calls `hook-wrapper-openspec-gate.sh`, not the gate directly, because
+(1) codex's `apply_patch` payload carries the target path *inside the patch
+blob* (`tool_input.command`), where the gate's extractor cannot see it — handed
+the raw payload the gate parses no path and fails open, allowing every edit; and
+(2) a codex `PreToolUse` hook emitting invalid stdout fails open and runs the
+tool anyway, so a block must be emitted as strictly valid
+`permissionDecision: deny` JSON. Both are verified behaviours, not theory.
+
+**An installed hook is not an enforcing hook.** codex-cli requires the operator
+to *trust* a project hook before it runs; an untrusted entry sits at
+`Installed N / Active N-1 / Review 1` and enforces nothing while looking
+installed. After wiring, confirm with `/hooks` that the entry is **Active**, and
+confirm the entry uses the nested `{"matcher", "hooks":[{"type","command"}]}`
+shape — the flat form is dropped silently, with no error and no warning.

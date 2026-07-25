@@ -16,8 +16,152 @@ in every shipped artifact's frontmatter.
 - Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
-- Real CI: `.github/workflows/ci.yml` is still the Phase 0 placeholder and
-  verifies nothing; `migrations/run-tests.sh` runs only locally.
+- Reconcile `bin/reviewer-cli.sh` fleet drift: this repo ships a superset (adds
+  `claude` + `opencode` arms), opencode ships the smaller one, and both install
+  to the same global path — last-writer-wins, backward-compatible in one
+  direction only.
+- Adopt core's in-flight symlinked-root exemption fix once it lands as a new
+  `gate-version` (core `fix/gate-symlinked-root-exemption`). Re-vendoring is a
+  copy plus a green suite — that is the point of 1.1.0.
+- Upstream: propose harness rows for GAP-1 and GAP-4. Core's implementation
+  fixes both; core's harness covers neither, so every host is unprotected
+  against a regression in them.
+
+## [1.1.0] — 2026-07-25
+
+Vendors the **canonical §18 change-gate** from `agenticapps-workflow-core`
+(core#33 / ADR-0022) via migration `0014`, and stops maintaining a copy. See
+[ADR-0012](docs/decisions/0012-vendor-canonical-change-gate.md).
+
+### Fixed
+
+- **Three live bypasses of the change-gate.** `src/openspec/app.ts`,
+  `/tmp/openspec/evil.ts` and `..`-escaping paths were treated as exempt change
+  artifacts; reviewer counting counted headings, so one vendor reviewing twice
+  or a fenced example block cleared the "≥2 independent reviewers" rule with
+  zero reviews performed; and a change author's own review counted toward the
+  threshold, which the §02 evidence verifier rejects.
+- **GAP-1** — the gate resolved `$PWD` rather than the repo root, so the
+  `PreToolUse` hook failed open from any subdirectory.
+- **GAP-4** — whitespace-containing non-JSON on stdin reached policy and
+  blocked, inverting §18's rule to fail open on a *parse* error and never on
+  policy.
+- **`GSD_SKIP_REVIEWS=1` no longer overrides a red `openspec validate`.** The
+  hatch bypasses the review clause only.
+
+### Added
+
+- `tools/change-gate-conformance.sh` — core's executable conformance harness,
+  vendored and run in CI **before** the gate's verdict is trusted. A drifted
+  gate passes every repo it guards while enforcing nothing.
+- `tools/core-vendor.manifest` — sidecar provenance (core commit + per-file
+  sha256), so the vendored files stay byte-identical and carry no local header.
+- `bin/install-gate.sh` — `# gate-version:` arbitration. The installer now
+  **refuses to downgrade** the shared `~/.agenticapps/bin/` gate, atomically and
+  under a bounded-retry lock. This is the fix for the hazard issue #26 was filed
+  about: four hosts write one path, so without arbitration it is
+  last-writer-wins.
+- Marker-validated shared-gate resolution on the local surfaces, and
+  `OPENSPEC_GATE_SELF=codex` set explicitly by all three.
+
+### Changed
+
+- **`--ci` is whole-repo, not diff-scoped.** An unreviewed active change now
+  fails the build even when the pull request did not touch it, and a
+  proposal-only PR is red until its `REVIEWS.md` lands. Stricter than the driver
+  it replaces, and what §18 actually requires.
+- Both floors are thin wrappers on the gate's real modes. They previously
+  synthesized a hook payload per file — which enforced, but not in a way §18's
+  "demonstrable by direct script invocation" clause accepts, and which left the
+  gate's own `--pre-commit`/`--ci` paths unexercised by this host.
+
+### Removed
+
+- `docs/GATE-KNOWN-GAPS.md` and `test_gate_known_gaps`. The sha256 pin existed
+  to force re-verification when the canonical landed; it has landed. History is
+  preserved in ADR-0012.
+
+## [1.0.0] — 2026-07-24
+
+Adopts `agenticapps-workflow-core` **spec v1.0.0** — the OpenSpec + Superpowers
+front end (§16–§19, core ADR-0021) — via migration `0013`. See
+[ADR-0011](docs/decisions/0011-openspec-superpowers-adoption.md) and the new
+[`docs/WORKFLOW.md`](docs/WORKFLOW.md).
+
+### Added
+
+- **The §18 change-gate**, as ONE host-agnostic shell script
+  (`bin/openspec-change-gate.sh`, byte-identical to the copy the opencode host
+  already installs at `~/.agenticapps/bin/`). It allows a code edit only when
+  `openspec validate --all` is green **and** the active change carries
+  `REVIEWS.md` with ≥2 `## Reviewer:` headings. Wired at three surfaces: the
+  codex `PreToolUse` hook, a git `pre-commit` hook, and CI
+  (`.github/workflows/openspec-gate.yml`). The latter two are the enforcement
+  *floor* — a PreToolUse hook cannot gate the session that installed it.
+- **`skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh`** — the
+  codex `PreToolUse` adapter, and it is load-bearing rather than sugar. codex's
+  `apply_patch` payload carries the edited path *inside the patch blob*
+  (`tool_input.command`), so the bare gate parses no path and fails open,
+  silently allowing every edit; and a codex hook emitting invalid stdout also
+  fails open, so a block must be jq-built `permissionDecision: deny` JSON. Both
+  are asserted in the suite.
+- **`bin/reviewer-cli.sh`** — the reviewer wrapper (`</dev/null` + `timeout`),
+  extended with `claude` and `opencode` vendor arms.
+- **`docs/WORKFLOW.md`**, **`docs/recipes/0001-planning-to-openspec.md`** (a
+  Codex adaptation of the core recipe, for target repos), and
+  **`templates/config-lifecycle.json`**.
+
+### Changed
+
+- **The planning front end is OpenSpec, not the GSD phase engine.** Work moves
+  propose → validate → Superpowers-execute → archive, then ships as a separate
+  act. The **execution** discipline is untouched: §01/§03/§04/§05/§06/§11 carry
+  forward verbatim.
+- **`codex-plan-review` → `codex-openspec-change-review`**, retargeted from a
+  GSD `*-PLAN.md` to the active OpenSpec change. Every discipline the 0.x skill
+  earned carries forward: egress manifest + affirmative consent, the honest
+  statement that the manifest is advisory, reviewer independence,
+  refuse-below-two, never fabricate a verdict, honest provenance. `codex` is
+  still never a reviewer — a host does not review its own change.
+- **The multi-AI review is kept but is no longer a named gate.** §17 forbids a
+  standalone `plan-review`/`spec-review` gate under 1.0.0, so the review is the
+  change-gate's *predicate*. Same adversarial mechanism, one fewer moving part;
+  ADR-0018's failure mode stays closed.
+- `implements_spec` **0.10.0 → 1.0.0** on the trigger skill; `AGENTS.md`'s
+  Development Workflow section now describes the lifecycle and points at
+  `docs/WORKFLOW.md`; `.planning/config.codex.json`'s 0.x `hooks` tree is
+  replaced by a `lifecycle` tree.
+- `install.sh` installs the gate, the reviewer wrapper and the pre-commit floor,
+  auto-installs the `openspec` CLI, runs `openspec init --tools codex --profile
+  core`, and prints the ACTION REQUIRED hook-trust step. The GSD binding block is
+  replaced by the OpenSpec one — ADR-0007's bind-upstream *rule* is unchanged,
+  only its subject moved.
+
+### Removed
+
+- **`skills/codex-spec-review/`** — its structural role is now
+  `openspec validate --all` (§17 collapse).
+- **gitnexus, from every live surface** — `.claude/skills/gitnexus/` and the
+  ~29 MB `.gitnexus/` directory. Historical records are retained per
+  supersede-don't-delete: migration `0009`, `validate-0009-anchor.sh`, ADR-0010,
+  the CHANGELOG entries, and `docs/briefs/`.
+
+### Notes
+
+- **Recorded §16 divergence:** `openspec init --tools codex` (CLI 1.6.0) does
+  **not** generate `/opsx:*` slash commands on this host — it writes six
+  project-local skills into `.codex/skills/` (`$openspec-propose`, `-explore`,
+  `-update-change`, `-apply-change`, `-sync-specs`, `-archive-change`). §16 says
+  the CLI wins and the host notes the divergence.
+- **An installed hook is not an enforcing hook.** codex-cli gates project hooks
+  behind operator trust; an untrusted entry reads
+  `Installed N / Active N-1 / Review 1` and enforces nothing while looking
+  installed. Migration `0013` carries a required, non-automatable operator
+  post-check for it — a repeat of `0011`'s second defect, treated as a known
+  failure mode.
+- `check-plan-review.sh` and a 0.x fallback in the producer skill are
+  **retained**: one global skills directory serves projects that have not yet
+  replayed `0013`.
 
 ## [0.9.0] — 2026-07-19
 

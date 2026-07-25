@@ -15,3 +15,10 @@ venv/
 .planning/state/
 session-handoff.md
 .codex/session-handoff.md
+
+# OpenSpec generates its codex command surface with `openspec init --tools codex`
+# (core spec §16 bind-upstream: generated per host by the CLI, never a vendored
+# artifact maintained by hand). The spec slot itself (openspec/) IS committed —
+# only the regenerable command surface is ignored.
+.codex/skills/openspec-*/
+.gstack/

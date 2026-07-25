@@ -2649,7 +2649,7 @@ test_check_plan_review_enforcement() {
   # relative to that root (e.g. .planning/phases/08-block-basic), not the
   # sandbox's own absolute $phasedir.
   _cpr_check_contains "block: stderr names the resolved phase dir" "$e" ".planning/phases/08-block-basic"
-  _cpr_check_contains "block: stderr names codex-plan-review remedy" "$e" "codex-plan-review"
+  _cpr_check_contains "block: stderr names codex-openspec-change-review remedy" "$e" "codex-openspec-change-review"
   _cpr_check_contains "block: stderr names GSD_SKIP_REVIEWS hatch" "$e" "GSD_SKIP_REVIEWS"
   _cpr_check_contains "block: stderr names multi-ai-review-skipped hatch" "$e" "multi-ai-review-skipped"
 
@@ -3382,7 +3382,7 @@ MD
 # check-plan-review.sh — producer <-> verifier contract suite (phase 08, plan 02)
 #
 # Reads the REAL repo-root artifacts (this repo's own 08-REVIEWS.md and the
-# codex-plan-review skill's reviews-skeleton) rather than inline fixtures --
+# codex-openspec-change-review skill's reviews-skeleton) rather than inline fixtures --
 # deliberately, per this plan's <action>: an inline copy of the schema only
 # proves the verifier parses the test author's idea of the schema. If either
 # real artifact is absent, these cases FAIL (never SKIP) -- their absence is
@@ -3398,7 +3398,7 @@ test_check_plan_review_contract() {
   mkdir -p "$tmp/.planning/phases"
 
   local real_reviews="$REPO_ROOT/.planning/phases/08-plan-review-gate/08-REVIEWS.md"
-  local skill_md="$REPO_ROOT/skills/codex-plan-review/SKILL.md"
+  local skill_md="$REPO_ROOT/skills/codex-openspec-change-review/SKILL.md"
 
   # ── Real-artifact round trip ─────────────────────────────────────────────────
 
@@ -3542,7 +3542,7 @@ test_check_plan_review_contract() {
     ( cd "$s3/.planning" && ln -sf "phases/08-skeleton" current-phase )
     _cpr_case "contract: skeleton with reviewers: [gemini, gemini] -> exit 2 (vendor-diversity spoof)" "$s3" 2
   else
-    echo "  ${RED}FAIL${RESET} contract: skills/codex-plan-review/SKILL.md missing (always a FAIL, never skipped)"
+    echo "  ${RED}FAIL${RESET} contract: skills/codex-openspec-change-review/SKILL.md missing (always a FAIL, never skipped)"
     FAIL=$((FAIL+1))
   fi
 
@@ -3688,11 +3688,19 @@ test_migration_0012() {
   fi
 
   # 10. Relocated procedures present in the trigger skill.
+  #
+  # RELAXED at 1.0.0 (migration 0013): 0012's invariant is that these PROCEDURES
+  # live in the lazily-loaded trigger skill rather than the eager AGENTS.md. The
+  # multi-AI review procedure still does — but 0013 retargets it from a GSD
+  # `*-PLAN.md` to the active OpenSpec change, and §17 forbids the old
+  # "Pre-execution Gate — Plan Review" NAME under 1.0.0. Matching either heading
+  # keeps the real assertion (the procedure is in the skill) and drops the part
+  # that was only ever a snapshot of what it was called that week.
   if grep -q '^## Session handoff$' "$skill" \
      && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$skill" \
-     && grep -q '^## Pre-execution Gate — Plan Review (spec §02)$' "$skill" \
+     && grep -qE '^## (Pre-execution Gate — Plan Review \(spec §02\)|Stage 2 — Validate \+ multi-AI change review \(spec §17 / §18\))$' "$skill" \
      && grep -q '^## Instruction surface — eager vs lazy (spec §12)$' "$skill"; then
-    echo "  ${GREEN}PASS${RESET} handoff, §15 tail, plan-review and §12 rationale in trigger skill"; PASS=$((PASS+1))
+    echo "  ${GREEN}PASS${RESET} handoff, §15 tail, change-review and §12 rationale in trigger skill"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} a relocated procedure is missing from the trigger skill"; FAIL=$((FAIL+1))
   fi
@@ -3705,20 +3713,902 @@ test_migration_0012() {
   fi
 
   # 12. Claim advanced, and ONLY on the normative carrier.
-  if grep -q '^implements_spec: 0.10.0$' "$skill" \
+  #
+  # RELAXED at 1.0.0 (migration 0013): this check originally pinned the live
+  # trigger skill to the exact string `implements_spec: 0.10.0`, which made it
+  # a snapshot of 0012's end state rather than an assertion about 0012's SCOPE.
+  # The durable invariant is the one 0012 actually established: the §09
+  # conformance citation advanced past 0.4.0 on the trigger skill ONLY, and no
+  # gate skill's own contract citation was collaterally dragged along with it.
+  # (0013 leaves gate skills at 0.4.0 deliberately — the §02 gate contracts they
+  # fulfil are unchanged under 1.0.0 §17; only the host's citation moves.)
+  if grep -qE '^implements_spec: (0\.10\.0|1\.0\.0)$' "$skill" \
      && grep -q '^implements_spec: 0.4.0$' "$REPO_ROOT/skills/codex-cso/SKILL.md"; then
-    echo "  ${GREEN}PASS${RESET} claim 0.10.0 on the trigger skill; gate skills still cite their contract"; PASS=$((PASS+1))
+    echo "  ${GREEN}PASS${RESET} claim advanced on the trigger skill; gate skills still cite their contract"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} claim not advanced, or a gate skill's contract citation was collaterally bumped"; FAIL=$((FAIL+1))
   fi
 
   # 13. Enforcement untouched — the point of the whole scope note.
-  if grep -q 'hook-wrapper-plan-review.sh' "$REPO_ROOT/.codex/hooks.json" \
-     && [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ]; then
-    echo "  ${GREEN}PASS${RESET} plan-review hook wiring untouched by the prose relocation"; PASS=$((PASS+1))
+  #
+  # RELAXED at 1.0.0 (migration 0013): 0012's claim was "the PROSE moved, the
+  # enforcement did not." That claim is about 0012, and it still holds — but the
+  # original check spelled it as "hooks.json names hook-wrapper-plan-review.sh",
+  # which 0013 legitimately changes when it retargets the hook to the §18
+  # OpenSpec change-gate. Asserting the frozen wrapper NAME would now forbid a
+  # later migration from ever retargeting enforcement, which is not what this
+  # test is for. The durable invariant: a PreToolUse wrapper is still wired, and
+  # its verifier script still exists on disk. Enforcement was never dropped —
+  # only ever retargeted.
+  if grep -qE 'hook-wrapper-(plan-review|openspec-gate)\.sh' "$REPO_ROOT/.codex/hooks.json" \
+     && [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ] \
+     && [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh" ]; then
+    echo "  ${GREEN}PASS${RESET} PreToolUse enforcement still wired (0.x verifier + 1.0.0 change-gate wrapper both present)"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} plan-review enforcement disturbed — prose moved but so did the hook"; FAIL=$((FAIL+1))
   fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# test_migration_0013 (OPENSPEC-01) — bind the OpenSpec front end (0.9.0 -> 1.0.0)
+#
+# Extracts the real Apply blocks from the DOCUMENT and executes them, so the
+# migration stays the single source of truth (D-36). Two of them carry defect
+# classes this repo has already been bitten by, and both are asserted directly:
+#
+#   Step 4 — the hooks.json retarget. Migration 0011's correction found that
+#   codex-cli DROPS the flat {"matcher","type","command"} shape with no error,
+#   and that an idempotency selector reading `.command` at GROUP level can never
+#   match its own output (so it reports "absent" forever and appends a duplicate
+#   on every re-run). Both are asserted here, plus sibling-vendor survival.
+#
+#   Step 5 — the AGENTS.md rewrite. Migration 0012 found that a non-fence-aware
+#   "## " drop bound eats a fenced session-handoff example. Asserted here too.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0013_ok()   { if [ "$1" -eq 0 ]; then echo "  ${GREEN}PASS${RESET} $2"; PASS=$((PASS+1)); else echo "  ${RED}FAIL${RESET} $2"; FAIL=$((FAIL+1)); fi; }
+_m0013_fail() { echo "  ${RED}FAIL${RESET} $1"; FAIL=$((FAIL+1)); }
+
+test_migration_0013() {
+  echo ""
+  echo "${YELLOW}=== Migration 0013 — bind the OpenSpec front end (0.9.0 -> 1.0.0) ===${RESET}"
+
+  local doc="$REPO_ROOT/migrations/0013-bind-openspec-v1.md"
+  if [ ! -f "$doc" ]; then
+    _m0013_fail "0013 doc missing"; return
+  fi
+
+  local NEWCMD="\${CODEX_HOME:-\$HOME/.codex}/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
+
+  # ── Step 4: the hooks.json retarget ────────────────────────────────────────
+  local apply4; apply4="$(extract_step_block "$doc" 4 Apply)"
+  assert_extracted_shape "0013 step 4" "$apply4" "hooks.PreToolUse" || return
+
+  local tmp; tmp="$(mktemp -d)"
+  mkdir -p "$tmp/.codex" "$tmp/fakehome/skills/agentic-apps-workflow/scripts"
+  # A real-enough CODEX_HOME so the step's `test -x "$NEW"` guard passes.
+  printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/fakehome/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
+  chmod +x "$tmp/fakehome/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
+  local OLDCMD="$tmp/fakehome/skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh"
+  local NEWCMD_ABS="$tmp/fakehome/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
+
+  # Fixture: OUR 0.x entry PLUS a sibling vendor group sharing the same matcher.
+  # The sibling is the whole point of selecting on the nested command rather
+  # than on the matcher.
+  jq -n --arg old "$OLDCMD" '{
+    hooks: { PreToolUse: [
+      { matcher: "apply_patch", hooks: [ { type: "command", command: $old } ] },
+      { matcher: "apply_patch", hooks: [ { type: "command", command: "/opt/vendor/other-hook.sh" } ] }
+    ] } }' > "$tmp/.codex/hooks.json"
+
+  printf '%s\n' "$apply4" > "$tmp/apply4.sh"
+  if ! ( cd "$tmp" && git init -q . >/dev/null 2>&1; cd "$tmp" && CODEX_HOME="$tmp/fakehome" bash apply4.sh >/dev/null 2>&1 ); then
+    _m0013_fail "0013 step 4 shell errored on the fixture"; rm -rf "$tmp"; return
+  fi
+
+  # 1. The retargeted entry is present AND readable through the NESTED hop.
+  #    A group-level read is the 0011 defect; assert the nested one explicitly.
+  if jq -e --arg cmd "$NEWCMD_ABS" \
+       '(.hooks.PreToolUse // [])[] | (.hooks // [])[] | select(.command == $cmd)' \
+       "$tmp/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0013_ok 0 "step 4: openspec-gate wrapper wired, readable via the nested (.hooks//[])[] hop"
+  else
+    _m0013_ok 1 "step 4: openspec-gate wrapper NOT found at the nested position (0011's silent-drop shape)"
+  fi
+
+  # 2. The entry is NOT flat — the shape codex-cli drops without a warning.
+  if jq -e '[(.hooks.PreToolUse // [])[] | select(has("command"))] | length == 0' \
+       "$tmp/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0013_ok 0 "step 4: no group carries a flat group-level .command (codex-cli drops that shape silently)"
+  else
+    _m0013_ok 1 "step 4: a flat {matcher,type,command} group was written — codex-cli drops it with NO error"
+  fi
+
+  # 3. The 0.x entry is gone.
+  if ! jq -e --arg old "$OLDCMD" \
+       '(.hooks.PreToolUse // [])[] | (.hooks // [])[] | select(.command == $old)' \
+       "$tmp/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0013_ok 0 "step 4: the 0.x plan-review entry is removed"
+  else
+    _m0013_ok 1 "step 4: the 0.x plan-review entry survived — two gates would fire"
+  fi
+
+  # 4. The sibling vendor's group survived (selection is on OUR command, not the matcher).
+  if jq -e '(.hooks.PreToolUse // [])[] | (.hooks // [])[] | select(.command == "/opt/vendor/other-hook.sh")' \
+       "$tmp/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0013_ok 0 "step 4: a sibling vendor group sharing the matcher is preserved"
+  else
+    _m0013_ok 1 "step 4: destroyed a sibling vendor's hook — selection matched on the matcher, not the command"
+  fi
+
+  # 5. Idempotent: re-apply must not append a duplicate. This is the assertion
+  #    0011's group-level selector could never satisfy.
+  ( cd "$tmp" && CODEX_HOME="$tmp/fakehome" bash apply4.sh >/dev/null 2>&1 )
+  local n; n="$(jq --arg cmd "$NEWCMD_ABS" \
+      '[(.hooks.PreToolUse // [])[] | (.hooks // [])[] | select(.command == $cmd)] | length' \
+      "$tmp/.codex/hooks.json" 2>/dev/null)"
+  if [ "${n:-0}" = "1" ]; then
+    _m0013_ok 0 "step 4: re-apply is a no-op (exactly 1 openspec-gate entry, not $n)"
+  else
+    _m0013_ok 1 "step 4: re-apply duplicated the entry (found ${n:-0}) — idempotency selector cannot see its own output"
+  fi
+  rm -rf "$tmp"
+
+  # ── Step 5: the AGENTS.md rewrite ──────────────────────────────────────────
+  local apply5; apply5="$(extract_step_block "$doc" 5 Apply)"
+  assert_extracted_shape "0013 step 5" "$apply5" "Development Workflow" || return
+
+  tmp="$(mktemp -d)"
+  {
+    printf '# AGENTS\n\nproject preamble\n\n'
+    printf '<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->\n\n'
+    printf '## Coding Discipline (NON-NEGOTIABLE)\n\nthe four rules\n\n'
+    printf '## Development Workflow\n\nold 0.x workflow prose naming gsd-plan-phase\n\n'
+    printf '## Session handoff\n\nprose\n\n```markdown\n# Handoff\n\n## Accomplished\n- x\n\n## Decisions\n- y\n```\n\ntrailing handoff prose\n\n'
+    printf '<!-- END: agentic-apps-workflow sections -->\n\n'
+    printf '## Project Section\n\nproject-owned content below the marker\n'
+  } > "$tmp/AGENTS.md"
+  printf '%s\n' "$apply5" > "$tmp/apply5.sh"
+
+  if ! ( cd "$tmp" && bash apply5.sh >/dev/null 2>&1 ); then
+    _m0013_fail "0013 step 5 shell errored on the fixture"; rm -rf "$tmp"; return
+  fi
+
+  # 6. New body in, old body out.
+  if grep -q 'OpenSpec change lifecycle' "$tmp/AGENTS.md" \
+     && grep -q 'docs/WORKFLOW.md' "$tmp/AGENTS.md" \
+     && ! grep -q 'gsd-plan-phase' "$tmp/AGENTS.md"; then
+    _m0013_ok 0 "step 5: Development Workflow body replaced with the OpenSpec loop"
+  else
+    _m0013_ok 1 "step 5: the workflow body was not replaced (or 0.x prose survived)"
+  fi
+
+  # 7. Fence leak — the 0012 regression class, re-asserted here because this
+  #    transform reintroduces a "## " drop bound.
+  if grep -q '^## Session handoff$' "$tmp/AGENTS.md" \
+     && grep -q '^trailing handoff prose$' "$tmp/AGENTS.md" \
+     && grep -q '^## Accomplished$' "$tmp/AGENTS.md"; then
+    _m0013_ok 0 "step 5: the following section and its fenced '## ' example survive intact"
+  else
+    _m0013_ok 1 "step 5: fence leak — a '## ' line inside a code fence ended the drop early"
+  fi
+
+  # 8. §11 and out-of-marker content untouched.
+  if grep -q '^## Coding Discipline (NON-NEGOTIABLE)$' "$tmp/AGENTS.md" \
+     && grep -q '^the four rules$' "$tmp/AGENTS.md" \
+     && grep -q '^project-owned content below the marker$' "$tmp/AGENTS.md" \
+     && grep -q '^project preamble$' "$tmp/AGENTS.md"; then
+    _m0013_ok 0 "step 5: §11 block and content outside the marker untouched"
+  else
+    _m0013_ok 1 "step 5: the rewrite escaped its section"
+  fi
+
+  # 9. Idempotent.
+  cp "$tmp/AGENTS.md" "$tmp/AGENTS.once"
+  ( cd "$tmp" && bash apply5.sh >/dev/null 2>&1 )
+  if diff -q "$tmp/AGENTS.once" "$tmp/AGENTS.md" >/dev/null 2>&1; then
+    _m0013_ok 0 "step 5: second apply is a no-op"
+  else
+    _m0013_ok 1 "step 5: the AGENTS.md rewrite is not idempotent"
+  fi
+  rm -rf "$tmp"
+
+  # ── The §18 exit-code truth table, by DIRECT invocation ────────────────────
+  # Spec §18 requires the gate be demonstrable with simulated payloads — a hook
+  # cannot gate its own installing session, so direct invocation IS the proof.
+  local gate="$REPO_ROOT/bin/openspec-change-gate.sh"
+  if [ ! -x "$gate" ]; then
+    _m0013_fail "bin/openspec-change-gate.sh missing or not executable"
+  else
+    tmp="$(mktemp -d)"
+    ( cd "$tmp" && git init -q . )
+    local rc
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: no openspec/ -> ALLOW (exit 0, got $rc)"
+
+    mkdir -p "$tmp/openspec/changes/add-thing"
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 2 ] && echo 0 || echo 1)" "§18: active change, validate green, 0 reviewers -> BLOCK (exit 2, got $rc)"
+
+    printf '# r\n\n## Reviewer: gemini\nx\n' > "$tmp/openspec/changes/add-thing/REVIEWS.md"
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 2 ] && echo 0 || echo 1)" "§18: 1 reviewer is still below the >=2 floor -> BLOCK (exit 2, got $rc)"
+
+    printf '\n## Reviewer: claude\nx\n' >> "$tmp/openspec/changes/add-thing/REVIEWS.md"
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: validate green + 2 reviewers -> ALLOW (exit 0, got $rc)"
+
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 2 ] && echo 0 || echo 1)" "§18: validate RED beats a green REVIEWS.md -> BLOCK (exit 2, got $rc)"
+
+    printf '{"tool":"edit","tool_input":{"file_path":"openspec/changes/add-thing/proposal.md"}}' | ( cd "$tmp" && bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: openspec/** write is EXEMPT -> ALLOW (exit 0, got $rc)"
+
+    printf '' | ( cd "$tmp" && bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: empty stdin fails OPEN on parse error -> ALLOW (exit 0, got $rc)"
+
+    # The escape hatch, under the CANONICAL gate's documented deviation from
+    # §18's literal truth table: GSD_SKIP_REVIEWS is applied AFTER the validate
+    # check, so it bypasses the REVIEW clause but not a red spec delta. §18's
+    # row reads unconditionally; core narrowed it deliberately and pinned the
+    # narrowing with a harness row, because the hatch exists for an emergency
+    # review bypass, not for shipping a change whose delta does not parse.
+    #
+    # Migration 0013 asserted only the unconditional reading, with no
+    # OPENSPEC_BIN stub — so `validate` ran for real and failed, and the
+    # assertion passed only because the pre-canonical gate checked the hatch
+    # first. Both halves are now pinned, so neither can silently invert.
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true GSD_SKIP_REVIEWS=1 bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: GSD_SKIP_REVIEWS=1 over a GREEN validate is a documented override -> ALLOW (exit 0, got $rc)"
+
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && GSD_SKIP_REVIEWS=1 bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 2 ] && echo 0 || echo 1)" "§18: GSD_SKIP_REVIEWS=1 does NOT override a RED validate -> BLOCK (exit 2, got $rc)"
+    rm -rf "$tmp"
+  fi
+
+  # ── The codex adapter: the reason it exists, asserted ──────────────────────
+  # A raw codex apply_patch payload carries the path INSIDE the patch blob. The
+  # bare gate cannot see it and fails open; the wrapper must translate. If this
+  # ever passes through the bare gate, the hook is enforcing nothing.
+  local wrapper="$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
+  if [ ! -x "$wrapper" ]; then
+    _m0013_fail "hook-wrapper-openspec-gate.sh missing or not executable"
+  else
+    tmp="$(mktemp -d)"
+    ( cd "$tmp" && git init -q . )
+    mkdir -p "$tmp/openspec/changes/add-thing"
+    local payload
+    payload="$(jq -n --arg c '*** Begin Patch
+*** Update File: main.go
+*** End Patch' '{tool_name:"apply_patch", tool_input:{command:$c}}')"
+
+    local rc_bare rc_wrap out
+    printf '%s' "$payload" | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc_bare=$?
+    _m0013_ok "$([ $rc_bare -eq 0 ] && echo 0 || echo 1)" \
+      "adapter rationale: the BARE gate fails open on a raw apply_patch payload (exit 0, got $rc_bare) — this is why the wrapper exists"
+
+    out="$(printf '%s' "$payload" | ( cd "$tmp" && OPENSPEC_BIN=true OPENSPEC_CHANGE_GATE="$gate" bash "$wrapper" ) 2>/dev/null)"; rc_wrap=$?
+    if [ "$rc_wrap" -eq 0 ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; then
+      _m0013_ok 0 "adapter: the WRAPPER denies the same payload via valid permissionDecision JSON (exit 0 + deny body)"
+    else
+      _m0013_ok 1 "adapter: the wrapper did not emit a valid deny JSON body (exit $rc_wrap) — codex fails OPEN on invalid stdout"
+    fi
+
+    # And the allow path must emit NOTHING on stdout (empty stdout = no-op success).
+    printf '# r\n\n## Reviewer: gemini\nx\n\n## Reviewer: claude\nx\n' > "$tmp/openspec/changes/add-thing/REVIEWS.md"
+    out="$(printf '%s' "$payload" | ( cd "$tmp" && OPENSPEC_BIN=true OPENSPEC_CHANGE_GATE="$gate" bash "$wrapper" ) 2>/dev/null)"; rc_wrap=$?
+    if [ "$rc_wrap" -eq 0 ] && [ -z "$out" ]; then
+      _m0013_ok 0 "adapter: the allow path is a silent exit 0 with empty stdout"
+    else
+      _m0013_ok 1 "adapter: the allow path emitted stdout ('$out') or a non-zero exit ($rc_wrap)"
+    fi
+    rm -rf "$tmp"
+  fi
+
+  # ── The agent-agnostic FLOOR: pre-commit + CI driver ──────────────────────
+  # The per-agent hook is faster feedback; these two are the guarantee, because
+  # a PreToolUse hook cannot gate the session that installed it. Untested, the
+  # "floor" is a claim rather than a control.
+  local precommit="$REPO_ROOT/bin/git-hooks/pre-commit"
+  local ciDriver="$REPO_ROOT/bin/openspec-gate-ci.sh"
+  if [ ! -x "$precommit" ] || [ ! -x "$ciDriver" ]; then
+    _m0013_fail "bin/git-hooks/pre-commit or bin/openspec-gate-ci.sh missing/not executable"
+  else
+    tmp="$(mktemp -d)"
+    (
+      cd "$tmp" && git init -q . \
+        && git config user.email t@t && git config user.name t \
+        && git commit -q --allow-empty -m base
+    )
+    install -m 0755 "$precommit" "$tmp/.git/hooks/pre-commit"
+    local rc
+
+    # No spec slot -> the floor must not block ordinary work.
+    ( cd "$tmp" && echo x > a.txt && git add a.txt \
+      && OPENSPEC_CHANGE_GATE="$gate" git commit -q -m "no slot" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: pre-commit allows a commit when the repo has no openspec/ (exit 0, got $rc)"
+
+    mkdir -p "$tmp/openspec/changes/add-thing"
+    ( cd "$tmp" && echo y > b.txt && git add b.txt \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m "unreviewed" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -ne 0 ] && echo 0 || echo 1)" "floor: pre-commit BLOCKS code staged under an unreviewed active change (non-zero, got $rc)"
+
+    # Authoring the change itself must never be blocked.
+    ( cd "$tmp" && git reset -q HEAD b.txt; echo z > openspec/changes/add-thing/proposal.md \
+      && git add openspec && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m "author the change" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: pre-commit allows a commit that stages ONLY openspec/ artifacts (exit 0, got $rc)"
+
+    printf '# r\n\n## Reviewer: gemini\nx\n\n## Reviewer: claude\nx\n' > "$tmp/openspec/changes/add-thing/REVIEWS.md"
+    ( cd "$tmp" && git add -A \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m "reviewed" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: pre-commit allows code once validate is green and 2 reviewers exist (exit 0, got $rc)"
+
+    # The documented override must actually work, or operators reach for
+    # --no-verify and lose the log line entirely.
+    ( cd "$tmp" && rm -f openspec/changes/add-thing/REVIEWS.md && echo w > c.txt && git add -A \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true GSD_SKIP_REVIEWS=1 git commit -q -m "override" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "floor: GSD_SKIP_REVIEWS=1 overrides the pre-commit block (exit 0, got $rc)"
+
+    # CI driver: same gate, PR-diff file set instead of the staged set.
+    ( cd "$tmp" && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true bash "$ciDriver" HEAD~1 ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -ne 0 ] && echo 0 || echo 1)" "floor: the CI driver blocks the same unreviewed change (non-zero, got $rc)"
+    rm -rf "$tmp"
+  fi
+
+  # ── Live repo is at the 1.0.0 end state (dogfooding) ───────────────────────
+  if jq -e '.lifecycle.validate.change_gate and .lifecycle.validate.multi_ai_review and .front_end == "openspec" and .implements_spec == "1.0.0"' \
+       "$REPO_ROOT/.planning/config.codex.json" >/dev/null 2>&1 \
+     && ! jq -e '.hooks.pre_execution.plan_review' "$REPO_ROOT/.planning/config.codex.json" >/dev/null 2>&1; then
+    _m0013_ok 0 "live config.codex.json is on the lifecycle tree with no standalone plan_review binding"
+  else
+    _m0013_ok 1 "live config.codex.json is not at the 1.0.0 end state"
+  fi
+
+  if jq -e '(.hooks.PreToolUse // [])[] | (.hooks // [])[] | select(.command | test("hook-wrapper-openspec-gate"))' \
+       "$REPO_ROOT/.codex/hooks.json" >/dev/null 2>&1; then
+    _m0013_ok 0 "live .codex/hooks.json points at the openspec-gate wrapper (nested shape)"
+  else
+    _m0013_ok 1 "live .codex/hooks.json does not name the openspec-gate wrapper at the nested position"
+  fi
+
+  # The gate + wrapper must be resolvable from the stable INSTALLED template
+  # path, because that is where the migration installs them from in a target
+  # repo that has no scaffolder checkout.
+  local tpl="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates"
+  if [ -f "$tpl/openspec-change-gate.sh" ] && [ -f "$tpl/reviewer-cli.sh" ] && [ -f "$tpl/git-hooks-pre-commit" ]; then
+    _m0013_ok 0 "gate, reviewer wrapper and pre-commit resolve from the setup skill's templates/ (stable installed path)"
+  else
+    _m0013_ok 1 "a gate artifact is missing from templates/ — 0013 step 3 cannot install it in a target repo"
+  fi
+
+  # The collapsed gate set.
+  if [ ! -d "$REPO_ROOT/skills/codex-spec-review" ] \
+     && [ -f "$REPO_ROOT/skills/codex-openspec-change-review/SKILL.md" ] \
+     && [ ! -d "$REPO_ROOT/skills/codex-plan-review" ]; then
+    _m0013_ok 0 "gates collapsed: spec-review deleted, plan-review retargeted to codex-openspec-change-review"
+  else
+    _m0013_ok 1 "the gate collapse did not land as specified"
+  fi
+
+  # §17 forbids a standalone plan-review gate under 1.0.0 — the producer must
+  # say what it is NOT, or a later reader re-creates the gate it replaced.
+  if grep -q 'Not a standalone plan-review gate' "$REPO_ROOT/skills/codex-openspec-change-review/SKILL.md" \
+     && grep -q 'Not a code review' "$REPO_ROOT/skills/codex-openspec-change-review/SKILL.md"; then
+    _m0013_ok 0 "the producer skill states both things it is NOT (§17 gate, §07 code review)"
+  else
+    _m0013_ok 1 "the producer skill does not distinguish itself from the gate it replaced or from code review"
+  fi
+
+  # gitnexus is gone from every live surface (historical records stay).
+  if [ ! -d "$REPO_ROOT/.claude/skills/gitnexus" ] && [ ! -d "$REPO_ROOT/.gitnexus" ]; then
+    _m0013_ok 0 "gitnexus removed from live surfaces"
+  else
+    _m0013_ok 1 "a live gitnexus surface survived"
+  fi
+  if [ -f "$REPO_ROOT/migrations/0009-spec-11-region-aware-placement.md" ] \
+     && [ -f "$REPO_ROOT/docs/decisions/0010-region-aware-spec-11-placement.md" ]; then
+    _m0013_ok 0 "gitnexus provenance retained (migration 0009 + ADR-0010) per supersede-don't-delete"
+  else
+    _m0013_ok 1 "gitnexus history was deleted rather than superseded"
+  fi
+
+  # The 0.x verifier is RETAINED — one global skills dir serves projects that
+  # have not replayed 0013 yet, and their evidence artifact is <NN>-REVIEWS.md.
+  if [ -f "$REPO_ROOT/skills/agentic-apps-workflow/scripts/check-plan-review.sh" ] \
+     && grep -q '0.x fallback' "$REPO_ROOT/skills/codex-openspec-change-review/SKILL.md"; then
+    _m0013_ok 0 "0.x verifier retained + producer carries a 0.x fallback (pre-1.0.0 projects keep working)"
+  else
+    _m0013_ok 1 "pre-1.0.0 projects lost their gate or their producer path"
+  fi
+
+  # Post-check 6 (operator hook-trust verification) must be IN the document.
+  # Phase 13 proved an untrusted hook is indistinguishable from a working one.
+  if grep -q 'OPERATOR VERIFICATION, REQUIRED' "$doc" && grep -q '/hooks' "$doc"; then
+    _m0013_ok 0 "0013 carries the required operator hook-trust verification (an untrusted hook enforces nothing)"
+  else
+    _m0013_ok 1 "0013 omits the hook-trust post-check — 0011's second defect, repeated"
+  fi
+}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# test_migration_0014 — the canonical §18 gate, vendored and proven
+#
+# Supersedes test_gate_known_gaps. That function pinned the gate's sha256 and
+# reported four defects as KNOWN-GAP, because the canonical fix did not exist
+# and patching locally would have forked the shared script a fifth way. The
+# canonical landed (core#33, ADR-0022), so the gaps are now REGRESSIONS, and
+# this function asserts them as such.
+#
+# Four legs, in order of how much they can be trusted:
+#
+#   1. CONFORMANCE (unconditional). Score the vendored gate with the vendored
+#      harness. The bar is "zero failing rows", never a literal count — the
+#      harness grows, and a hardcoded number reads like verification while
+#      verifying less than the instrument offers.
+#   2. PROVENANCE (unconditional). The sidecar manifest records core's commit
+#      and each vendored file's sha256. This runs with no core checkout, which
+#      is the common CI case, and is what remains of the old integrity pin.
+#   3. BYTE-IDENTITY (conditional). Compare against a real core checkout when
+#      one resolves. SKIPs loudly when it does not — a silent pass and a
+#      verified match must never look alike.
+#   4. UNCOVERED REGRESSIONS (unconditional). GAP-1 and GAP-4 are fixed by the
+#      canonical but covered by NO harness row. Without these two assertions a
+#      future re-vendor could regress them and still score every declared row
+#      green.
+#
+# The vendored files carry NO local header. A "vendored from <commit>" comment
+# would itself break the byte-identity it claimed to record, which is why the
+# provenance lives in tools/core-vendor.manifest instead.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0014_core_root() {   # echo a core checkout path, or nothing
+  local c
+  for c in "${AGENTICAPPS_CORE_ROOT:-}" \
+           "$REPO_ROOT/../agenticapps-workflow-core"; do
+    [ -n "$c" ] && [ -d "$c/reference-implementations/openspec-change-gate" ] && { printf '%s' "$c"; return; }
+  done
+}
+
+_m0014_manifest_field() {   # _m0014_manifest_field <key>
+  grep -m1 "^$1=" "$REPO_ROOT/tools/core-vendor.manifest" 2>/dev/null | cut -d= -f2-
+}
+
+test_migration_0014() {
+  echo ""
+  echo "${YELLOW}=== Migration 0014 — canonical §18 change-gate, vendored from core ===${RESET}"
+
+  local gate="$REPO_ROOT/bin/openspec-change-gate.sh"
+  local harness="$REPO_ROOT/tools/change-gate-conformance.sh"
+  local manifest="$REPO_ROOT/tools/core-vendor.manifest"
+
+  # ── Leg 0: the instrument and the provenance record must both exist ────────
+  if [ ! -x "$harness" ]; then
+    echo "  ${RED}FAIL${RESET} tools/change-gate-conformance.sh missing/not executable — the gate cannot be scored, so nothing below is trustworthy"
+    FAIL=$((FAIL+1)); return
+  fi
+  if [ ! -f "$manifest" ]; then
+    echo "  ${RED}FAIL${RESET} tools/core-vendor.manifest missing — vendored files with no recorded provenance"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # ── Leg 1: CONFORMANCE — zero failing rows, whatever the row count is ──────
+  local out rows_failed rows_total
+  # env -u: a developer who exports OPENSPEC_GATE_SELF=codex in their shell would
+  # otherwise get a false conformance FAIL from the same leak this change fixes
+  # everywhere else.
+  out="$(env -u OPENSPEC_GATE_SELF bash "$harness" "$gate" 2>&1)"
+  rows_failed="$(printf '%s' "$out" | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
+  rows_total="$(printf '%s' "$out" | sed -n 's/.*── \([0-9]*\) passed, [0-9]* failed, [0-9]* inconclusive of \([0-9]*\) rows.*/\2/p' | tail -1)"
+  if [ "${rows_failed:-x}" = "0" ]; then
+    echo "  ${GREEN}PASS${RESET} conformance: 0 failing rows of ${rows_total:-?} (bar is zero-failures, not a fixed count)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} conformance: ${rows_failed:-<unparsed>} failing rows of ${rows_total:-?}"
+    printf '%s\n' "$out" | grep -E '^  FAIL' | sed 's/^/         /'
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Leg 2: PROVENANCE — sha256s hold, and ONE core commit for both files ───
+  # Per-file identity cannot catch a gate from commit A paired with a harness
+  # from commit B; a single core_commit for the whole manifest makes that
+  # combination unrepresentable rather than merely detectable.
+  local commit; commit="$(_m0014_manifest_field core_commit)"
+  if [ -n "$commit" ]; then
+    echo "  ${GREEN}PASS${RESET} manifest names a single core commit (${commit:0:12})"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} tools/core-vendor.manifest has no core_commit"
+    FAIL=$((FAIL+1))
+  fi
+
+  local bad=0 f expect actual
+  while read -r f expect; do
+    [ -n "$f" ] || continue
+    actual="$(shasum -a 256 "$REPO_ROOT/$f" 2>/dev/null | awk '{print $1}')"
+    if [ "$actual" != "$expect" ]; then
+      echo "  ${RED}FAIL${RESET} $f does not match its manifest sha256 — it was edited locally, or the manifest is stale"
+      echo "         expected $expect"
+      echo "         actual   ${actual:-<file missing>}"
+      bad=1
+    fi
+  done < <(grep '^file=' "$manifest" | sed -E 's/^file=([^ ]+) sha256=(.*)$/\1 \2/')
+  if [ "$bad" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} every vendored file matches its recorded sha256"
+    PASS=$((PASS+1))
+  else
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── Leg 3: BYTE-IDENTITY vs core — conditional, and LOUD when skipped ──────
+  local core; core="$(_m0014_core_root)"
+  if [ -z "$core" ]; then
+    echo "  ${YELLOW}SKIP${RESET} byte-identity vs core: no checkout at \$AGENTICAPPS_CORE_ROOT or $REPO_ROOT/../agenticapps-workflow-core"
+    echo "         (legs 1, 2 and 4 still ran — this leg proves ORIGIN, they prove BEHAVIOUR)"
+    SKIP=$((SKIP+1))
+  elif ! git -C "$core" cat-file -e "$commit^{commit}" 2>/dev/null; then
+    echo "  ${YELLOW}SKIP${RESET} byte-identity vs core: checkout at $core does not contain commit $commit (fetch it to enable this leg)"
+    SKIP=$((SKIP+1))
+  else
+    # Compare against the RECORDED COMMIT via git show, never against the
+    # working tree. A core checkout is a live workspace: it may sit on a feature
+    # branch, mid-TDD, with uncommitted edits. Comparing against whatever
+    # happens to be checked out makes this leg non-deterministic and can report
+    # divergence from a file that was never published — observed 2026-07-25,
+    # when core was on fix/gate-symlinked-root-exemption with a dirty gate.
+    local d=0 cf
+    for cf in "reference-implementations/openspec-change-gate/openspec-change-gate.sh:$gate" \
+              "tools/change-gate-conformance.sh:$harness"; do
+      local src="${cf%%:*}" dst="${cf#*:}"
+      if ! git -C "$core" show "$commit:$src" 2>/dev/null | cmp -s - "$dst"; then
+        echo "  ${RED}FAIL${RESET} ${dst#"$REPO_ROOT"/} differs from core $src at ${commit:0:12}"
+        d=1
+      fi
+    done
+    if [ "$d" -eq 0 ]; then
+      echo "  ${GREEN}PASS${RESET} both vendored files are byte-identical to core at ${commit:0:12}"
+      PASS=$((PASS+1))
+    else
+      echo "         A host-local fix is how five copies diverged (issue #32). Change it in core, add a harness row, re-vendor."
+      FAIL=$((FAIL+1))
+    fi
+  fi
+
+  # ── Leg 4: the two regressions NO harness row covers ───────────────────────
+  # Verified 2026-07-25: the pre-adoption 164-line copy returned 0 and 2 here,
+  # the inverse of correct, and scored 28/28-minus-12 without either showing up.
+  local tmp; tmp="$(mktemp -d)"
+  ( cd "$tmp" && git init -q . )
+  mkdir -p "$tmp/openspec/changes/active-change" "$tmp/sub/dir"
+  : > "$tmp/openspec/changes/active-change/proposal.md"
+  local rc
+
+  # GAP-1 — $ROOT resolution, not $PWD. The PreToolUse hook's cwd is the
+  # session's, so a cwd-relative gate fails open from anywhere below the root.
+  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
+    | ( cd "$tmp/sub/dir" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 2 ]; then
+    echo "  ${GREEN}PASS${RESET} GAP-1: blocks a code edit from a subdirectory (gate resolves \$ROOT, not \$PWD)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} GAP-1 REGRESSED: code edit from a subdirectory returned $rc, expected 2"
+    FAIL=$((FAIL+1))
+  fi
+
+  # GAP-4 — fail open on a PARSE error, never on policy. Whitespace-containing
+  # non-JSON must not be split into a plausible path and evaluated.
+  printf 'not json at all' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} GAP-4: 'not json at all' fails OPEN (parse error, not policy)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} GAP-4 REGRESSED: unparseable stdin returned $rc, expected 0"
+    FAIL=$((FAIL+1))
+  fi
+
+  rm -rf "$tmp"
+
+  # ── Leg 5: the codex wrapper must NOT own root resolution ──────────────────
+  # Same assertion the 0013-era test made, opposite reasoning. Then: "GAP-1 is
+  # unfixed and the fix belongs in the canonical, not here." Now: the canonical
+  # HAS the fix, so a wrapper that also cd'd would be duplicating gate logic in
+  # a host adapter — the divergence D1 exists to prevent.
+  if ! grep -q 'cd "\$(git rev-parse --show-toplevel' \
+       "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"; then
+    echo "  ${GREEN}PASS${RESET} the codex wrapper leaves root resolution to the gate"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} the codex wrapper cds to the repo root — that is the gate's job now; host adapters must not re-implement gate logic"
+    FAIL=$((FAIL+1))
+  fi
+}
+
+# test_migration_0014_floors — the agent-agnostic floor, on REAL mode dispatch
+#
+# Before this change both floors synthesized one fake hook payload per file and
+# piped it to the gate in hook mode. That DID enforce — two live commit refusals
+# are on record — but §18 requires the gate be "demonstrable by direct script
+# invocation", and enforcement reached by fabricating a payload is not that. It
+# also meant the gate's own --pre-commit and --ci code paths were never exercised
+# by this host at all, which is why 12 harness rows could fail unnoticed.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0014f_ok() {  # _m0014f_ok <0|1> <label>
+  if [ "$1" = "0" ]; then echo "  ${GREEN}PASS${RESET} $2"; PASS=$((PASS+1));
+  else echo "  ${RED}FAIL${RESET} $2"; FAIL=$((FAIL+1)); fi
+}
+
+test_migration_0014_floors() {
+  echo ""
+  echo "${YELLOW}=== Migration 0014 — floors use the gate's real modes ===${RESET}"
+
+  local pc="$REPO_ROOT/bin/git-hooks/pre-commit"
+  local ci="$REPO_ROOT/bin/openspec-gate-ci.sh"
+  local gate="$REPO_ROOT/bin/openspec-change-gate.sh"
+  local rc
+
+  # ── Structural: no fabricated payloads, real modes, explicit self ──────────
+  grep -q -- '--pre-commit' "$pc"; _m0014f_ok $? "pre-commit invokes the gate's --pre-commit mode"
+  ! grep -q 'tool_input' "$pc";    _m0014f_ok $? "pre-commit synthesizes no tool-call payload"
+  # Property, not spelling: the script must DEFAULT it to codex on its own. An
+  # explicit operator override is fine — what must not happen is a bare
+  # inherit, which leaves a human's `git commit` counting codex's own reviews.
+  grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$pc"; _m0014f_ok $? "pre-commit defaults OPENSPEC_GATE_SELF to codex itself (not inherited)"
+  grep -q -- '--ci' "$ci";         _m0014f_ok $? "CI driver invokes the gate's --ci mode"
+  ! grep -q 'tool_input' "$ci";    _m0014f_ok $? "CI driver synthesizes no tool-call payload"
+  grep -q 'change-gate-conformance.sh' "$ci"; _m0014f_ok $? "CI driver scores the gate before trusting its verdict"
+  # The driver must not let its own OPENSPEC_GATE_SELF leak into the harness.
+  # One harness row seeds reviewers `claude` and `codex`; with codex excluded by
+  # ambient env, a CONFORMANT gate scores 27/28 and CI goes red for a reason
+  # that lives entirely in the measurement. Caught during live verification of
+  # this change, not in review.
+  grep -q 'env -u OPENSPEC_GATE_SELF' "$ci"
+  _m0014f_ok $? "CI driver runs the harness with OPENSPEC_GATE_SELF unset (no ambient interference)"
+  local clean dirty
+  clean="$(env -u OPENSPEC_GATE_SELF bash "$REPO_ROOT/tools/change-gate-conformance.sh" "$gate" 2>&1 | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
+  dirty="$(OPENSPEC_GATE_SELF=codex bash "$REPO_ROOT/tools/change-gate-conformance.sh" "$gate" 2>&1 | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
+  _m0014f_ok "$([ "$clean" = "0" ] && echo 0 || echo 1)" "harness scores the gate clean with no ambient OPENSPEC_GATE_SELF (failures=$clean)"
+  _m0014f_ok "$([ "$dirty" != "0" ] && echo 0 || echo 1)" "...and the leak is real, so the guard is load-bearing (failures with codex exported=$dirty)"
+  grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$ci"; _m0014f_ok $? "CI driver defaults OPENSPEC_GATE_SELF to codex"
+  grep -qE 'OPENSPEC_GATE_SELF: *codex' "$REPO_ROOT/.github/workflows/openspec-gate.yml"
+  _m0014f_ok $? "the CI workflow sets OPENSPEC_GATE_SELF: codex in its job env"
+  # ...AND the conformance step must nullify it. Workflow-level env is inherited
+  # by every run: step, so the step that scores the gate would otherwise run with
+  # codex ambient and fail a CONFORMANT gate at 27/28 — turning every PR red and
+  # training people to disable the workflow. Asserting only that the variable is
+  # SET passes while the workflow is broken.
+  grep -qE 'env -u OPENSPEC_GATE_SELF .*change-gate-conformance' "$REPO_ROOT/.github/workflows/openspec-gate.yml"
+  _m0014f_ok $? "the CI workflow's conformance step runs the harness with OPENSPEC_GATE_SELF unset"
+  grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
+  _m0014f_ok $? "the PreToolUse wrapper defaults OPENSPEC_GATE_SELF to codex"
+  # CI must NOT resolve the shared path: a runner has no ~/.agenticapps/bin/,
+  # and enforcing with a copy it never scored would defeat the harness step.
+  # Strip comments before matching: the driver DOCUMENTS why it avoids the
+  # shared path, and a naive grep would read that explanation as the defect.
+  ! sed 's/#.*//' "$ci" | grep -q 'agenticapps/bin'
+  _m0014f_ok $? "CI driver resolves the REPO-LOCAL gate, never the shared install (code, not comments)"
+
+  # The two local surfaces must agree on what a well-formed marker is. If the
+  # hook accepted a marker the pre-commit rejected, the trust decision would
+  # depend on which surface you happened to hit.
+  local pc_marker hw_marker
+  pc_marker="$(grep -c 'has_valid_marker' "$pc")"
+  hw_marker="$(grep -c 'has_valid_marker' "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh")"
+  _m0014f_ok "$([ "$pc_marker" -gt 0 ] && [ "$hw_marker" -gt 0 ] && echo 0 || echo 1)" \
+    "both local surfaces marker-check the shared copy (pre-commit=$pc_marker, wrapper=$hw_marker refs)"
+
+  # ── Behavioural: a real commit, refused ────────────────────────────────────
+  local tmp; tmp="$(mktemp -d)"
+  (
+    cd "$tmp" && git init -q . \
+      && git config user.email t@t && git config user.name t \
+      && git commit -q --allow-empty -m base
+  )
+  mkdir -p "$tmp/openspec/changes/add-thing"
+  : > "$tmp/openspec/changes/add-thing/proposal.md"
+  install -m 0755 "$pc" "$tmp/.git/hooks/pre-commit"
+
+  printf 'package main\n' > "$tmp/main.go"
+  local head_before head_after
+  head_before="$(git -C "$tmp" rev-parse HEAD)"
+  ( cd "$tmp" && git add main.go \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m code ) >/dev/null 2>&1; rc=$?
+  head_after="$(git -C "$tmp" rev-parse HEAD)"
+  _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: commit of code under an unreviewed change is REFUSED (rc=$rc)"
+  _m0014f_ok "$([ "$head_before" = "$head_after" ] && echo 0 || echo 1)" "floor: HEAD did not move"
+
+  # Only openspec/ staged -> allowed, and reached via mode dispatch rather than
+  # the parse-error fail-open the old driver relied on.
+  ( cd "$tmp" && git reset -q && git add openspec \
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m spec ) >/dev/null 2>&1; rc=$?
+  _m0014f_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" "floor: a commit staging ONLY openspec/ artifacts is allowed (rc=$rc)"
+
+  # ── Absent gate -> fail OPEN with a warning (spec's explicit exception) ────
+  local err; err="$tmp/err.txt"
+  ( cd "$tmp" && git add -A \
+      && OPENSPEC_CHANGE_GATE="$tmp/definitely-not-here" HOME="$tmp/nohome" \
+         bash "$pc" ) >/dev/null 2>"$err"; rc=$?
+  _m0014f_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" "floor: no gate resolvable -> fails OPEN (exit 0, got $rc)"
+  grep -qi 'warn\|not found\|not gated' "$err"; _m0014f_ok $? "floor: the absent-gate path warns on stderr rather than passing silently"
+
+  # ── A shared copy with no version marker must NOT be trusted ───────────────
+  # The transitional defence: the other three hosts do not arbitrate yet, so any
+  # of them can blind-write its unmarked pre-#33 gate over the shared path. A
+  # marker is what every post-#33 conformant gate carries and every pre-adoption
+  # copy lacks.
+  mkdir -p "$tmp/fakehome/.agenticapps/bin" "$tmp/bin"
+  install -m 0755 "$gate" "$tmp/bin/openspec-change-gate.sh"   # the repo-local fallback target
+  printf '#!/usr/bin/env bash\n# no marker here\nexit 0\n' > "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
+  chmod +x "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
+  # env -u OPENSPEC_CHANGE_GATE: an exported override resolves BEFORE the shared
+  # path, so the "shared copy was rejected" warning would never emit and this
+  # assertion would measure the wrong branch.
+  ( cd "$tmp" && git reset -q && git add main.go \
+      && env -u OPENSPEC_CHANGE_GATE HOME="$tmp/fakehome" OPENSPEC_BIN=true bash "$pc" ) >/dev/null 2>"$err"; rc=$?
+  _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: an UNMARKED shared gate is ignored — falls back to repo-local and still blocks (rc=$rc)"
+  grep -qi 'marker\|unmarked\|falling back' "$err"; _m0014f_ok $? "floor: the fallback warns that the shared copy was rejected"
+
+  rm -rf "$tmp"
+}
+
+# test_migration_0014_arbitration — the installer cannot downgrade the shared gate
+#
+# Every AgenticApps host installs to ONE path,
+# ~/.agenticapps/bin/openspec-change-gate.sh. Without arbitration that is
+# last-writer-wins: a host still vendoring an older copy silently republishes it
+# over a newer one and reverts the fix for every agent on the machine. That is
+# the hazard issue #26 was filed about, and core's gate README makes refusing a
+# downgrade a MUST for every host.
+#
+# The logic lives in bin/install-gate.sh rather than inline in install.sh so it
+# can be driven directly with fixtures — the same reason §18 requires the gate
+# itself be demonstrable by direct invocation. Arbitration that can only be
+# exercised by running a full installer is arbitration nobody tests.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0014a_ok() {  # _m0014a_ok <0|1> <label>
+  if [ "$1" = "0" ]; then echo "  ${GREEN}PASS${RESET} $2"; PASS=$((PASS+1));
+  else echo "  ${RED}FAIL${RESET} $2"; FAIL=$((FAIL+1)); fi
+}
+_m0014a_mkgate() { # _m0014a_mkgate <path> <version-or-empty> [marker-line-override]
+  { if [ -n "${3:-}" ]; then printf '#!/usr/bin/env bash\n%s\n' "$3"
+    elif [ -n "$2" ]; then printf '#!/usr/bin/env bash\n# gate-version: %s\n' "$2"
+    else printf '#!/usr/bin/env bash\n# no marker at all\n'; fi
+    printf 'echo "%s"\nexit 0\n' "${2:-unmarked}"; } > "$1"
+  chmod +x "$1"
+}
+
+test_migration_0014_arbitration() {
+  echo ""
+  echo "${YELLOW}=== Migration 0014 — installer version arbitration (shared gate) ===${RESET}"
+
+  local ig="$REPO_ROOT/bin/install-gate.sh"
+  if [ ! -x "$ig" ]; then
+    echo "  ${RED}FAIL${RESET} bin/install-gate.sh missing/not executable — arbitration is not implemented"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  local src="$tmp/src.sh" dst="$tmp/dest/openspec-change-gate.sh"
+  mkdir -p "$tmp/dest"
+  local rc before
+
+  # ── Refuse a strict downgrade, byte-for-byte ──────────────────────────────
+  _m0014a_mkgate "$src" "1.1.0"
+  _m0014a_mkgate "$dst" "1.3.0"
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "1.1.0 over installed 1.3.0 -> file left byte-for-byte unchanged"
+  grep -q '1.3.0' "$tmp/out" && grep -q '1.1.0' "$tmp/out"
+  _m0014a_ok $? "the refusal names BOTH versions"
+  grep -qi 'force\|OPENSPEC_GATE_FORCE\|--force' "$tmp/out"
+  _m0014a_ok $? "the refusal names the command to force it"
+
+  # ── Upgrade writes ────────────────────────────────────────────────────────
+  _m0014a_mkgate "$src" "1.4.0"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# gate-version: 1.4.0' "$dst"
+  _m0014a_ok $? "1.4.0 over installed 1.3.0 -> upgrade writes"
+
+  # ── Equal refreshes, so a truncated same-version copy is repairable ────────
+  : > "$dst"                       # simulate a truncated/corrupt install
+  _m0014a_mkgate "$src" "1.4.0"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# gate-version: 1.4.0' "$dst"
+  _m0014a_ok $? "equal version -> refreshes (repairs a truncated copy)"
+
+  # ── Unmarked installed == 0.0.0, so first adoption always proceeds ────────
+  _m0014a_mkgate "$dst" ""         # every pre-canonical copy looks like this
+  _m0014a_mkgate "$src" "1.2.0"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# gate-version: 1.2.0' "$dst"
+  _m0014a_ok $? "unmarked installed treated as 0.0.0 -> first adoption proceeds"
+
+  # ── Malformed markers are 0.0.0, not a mis-ordered comparison ─────────────
+  local m
+  for m in '# gate-version: 1.2' '# gate-version: 1.3.0-rc1' '# gate-version:'; do
+    _m0014a_mkgate "$dst" "" "$m"
+    _m0014a_mkgate "$src" "1.2.0"
+    bash "$ig" "$src" "$dst" >/dev/null 2>&1
+    grep -q '# gate-version: 1.2.0' "$dst"
+    _m0014a_ok $? "malformed installed marker '${m#\# gate-version: }' treated as 0.0.0 -> installs"
+  done
+
+  # A corrupt INCOMING marker is also 0.0.0 — and so is refused against a real
+  # installed version. Safe direction: a gate whose own provenance cannot be
+  # read must not displace one whose can.
+  _m0014a_mkgate "$dst" "1.5.0"
+  _m0014a_mkgate "$src" "" '# gate-version: not-a-version'
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "malformed INCOMING marker is 0.0.0 -> refused against a real installed version"
+
+  # ── Fresh machine: destination directory does not exist at all ────────────
+  _m0014a_mkgate "$src" "1.2.0"
+  bash "$ig" "$src" "$tmp/brand-new/deeper/openspec-change-gate.sh" >/dev/null 2>&1
+  [ -x "$tmp/brand-new/deeper/openspec-change-gate.sh" ]
+  _m0014a_ok $? "fresh machine: creates the destination directory and installs"
+
+  # ── --dry-run decides without writing ─────────────────────────────────────
+  _m0014a_mkgate "$dst" "1.5.0"
+  _m0014a_mkgate "$src" "1.9.0"
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" --dry-run "$src" "$dst" >"$tmp/out" 2>&1
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "--dry-run writes nothing"
+  grep -qi 'would' "$tmp/out"; _m0014a_ok $? "--dry-run reports the decision it would take"
+
+  # ── A held, not-yet-stale lock stops the installer ────────────────────────
+  # Bounded retry: retry to a declared max-wait, reclaim past a declared
+  # staleness threshold, otherwise give up non-zero. Naming the model matters —
+  # under unbounded retry this case is unreachable, and under single-attempt
+  # fail-fast the serialise case is fiction.
+  mkdir -p "$dst.lock"
+  _m0014a_mkgate "$src" "9.9.9"
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=9999 bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  # Exit 2 SPECIFICALLY, not merely non-zero: contention and breakage must be
+  # distinguishable, or install.sh cannot be loud about a genuinely failed
+  # install while staying tolerant of two installers racing.
+  _m0014a_ok "$([ "$rc" -eq 2 ] && echo 0 || echo 1)" "a held, not-yet-stale lock -> exits 2 (contention, not breakage) (rc=$rc)"
+  bash "$ig" >/dev/null 2>&1; rc=$?
+  _m0014a_ok "$([ "$rc" -eq 1 ] && echo 0 || echo 1)" "bad arguments -> exits 1 (breakage, distinct from contention) (rc=$rc)"
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "...and writes nothing rather than proceeding unlocked"
+
+  # ── Portability: a GNU-shaped `stat` must not defeat staleness detection ──
+  # `stat` is one of the sharpest BSD/GNU divergences. On GNU, `-f` means
+  # --file-system, so `stat -f %m <dir>` SUCCEEDS while printing a non-numeric
+  # value — a BSD-first `A || B` chain never falls through, the age arithmetic
+  # breaks, and the lock is never reclaimed. This shipped, passed on macOS, and
+  # was caught only by the ubuntu leg of the CI matrix.
+  #
+  # This fixture puts a GNU-shaped `stat` on PATH so the failure reproduces on
+  # EITHER platform. A portability bug that only one leg of the matrix can see
+  # is a portability bug half the contributors will keep reintroducing.
+  mkdir -p "$tmp/gnustub"
+  cat > "$tmp/gnustub/stat" <<'STUB'
+#!/usr/bin/env bash
+# Mimic GNU coreutils: -c is the real format flag; -f is --file-system and
+# prints filesystem info (non-numeric here), exiting 0 either way.
+case "${1:-}" in
+  -c) shift; fmt="${1:-}"; shift; [ "$fmt" = "%Y" ] && { date -r "${1:-}" +%s 2>/dev/null || echo 1; exit 0; }; echo 0; exit 0 ;;
+  -f) echo "  File: \"${3:-}\""; exit 0 ;;
+esac
+exit 1
+STUB
+  chmod +x "$tmp/gnustub/stat"
+  mkdir -p "$dst.lock"
+  _m0014a_mkgate "$src" "9.9.9"
+  PATH="$tmp/gnustub:$PATH" OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=0 \
+    bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" \
+    "stale lock is reclaimed under a GNU-shaped stat too (rc=$rc) — the BSD/GNU trap"
+
+  # ── A stale lock is reclaimed with a warning, never a deadlock ────────────
+  mkdir -p "$dst.lock"
+  OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=0 bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" "a stale lock is reclaimed rather than deadlocking (rc=$rc)"
+  grep -qi 'stale' "$tmp/out"; _m0014a_ok $? "...and the reclaim is warned about, so the degraded outcome is attributable"
+
+  rm -rf "$tmp"
 }
 
 test_drift() {
@@ -3824,11 +4714,26 @@ test_repo_layout() {
     skills/codex-ts-declare-first/templates/example.test.ts \
     skills/codex-ts-declare-first/templates/example.impl.ts \
     skills/agentic-apps-workflow/scripts/check-plan-review.sh \
-    skills/codex-plan-review/SKILL.md \
+    skills/codex-openspec-change-review/SKILL.md \
     migrations/0008-plan-review-gate.md \
     docs/decisions/0009-plan-review-gate.md \
     skills/agentic-apps-workflow/scripts/hook-wrapper-plan-review.sh \
     migrations/0011-native-plan-review-hook.md \
+    migrations/0013-bind-openspec-v1.md \
+    bin/openspec-change-gate.sh \
+    bin/install-gate.sh \
+    tools/change-gate-conformance.sh \
+    tools/core-vendor.manifest \
+    bin/reviewer-cli.sh \
+    bin/openspec-gate-ci.sh \
+    bin/git-hooks/pre-commit \
+    .github/workflows/openspec-gate.yml \
+    skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh \
+    skills/codex-openspec-change-review/SKILL.md \
+    skills/setup-codex-agenticapps-workflow/templates/config-lifecycle.json \
+    docs/WORKFLOW.md \
+    docs/recipes/0001-planning-to-openspec.md \
+    docs/decisions/0011-openspec-superpowers-adoption.md \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -3851,6 +4756,19 @@ test_repo_layout() {
     PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} update skill migrations symlink missing/broken — \$update discovers no migrations"
+    FAIL=$((FAIL+1))
+  fi
+
+  # Recipe discovery: the update skill hands recipes/0001-planning-to-openspec.md
+  # to a project crossing 0.x -> 1.0.0. Same committed-symlink mechanism as
+  # `migrations` — without it, $update resolves no recipe in a target repo and
+  # the .planning/ history silently never gets migrated into openspec/specs/.
+  if [ -L skills/update-codex-agenticapps-workflow/recipes ] \
+     && [ -f skills/update-codex-agenticapps-workflow/recipes/0001-planning-to-openspec.md ]; then
+    echo "  ${GREEN}PASS${RESET} update skill recipes symlink resolves to repo-root docs/recipes/"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} update skill recipes symlink missing/broken — \$update finds no planning->openspec recipe"
     FAIL=$((FAIL+1))
   fi
 
@@ -6150,6 +7068,16 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0012" ]; then
   test_migration_0012
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0013" ]; then
+  test_migration_0013
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
+  test_migration_0014
+  test_migration_0014_floors
+  test_migration_0014_arbitration
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

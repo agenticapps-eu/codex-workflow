@@ -13,9 +13,46 @@ in `.planning/config.codex.json`.)
 The scaffolder repo dogfoods its own workflow per Phase 6 of the
 build-out (`docs/dogfood-2026-05-10.md`).
 
-## Conformance claim
+## Amendment — v1.0.0 (migration `0013`, ADR-0011)
 
-`codex-workflow` claims **`full` conformance** to
+Core spec **v1.0.0** replaced the planning front end with OpenSpec (§16–§19)
+and **remapped** the §02 gate taxonomy onto the change lifecycle (§17). The
+document below is retained as the 0.x record; where the two differ, the
+following is current:
+
+- **`spec-review` and `plan-review` are collapsed into lifecycle stage 2.**
+  `spec-review`'s structural role is `openspec validate --all`;
+  `plan-review`'s adversarial role is the §18 change-gate **predicate**
+  (validate green AND `REVIEWS.md` ≥ 2 reviewers), produced by
+  `codex-openspec-change-review`. Neither is a standalone gate under 1.0.0 —
+  §17 forbids that — and neither obligation was dropped.
+- **`code-review`, `tdd`, `verification`, `security`, `branch-close` are
+  retained** unchanged as execution gates.
+- **`brainstorm-ui`, `brainstorm-architecture`, `design-shotgun`,
+  `design-critique`, `impeccable-audit`, `ui-preview`, `qa`,
+  `database-security`, `db-pre-launch-audit` are conditional** — bound for
+  downstream projects, and **none of them can fire in this repo**, which has
+  no UI, no database, and no dev server. Per spec/09 an omission whose trigger
+  cannot occur does not downgrade `full` to `partial`. Rationale per gate is
+  unchanged from the 0.x sections below.
+- **`ts-declare` (§13) is demoted to a CI lint**, not a standalone gate. It
+  cannot fire here either: the only TypeScript in the repo is inert template
+  fixtures under `skills/codex-ts-declare-first/templates/`.
+- **§14 (prompt-injection) remains trivially conformant** for the reason given
+  below — this scaffolder builds no LLM prompts from non-self-authored values.
+  One §14-adjacent control is live: `codex-openspec-change-review` fences every
+  verbatim third-party reviewer block behind an untrusted-content notice.
+
+The conformance claim is now **`full` against v1.0.0**. The trigger skill's
+`implements_spec: 1.0.0` is the normative citation (spec §09); gate skills keep
+citing `0.4.0`, the version of the §02 gate contract each fulfils, because
+those contracts did not change under §17 — only their *fate* in the lifecycle
+did. See [`WORKFLOW.md`](WORKFLOW.md) for the full mapping and
+[ADR-0011](decisions/0011-openspec-superpowers-adoption.md) for the decision.
+
+## Conformance claim (0.x record)
+
+`codex-workflow` claimed **`full` conformance** to
 `agenticapps-workflow-core` v0.10.0 per spec/09 because:
 
 > **Citation history.** This document and the trigger skill cited **v0.4.0**
