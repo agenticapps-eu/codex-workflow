@@ -57,10 +57,26 @@ in every shipped artifact's frontmatter.
 - Upstream follow-up: `agenticapps-observability` `init` Phase 6 emits the
   §10.8 metadata block to `CLAUDE.md`; making it host-aware (`AGENTS.md` on
   Codex) would remove migration 0003's relocate round-trip.
-- Reconcile `bin/reviewer-cli.sh` fleet drift: this repo ships a superset (adds
-  `claude` + `opencode` arms), opencode ships the smaller one, and both install
-  to the same global path — last-writer-wins, backward-compatible in one
-  direction only.
+- **`bin/reviewer-cli.sh` fleet drift — now filed upstream as
+  [core#41](https://github.com/agenticapps-eu/agenticapps-workflow-core/issues/41),
+  and it has fired.** On 2026-07-25 a sibling installer delivered the arbitrated
+  1.2.2 gate correctly and, in the same run, blind-installed its
+  `reviewer-cli.sh` over this repo's superset — dropping the `opencode` arm, so
+  `reviewer-cli.sh opencode` now dies with `unknown vendor`. Three divergent
+  copies (codex 95 lines / 4 arms, pi 85 / 3, opencode 72 / 2), one shared path,
+  no version marker, blind installs. The gate survived the same run because it
+  has `# gate-version:` and every host arbitrates on it.
+
+  Not a gate bypass — a producer that excludes the implementing host still has
+  two reviewers, which clears §18. It is a silent capability loss that surfaces
+  mid-review rather than at install time.
+
+  The ask upstream is the core#33 treatment: publish a canonical
+  `reviewer-cli.sh` composed from **pi's structure** (stdin pinned inside
+  `run_bounded`, one place) and **codex's coverage** (four arms, plus the note
+  that `opencode` is a client and the producer must record the resolved model),
+  give it a version marker, and add a small conformance harness. Fixing it in
+  this repo alone would make a fourth copy.
 
 ## [1.1.0] — 2026-07-25
 
