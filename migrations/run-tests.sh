@@ -4758,6 +4758,165 @@ test_migration_0015() {
   fi
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# test_migration_0015_arbitration — the installer arbitrates a SECOND artifact
+#
+# ~/.agenticapps/bin/reviewer-cli.sh is written by the claude, codex, opencode
+# and pi installers alike, exactly like the gate one directory over. Core#41 is
+# what last-writer-wins looks like on this file: the correctly-arbitrated 1.2.2
+# gate and a 3-arm wrapper over a 4-arm one, in the SAME installer run.
+#
+# The arbitration is NOT duplicated for it. bin/install-gate.sh takes --marker
+# and both artifacts share one implementation of parse -> compare -> refuse ->
+# lock -> atomic write. Two copies of concurrency-critical code is divergence at
+# the exact surface this change exists to un-diverge.
+#
+# Two groups of rows:
+#   A. the NEW marker (reviewer-cli-version) — genuine RED before the refactor
+#   B. a REGRESSION PIN on the default marker (gate-version). Deliberately NOT
+#      tagged tdd: it is green before the refactor, because that is the point.
+#      It asserts gate BEHAVIOUR through the refactored script, not that the
+#      call site's text is unchanged — a syntactic check cannot see a
+#      behavioural break inside the thing it is guarding.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0015a_mkcli() { # _m0015a_mkcli <path> <version-or-empty> [marker-line-override]
+  { if [ -n "${3:-}" ]; then printf '#!/usr/bin/env bash\n%s\n' "$3"
+    elif [ -n "$2" ]; then printf '#!/usr/bin/env bash\n# reviewer-cli-version: %s\n' "$2"
+    else printf '#!/usr/bin/env bash\n# no marker at all\n'; fi
+    printf 'echo "%s"\nexit 0\n' "${2:-unmarked}"; } > "$1"
+  chmod +x "$1"
+}
+
+test_migration_0015_arbitration() {
+  echo ""
+  echo "${YELLOW}=== Migration 0015 — installer arbitration (shared reviewer-cli) ===${RESET}"
+
+  local ig="$REPO_ROOT/bin/install-gate.sh"
+  if [ ! -x "$ig" ]; then
+    echo "  ${RED}FAIL${RESET} bin/install-gate.sh missing/not executable"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  local src="$tmp/src.sh" dst="$tmp/dest/reviewer-cli.sh"
+  mkdir -p "$tmp/dest"
+  local rc before
+  local M=--marker RC=reviewer-cli-version
+
+  # ── A1: refuse a strict downgrade on the NEW marker ───────────────────────
+  _m0015a_mkcli "$src" "1.0.0"
+  _m0015a_mkcli "$dst" "9.9.9"
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" "$M" "$RC" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "1.0.0 over installed 9.9.9 -> wrapper left byte-for-byte unchanged"
+  _m0014a_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" \
+    "...and exits 0 — refusing a downgrade is a DECISION, not a failure (rc=$rc)"
+  grep -q '9.9.9' "$tmp/out" && grep -q '1.0.0' "$tmp/out"
+  _m0014a_ok $? "the refusal names BOTH versions"
+  grep -qi 'reviewer-cli' "$tmp/out"
+  _m0014a_ok $? "the refusal names the artifact it refused (label derived from the marker)"
+
+  # ── A2: unmarked installed is 0.0.0, so first adoption proceeds ───────────
+  # This is every pre-canonical copy on the machine, including the degraded
+  # 3-arm one core#41 was filed about.
+  _m0015a_mkcli "$dst" ""
+  _m0015a_mkcli "$src" "1.0.0"
+  bash "$ig" "$M" "$RC" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# reviewer-cli-version: 1.0.0' "$dst"
+  _m0014a_ok $? "unmarked installed treated as 0.0.0 -> first adoption proceeds"
+
+  # ── A3: an older marked copy is upgraded ─────────────────────────────────
+  _m0015a_mkcli "$dst" "0.9.0"
+  _m0015a_mkcli "$src" "1.0.0"
+  bash "$ig" "$M" "$RC" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# reviewer-cli-version: 1.0.0' "$dst"
+  _m0014a_ok $? "1.0.0 over installed 0.9.0 -> upgrade writes"
+
+  # ── A4: an unreadable INCOMING marker is refused, not trusted ─────────────
+  # The 0.0.0 rule binds BOTH sides. Round 2 of the change review noted only the
+  # installed side had a scenario; this is the other half. Safe direction: a
+  # copy whose own provenance cannot be read must not displace one whose can.
+  _m0015a_mkcli "$dst" "1.0.0"
+  _m0015a_mkcli "$src" "" '# reviewer-cli-version: not-a-version'
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" "$M" "$RC" "$src" "$dst" >/dev/null 2>&1
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "malformed INCOMING marker is 0.0.0 -> refused against a real installed version"
+
+  # ── A5: the gate's marker must not leak into the wrapper's decision ───────
+  # A wrapper carrying a high `# gate-version:` and no reviewer-cli marker is
+  # 0.0.0 for THIS arbitration. Reading the wrong marker would be indetectable
+  # from the outcome alone on any file that happens to carry both.
+  _m0015a_mkcli "$dst" "" '# gate-version: 9.9.9'
+  _m0015a_mkcli "$src" "1.0.0"
+  bash "$ig" "$M" "$RC" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# reviewer-cli-version: 1.0.0' "$dst"
+  _m0014a_ok $? "a stray '# gate-version: 9.9.9' does not block a reviewer-cli install"
+
+  # ── B: REGRESSION PIN — the default marker is still gate-version ──────────
+  # Not tagged tdd and green before the refactor, on purpose. Its only guarantee
+  # of validity is the mutation check: it must FAIL against a deliberately
+  # broken installer, and that is exercised in the mutation pass.
+  local gsrc="$tmp/gate-src.sh" gdst="$tmp/dest/openspec-change-gate.sh"
+  _m0014a_mkgate "$gsrc" "1.2.2"
+  _m0014a_mkgate "$gdst" "9.9.9"
+  before="$(shasum -a 256 "$gdst" | awk '{print $1}')"
+  bash "$ig" "$gsrc" "$gdst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$(shasum -a 256 "$gdst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "PIN: no --marker -> still arbitrates gate-version (9.9.9 not overwritten)"
+  _m0014a_mkgate "$gdst" ""
+  bash "$ig" "$gsrc" "$gdst" >/dev/null 2>&1
+  grep -q '# gate-version: 1.2.2' "$gdst"
+  _m0014a_ok $? "PIN: no --marker -> unmarked gate still upgrades"
+
+  # ── C: no LIVE surface may blind-write the shared wrapper ────────────────
+  # The wrapper is the artifact core#41 lost. An `install -m 0755` of it is the
+  # bug verbatim, so the assertion is on the ABSENCE of that call, not merely on
+  # the presence of an arbitrated one somewhere else.
+  #
+  # Scope is the surfaces a fresh install or update EXECUTES today: install.sh,
+  # bin/, skills/. Historical migration records are excluded deliberately —
+  # 0013 Step 3 blind-installs the wrapper and that text is retained per §08
+  # supersede-don't-delete, exactly as it retains the blind gate install that
+  # 0014 superseded. A replay runs 0013 and then reaches 0015, so the END STATE
+  # is arbitrated; rewriting 0013 would falsify the record of what it did.
+  #
+  # That exclusion is not a hiding place: the row immediately below asserts
+  # 0015 actually carries the superseding step. Excluding history is only
+  # honest if something proves history was superseded.
+  local blind
+  blind="$(grep -rn 'install -m 0755.*reviewer-cli\.sh' \
+             "$REPO_ROOT/install.sh" "$REPO_ROOT/bin" "$REPO_ROOT/skills" 2>/dev/null || true)"
+  if [ -z "$blind" ]; then
+    echo "  ${GREEN}PASS${RESET} no live surface blind-writes the shared wrapper (install.sh, bin/, skills/)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} the shared wrapper is blind-written — that is core#41 verbatim:"
+    printf '%s\n' "$blind" | sed "s|$REPO_ROOT/||; s|^|         |"
+    FAIL=$((FAIL+1))
+  fi
+
+  if grep -qE -- '--marker[[:space:]]+reviewer-cli-version' "$REPO_ROOT/migrations/0015-adopt-canonical-reviewer-cli.md" 2>/dev/null; then
+    echo "  ${GREEN}PASS${RESET} migration 0015 carries the step that supersedes 0013's blind wrapper install"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} migration 0015 does not supersede 0013 Step 3 — a replay would end on the blind install"
+    FAIL=$((FAIL+1))
+  fi
+
+  if grep -q 'install-gate\.sh.*\\$' "$REPO_ROOT/install.sh" \
+     && grep -qE -- '--marker[[:space:]]+reviewer-cli-version' "$REPO_ROOT/install.sh"; then
+    echo "  ${GREEN}PASS${RESET} install.sh routes the shared wrapper through install-gate.sh --marker"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} install.sh does not install the wrapper through the arbitrating installer"
+    FAIL=$((FAIL+1))
+  fi
+
+  rm -rf "$tmp"
+}
+
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
@@ -7226,6 +7385,7 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
   test_migration_0014_floors
   test_migration_0014_arbitration
   test_migration_0015
+  test_migration_0015_arbitration
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
