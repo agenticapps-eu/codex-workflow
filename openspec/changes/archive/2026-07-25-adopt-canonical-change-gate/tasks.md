@@ -142,8 +142,8 @@ which is not a RED at all.
       `openspec validate` does not discharge this.
 - [x] 7.5 `/cso` — the gate is the enforcement trust boundary and this change
       closes a live bypass. Write `SECURITY.md` into the change directory.
-- [ ] 7.6 File the upstream core issue proposing GAP-1 and GAP-4 harness rows;
+- [x] 7.6 File the upstream core issue proposing GAP-1 and GAP-4 harness rows;
       link it from ADR-0012 and from issue #26.
-- [ ] 7.7 Reply on issue #26 correcting the "pre-commit and CI are no-ops"
+- [x] 7.7 Reply on issue #26 correcting the "pre-commit and CI are no-ops"
       inference — the floors did enforce, via driver wrappers rather than mode
       dispatch — and report the adoption.
