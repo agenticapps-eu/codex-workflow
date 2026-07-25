@@ -91,19 +91,65 @@ fi
 # Resolution order matches the pre-commit floor: env override, the global
 # install, then a repo-local checkout.
 # ─────────────────────────────────────────────────────────────────────────────
+# This host's identity, so codex's own reviews do not satisfy the >= 2
+# independent reviewer threshold. Set here rather than inherited — a gate that
+# counts self-review disagrees with the §02 evidence verifier, and a verifier
+# and a gate that disagree is the ADR-0018 drift pattern reappearing inside the
+# tooling.
+export OPENSPEC_GATE_SELF="${OPENSPEC_GATE_SELF:-codex}"
+
+# The shared gate is trusted only if it carries a well-formed `# gate-version:`
+# marker — exactly three dot-separated integers, the shape install.sh
+# arbitrates on. All four host installers write that one path and only this host
+# arbitrates so far, so a sibling can blind-write its unmarked pre-canonical
+# copy over ours; without this check, shared-first resolution would run this
+# hook against the very gate the workflow replaced. It does NOT distinguish
+# newer from older — a marked-but-older sibling copy is still trusted — but it
+# closes the case that exists today. Same rule as bin/git-hooks/pre-commit; the
+# two must not drift apart.
+has_valid_marker() {
+  local v dots
+  v="$(grep -m1 '^# gate-version:' "$1" 2>/dev/null | sed 's/^# gate-version:[[:space:]]*//' | tr -d '[:space:]')"
+  case "$v" in
+    ''|*[!0-9.]*) return 1 ;;
+  esac
+  dots="$(printf '%s' "$v" | tr -cd '.' | wc -c | tr -d ' ')"
+  [ "$dots" = "2" ] || return 1
+  case "$v" in .*|*.|*..*) return 1 ;; esac
+  return 0
+}
+
 GATE=""
-for c in "${OPENSPEC_CHANGE_GATE:-}" \
-         "$HOME/.agenticapps/bin/openspec-change-gate.sh" \
-         "$(git rev-parse --show-toplevel 2>/dev/null)/bin/openspec-change-gate.sh"; do
-  [ -n "$c" ] && [ -x "$c" ] && { GATE="$c"; break; }
-done
+if [ -n "${OPENSPEC_CHANGE_GATE:-}" ] && [ -x "${OPENSPEC_CHANGE_GATE:-}" ]; then
+  # An explicit override is the operator's deliberate choice, used as-is.
+  GATE="$OPENSPEC_CHANGE_GATE"
+fi
+if [ -z "$GATE" ]; then
+  _shared="$HOME/.agenticapps/bin/openspec-change-gate.sh"
+  if [ -x "$_shared" ] && has_valid_marker "$_shared"; then
+    GATE="$_shared"
+  elif [ -x "$_shared" ]; then
+    printf '%s shared-gate-unmarked ignored=%s\n' \
+      "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" "$_shared" >>"$HW_LOG" 2>/dev/null || true
+  fi
+fi
+if [ -z "$GATE" ]; then
+  _local="$(git rev-parse --show-toplevel 2>/dev/null)/bin/openspec-change-gate.sh"
+  [ -x "$_local" ] && GATE="$_local"
+fi
 
 if [ -z "$GATE" ]; then
-  # The gate is not installed. ALLOW (silently) rather than bricking every edit
-  # on a machine that never installed the workflow — the git pre-commit + CI
-  # floor is the enforcement guarantee; this hook is faster feedback on top.
-  printf '%s gate-not-installed allow\n' \
-    "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" >>"$HW_LOG" 2>/dev/null || true
+  # The gate is not installed. ALLOW rather than bricking every edit on a
+  # machine that never installed the workflow — the git pre-commit + CI floor is
+  # the enforcement guarantee; this hook is faster feedback on top.
+  #
+  # The log line is MANDATORY, not best-effort housekeeping: a surface that
+  # silently stops enforcing looks exactly like one that is enforcing and
+  # finding nothing wrong. That ambiguity is how the fleet drift went unnoticed,
+  # so the paths searched are recorded even on the allow path.
+  printf '%s gate-not-installed allow searched=[$OPENSPEC_CHANGE_GATE,%s,repo-local]\n' \
+    "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)" \
+    "$HOME/.agenticapps/bin/openspec-change-gate.sh" >>"$HW_LOG" 2>/dev/null || true
   exit 0
 fi
 

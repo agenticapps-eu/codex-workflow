@@ -4343,7 +4343,10 @@ test_migration_0014_floors() {
   # ── Structural: no fabricated payloads, real modes, explicit self ──────────
   grep -q -- '--pre-commit' "$pc"; _m0014f_ok $? "pre-commit invokes the gate's --pre-commit mode"
   ! grep -q 'tool_input' "$pc";    _m0014f_ok $? "pre-commit synthesizes no tool-call payload"
-  grep -q 'OPENSPEC_GATE_SELF=codex' "$pc"; _m0014f_ok $? "pre-commit sets OPENSPEC_GATE_SELF=codex itself (not inherited)"
+  # Property, not spelling: the script must DEFAULT it to codex on its own. An
+  # explicit operator override is fine — what must not happen is a bare
+  # inherit, which leaves a human's `git commit` counting codex's own reviews.
+  grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$pc"; _m0014f_ok $? "pre-commit defaults OPENSPEC_GATE_SELF to codex itself (not inherited)"
   grep -q -- '--ci' "$ci";         _m0014f_ok $? "CI driver invokes the gate's --ci mode"
   ! grep -q 'tool_input' "$ci";    _m0014f_ok $? "CI driver synthesizes no tool-call payload"
   grep -q 'change-gate-conformance.sh' "$ci"; _m0014f_ok $? "CI driver scores the gate before trusting its verdict"
@@ -4387,7 +4390,8 @@ test_migration_0014_floors() {
   # of them can blind-write its unmarked pre-#33 gate over the shared path. A
   # marker is what every post-#33 conformant gate carries and every pre-adoption
   # copy lacks.
-  mkdir -p "$tmp/fakehome/.agenticapps/bin"
+  mkdir -p "$tmp/fakehome/.agenticapps/bin" "$tmp/bin"
+  install -m 0755 "$gate" "$tmp/bin/openspec-change-gate.sh"   # the repo-local fallback target
   printf '#!/usr/bin/env bash\n# no marker here\nexit 0\n' > "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
   chmod +x "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
   ( cd "$tmp" && git reset -q && git add main.go \

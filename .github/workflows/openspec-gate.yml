@@ -3,9 +3,26 @@ name: openspec-gate
 # The agent-agnostic enforcement floor for the §18 OpenSpec change-gate.
 #
 # The per-agent PreToolUse hook (.codex/hooks.json) gives fast feedback but is
-# loaded at session start and cannot gate the session that installed it. This
-# job — together with the git pre-commit hook — is the floor: it catches code
-# pushed by ANY agent or a human.
+# loaded at session start and cannot gate the session that installed it. The git
+# pre-commit hook catches humans but can be waved through with --no-verify. This
+# job is the surface no local configuration can bypass.
+#
+# It runs in two steps, and the order is the point:
+#
+#   1. Score the vendored gate with core's conformance harness.
+#   2. Only then run the gate.
+#
+# A drifted gate passes every repo it guards while enforcing nothing — issue #32
+# found five divergent copies on one machine, none conformant, all reporting
+# clean. Step 1 is what makes step 2's verdict mean something.
+#
+# The gate is the REPO-LOCAL vendored copy, never the shared
+# ~/.agenticapps/bin/ one. A runner has no shared path, and enforcing with a
+# copy this job never scored would defeat step 1.
+#
+# --ci is whole-repo: an unreviewed active change fails the build even if this
+# pull request did not touch it. A proposal-only PR is therefore red until its
+# REVIEWS.md lands, which is the rule working — reviews come before code.
 #
 # It no-ops on a repo with no openspec/changes/ (see bin/openspec-gate-ci.sh),
 # so it is safe to enable before the spec slot is initialised.
@@ -16,13 +33,17 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  # This host's identity, so codex's own reviews do not count toward the
+  # >= 2 independent reviewer threshold. Set on every surface this repo ships;
+  # a gate that counts self-review disagrees with the §02 evidence verifier.
+  OPENSPEC_GATE_SELF: codex
+
 jobs:
   gate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0   # the CI driver diffs against the base ref
 
       - uses: actions/setup-node@v4
         with:
@@ -31,9 +52,16 @@ jobs:
       - name: Install the OpenSpec CLI
         run: npm i -g @fission-ai/openspec
 
-      - name: Run the change gate over the PR diff
-        # Passed via env, never interpolated into the shell line (workflow
-        # injection hygiene), even though base.sha is a git SHA.
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash bin/openspec-gate-ci.sh "${BASE_SHA:-HEAD~1}"
+      - name: Prove the gate itself is conformant
+        # Every declared row must pass. The bar is zero failures, not a fixed
+        # count: the harness grows as core adds rows, and a hardcoded number
+        # would read like verification while verifying less than the instrument
+        # offers.
+        run: bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
+
+      - name: Run the change gate over every active change
+        # The driver re-checks conformance itself, so that non-CI callers get
+        # the same guarantee. The duplication is deliberate and costs about a
+        # second: this step exists so the ordering is visible in the CI log
+        # rather than buried inside a script.
+        run: bash bin/openspec-gate-ci.sh
