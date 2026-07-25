@@ -9,6 +9,6 @@
 # workspace and may sit mid-change on a feature branch. Vendor from
 # origin/main; verify against the recorded commit.
 core_repo=agenticapps-eu/agenticapps-workflow-core
-core_commit=ae904836af632836f2afba74723b1a30a4c5e15a
+core_commit=9c938b4ab9877cb5f849d2059ecafdc86bb0d956
 file=bin/openspec-change-gate.sh sha256=aeec47339e6ed6a74b6cba466ec93f796854bd02c39e69743604eab288538c05
-file=tools/change-gate-conformance.sh sha256=64d65a95c2716e9f3d7a41319491b0ce0c6dd0fb7166ce9bdb2058ace93847b5
+file=tools/change-gate-conformance.sh sha256=eb1e8fbac5e2f8626a9a564788b4778f7cf512e97b8364a0e2a8d1343448f545
