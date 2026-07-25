@@ -4271,9 +4271,17 @@ test_migration_0014() {
     fi
   fi
 
-  # ── Leg 4: the two regressions NO harness row covers ───────────────────────
+  # ── Leg 4: two regressions, now ALSO covered upstream ──────────────────────
   # Verified 2026-07-25: the pre-adoption 164-line copy returned 0 and 2 here,
-  # the inverse of correct, and scored 28/28-minus-12 without either showing up.
+  # the inverse of correct, and no harness row caught either.
+  #
+  # Core has since added rows for both (core#38, prompted by our core#37):
+  # `active change, evaluated from a subdirectory -> block` and `brace-free
+  # garbage stdin -> allow (fail-open)`. These local assertions are therefore no
+  # longer the SOLE coverage, and are kept deliberately rather than deleted:
+  # they are owned by this repo and hold even if a future re-vendor brings in a
+  # harness that dropped them. Two cheap assertions against the failure mode
+  # that produced five divergent copies is a trade worth making.
   local tmp; tmp="$(mktemp -d)"
   ( cd "$tmp" && git init -q . )
   mkdir -p "$tmp/openspec/changes/active-change" "$tmp/sub/dir"
@@ -4353,18 +4361,29 @@ test_migration_0014_floors() {
   grep -q -- '--ci' "$ci";         _m0014f_ok $? "CI driver invokes the gate's --ci mode"
   ! grep -q 'tool_input' "$ci";    _m0014f_ok $? "CI driver synthesizes no tool-call payload"
   grep -q 'change-gate-conformance.sh' "$ci"; _m0014f_ok $? "CI driver scores the gate before trusting its verdict"
-  # The driver must not let its own OPENSPEC_GATE_SELF leak into the harness.
-  # One harness row seeds reviewers `claude` and `codex`; with codex excluded by
-  # ambient env, a CONFORMANT gate scores 27/28 and CI goes red for a reason
-  # that lives entirely in the measurement. Caught during live verification of
-  # this change, not in review.
+  # Ambient OPENSPEC_GATE_SELF must not change the harness's verdict.
+  #
+  # History, because the assertion below inverted once and will read oddly
+  # otherwise. One harness row seeds reviewers `claude` and `codex`. An ambient
+  # OPENSPEC_GATE_SELF=codex made the gate correctly exclude that review, the
+  # row saw one reviewer, and a CONFORMANT gate scored 27/28 — CI red for a
+  # reason living entirely in the measurement. We hit it twice (CI driver, then
+  # the workflow's own step) and reported it upstream as core#37; core fixed it
+  # in #38 by having the harness `unset OPENSPEC_GATE_SELF` itself.
+  #
+  # So the property is now asserted at the source — the vendored harness must
+  # self-defend — rather than by proving the leak still exists, which it no
+  # longer does. Our own `env -u` guards are kept as defence-in-depth: they cost
+  # nothing and still hold if an older harness is ever vendored.
   grep -q 'env -u OPENSPEC_GATE_SELF' "$ci"
-  _m0014f_ok $? "CI driver runs the harness with OPENSPEC_GATE_SELF unset (no ambient interference)"
+  _m0014f_ok $? "CI driver runs the harness with OPENSPEC_GATE_SELF unset (defence-in-depth)"
+  grep -qE '^[[:space:]]*unset OPENSPEC_GATE_SELF' "$REPO_ROOT/tools/change-gate-conformance.sh"
+  _m0014f_ok $? "the vendored harness unsets OPENSPEC_GATE_SELF itself (core#38)"
   local clean dirty
   clean="$(env -u OPENSPEC_GATE_SELF bash "$REPO_ROOT/tools/change-gate-conformance.sh" "$gate" 2>&1 | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
   dirty="$(OPENSPEC_GATE_SELF=codex bash "$REPO_ROOT/tools/change-gate-conformance.sh" "$gate" 2>&1 | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
   _m0014f_ok "$([ "$clean" = "0" ] && echo 0 || echo 1)" "harness scores the gate clean with no ambient OPENSPEC_GATE_SELF (failures=$clean)"
-  _m0014f_ok "$([ "$dirty" != "0" ] && echo 0 || echo 1)" "...and the leak is real, so the guard is load-bearing (failures with codex exported=$dirty)"
+  _m0014f_ok "$([ "$dirty" = "$clean" ] && echo 0 || echo 1)" "...and scores it IDENTICALLY with codex exported (ambient=$dirty vs clean=$clean)"
   grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$ci"; _m0014f_ok $? "CI driver defaults OPENSPEC_GATE_SELF to codex"
   grep -qE 'OPENSPEC_GATE_SELF: *codex' "$REPO_ROOT/.github/workflows/openspec-gate.yml"
   _m0014f_ok $? "the CI workflow sets OPENSPEC_GATE_SELF: codex in its job env"

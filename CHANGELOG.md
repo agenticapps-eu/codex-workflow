@@ -9,6 +9,47 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Changed
+
+- **Re-vendored the §18 change-gate at core `750da2e` — `gate-version` 1.2.0 →
+  1.2.2**, and the conformance harness with it (28 → 37 rows). No workflow
+  version bump: the standard did not change, only a vendored dependency, and its
+  version is tracked by `# gate-version:` and `tools/core-vendor.manifest`.
+  Downstream projects pick it up by re-running `install.sh`, which arbitrates the
+  upgrade. This is the maintenance path v1.1.0 was built for — a copy and a green
+  suite.
+
+  Two real fixes come with it, both affecting anyone whose repo root is a
+  symlink (macOS `/tmp` → `/private/tmp`, git worktrees, symlinked checkouts):
+
+  - **1.2.1** — an *absolute* path to a change's own artifacts was blocked
+    instead of exempted. Under a symlinked root the relative case broke too,
+    because `git rev-parse --show-toplevel` and the incoming path resolved
+    through different routes to the same directory. The consequence is the one
+    §18's fail-open rule exists to prevent: a change whose `proposal.md` cannot
+    be written can never be authored, reviewed, or unblocked.
+  - **1.2.2** — two symlink escapes in `is_openspec_artifact()`.
+
+  Measured: the new harness scored our 1.2.0 gate **29/31** before the
+  re-vendor, and **37/37** after. That the bar is "zero failing rows, whatever
+  the count" rather than a literal `28/28` is what let the gap surface as a
+  clean RED with no assertion edit.
+
+- **`test_migration_0014`'s env-leak assertion inverted, deliberately.** It used
+  to prove the ambient-`OPENSPEC_GATE_SELF` leak was real, so that our `env -u`
+  guards were load-bearing. Core fixed the root cause in
+  [core#38](https://github.com/agenticapps-eu/agenticapps-workflow-core/pull/38)
+  (prompted by our core#37) — the harness now `unset`s the variable itself. The
+  assertion now checks that ambient state does not change the harness's verdict,
+  and that the vendored harness self-defends. Our guards are kept as
+  defence-in-depth for the case where an older harness is vendored.
+
+- **The GAP-1 / GAP-4 local pins are no longer sole coverage.** core#38 added
+  rows for both (`active change, evaluated from a subdirectory -> block` and
+  `brace-free garbage stdin -> allow (fail-open)`). Kept anyway: they are owned
+  by this repo and hold even if a future re-vendor brings a harness that dropped
+  them.
+
 ### Backlog (beyond conformance)
 
 - Plugin packaging — re-evaluate after in-the-wild use (ADR-0001 F2).
@@ -20,12 +61,6 @@ in every shipped artifact's frontmatter.
   `claude` + `opencode` arms), opencode ships the smaller one, and both install
   to the same global path — last-writer-wins, backward-compatible in one
   direction only.
-- Adopt core's in-flight symlinked-root exemption fix once it lands as a new
-  `gate-version` (core `fix/gate-symlinked-root-exemption`). Re-vendoring is a
-  copy plus a green suite — that is the point of 1.1.0.
-- Upstream: propose harness rows for GAP-1 and GAP-4. Core's implementation
-  fixes both; core's harness covers neither, so every host is unprotected
-  against a regression in them.
 
 ## [1.1.0] — 2026-07-25
 

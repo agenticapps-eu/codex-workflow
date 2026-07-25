@@ -6,9 +6,11 @@
 # a header would itself break the byte-identity it claimed to record.
 #
 # core_commit is a COMMIT, not a branch: a core checkout is a live
-# workspace and may sit mid-change on a feature branch. Vendor from
-# origin/main; verify against the recorded commit.
+# workspace and may sit mid-change on a feature branch, and origin/main
+# can advance BETWEEN two commands. Resolve it ONCE and vendor every file
+# from that one revision — a per-file rev-parse is how the gate and the
+# harness ended up from different commits on 2026-07-25.
 core_repo=agenticapps-eu/agenticapps-workflow-core
-core_commit=9c938b4ab9877cb5f849d2059ecafdc86bb0d956
-file=bin/openspec-change-gate.sh sha256=aeec47339e6ed6a74b6cba466ec93f796854bd02c39e69743604eab288538c05
-file=tools/change-gate-conformance.sh sha256=eb1e8fbac5e2f8626a9a564788b4778f7cf512e97b8364a0e2a8d1343448f545
+core_commit=750da2e87a9a33b25addedea7b0d76a4346a81b9
+file=bin/openspec-change-gate.sh sha256=11056079fc6b3aca67d2e28603a8a21b7cb6ae353a63a569833ca34798133208
+file=tools/change-gate-conformance.sh sha256=b3c2f6b284c5f8423ce583005358403734c9d133a92985671914ff17cdb4eae7
