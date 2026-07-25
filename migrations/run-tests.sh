@@ -4350,6 +4350,18 @@ test_migration_0014_floors() {
   grep -q -- '--ci' "$ci";         _m0014f_ok $? "CI driver invokes the gate's --ci mode"
   ! grep -q 'tool_input' "$ci";    _m0014f_ok $? "CI driver synthesizes no tool-call payload"
   grep -q 'change-gate-conformance.sh' "$ci"; _m0014f_ok $? "CI driver scores the gate before trusting its verdict"
+  # The driver must not let its own OPENSPEC_GATE_SELF leak into the harness.
+  # One harness row seeds reviewers `claude` and `codex`; with codex excluded by
+  # ambient env, a CONFORMANT gate scores 27/28 and CI goes red for a reason
+  # that lives entirely in the measurement. Caught during live verification of
+  # this change, not in review.
+  grep -q 'env -u OPENSPEC_GATE_SELF' "$ci"
+  _m0014f_ok $? "CI driver runs the harness with OPENSPEC_GATE_SELF unset (no ambient interference)"
+  local clean dirty
+  clean="$(env -u OPENSPEC_GATE_SELF bash "$REPO_ROOT/tools/change-gate-conformance.sh" "$gate" 2>&1 | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
+  dirty="$(OPENSPEC_GATE_SELF=codex bash "$REPO_ROOT/tools/change-gate-conformance.sh" "$gate" 2>&1 | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
+  _m0014f_ok "$([ "$clean" = "0" ] && echo 0 || echo 1)" "harness scores the gate clean with no ambient OPENSPEC_GATE_SELF (failures=$clean)"
+  _m0014f_ok "$([ "$dirty" != "0" ] && echo 0 || echo 1)" "...and the leak is real, so the guard is load-bearing (failures with codex exported=$dirty)"
   grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$ci"; _m0014f_ok $? "CI driver defaults OPENSPEC_GATE_SELF to codex"
   grep -qE 'OPENSPEC_GATE_SELF: *codex' "$REPO_ROOT/.github/workflows/openspec-gate.yml"
   _m0014f_ok $? "the CI workflow sets OPENSPEC_GATE_SELF: codex in its job env"

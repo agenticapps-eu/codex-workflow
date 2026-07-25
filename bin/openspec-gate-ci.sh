@@ -62,7 +62,19 @@ if [ ! -x "$HARNESS" ]; then
 fi
 
 echo "openspec-gate-ci: scoring the gate before trusting its verdict"
-if ! bash "$HARNESS" "$GATE"; then
+# Run the harness in a CLEAN environment — specifically WITHOUT this host's
+# OPENSPEC_GATE_SELF. The harness drives the gate with its own fixtures, and one
+# row ("validate green + 2 reviewers -> allow") seeds reviewers `claude` and
+# `codex`. With OPENSPEC_GATE_SELF=codex leaking in from this driver, the gate
+# correctly excludes the codex review, the row sees 1 reviewer, and a perfectly
+# conformant gate scores 27/28 — a false CI failure caused entirely by the
+# measurement.
+#
+# The harness sets the variable itself for the rows that test self-exclusion, so
+# unsetting it here removes ambient interference rather than skipping coverage.
+# Core's gate README tells every host to set OPENSPEC_GATE_SELF and to run the
+# harness; followed literally, in one shell, those two instructions conflict.
+if ! env -u OPENSPEC_GATE_SELF bash "$HARNESS" "$GATE"; then
   echo "openspec-gate-ci: FAIL — the vendored gate is not conformant with spec §18." >&2
   echo "  Do NOT hand-patch it: a host-local fix is how five copies diverged (issue #32)." >&2
   echo "  Re-vendor from agenticapps-workflow-core, or fix it there and add a harness row." >&2
