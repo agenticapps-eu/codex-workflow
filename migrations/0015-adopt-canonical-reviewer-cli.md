@@ -162,16 +162,40 @@ bash tools/reviewer-cli-conformance.sh bin/reviewer-cli.sh   # 14 passed, 0 fail
 bash tools/reviewer-cli-conformance.sh --family              # the fleet, if siblings are checked out
 ```
 
+## Fleet state at adoption
+
+**The fleet converged during this change.** `opencode-workflow` adopted in its
+#19 while this was in review, so the 9/14 copy this migration was partly written
+against no longer exists. Measured after adoption:
+
+| copy | score |
+|---|---|
+| `claude-workflow` · `codex-workflow` · `opencode-workflow` · `pi-agentic-apps-workflow` | 14 / 14 each |
+| `~/.agenticapps/bin/` (shared) | 14 / 14 |
+
+All five are byte-identical to the canonical (`32718bb9…`). A dry-run against the
+live shared path now reports `would install reviewer-cli 1.0.0 over 1.0.0
+(refresh)` — arbitration working end-to-end, from four divergent copies to one
+file, inside a day.
+
+**The marker check does not become decoration because of that.** Convergence is
+a state, not a property. It is undone by any host reinstalling from an older
+checkout, by a fifth host, or by a hand-edited shared copy — and the check costs
+one `grep`.
+
 ## Known holes, named rather than implied
 
-- **`opencode-workflow` has not adopted.** It still ships a 9/14 unmarked copy
-  and does not arbitrate, so it can still clobber the shared path. This migration
-  cannot fix that from here — it stops *this* host causing it, and stops this
-  host's producer trusting the result. Its adoption is its own PR.
 - **Arbitration reads a marker anyone able to write the file can write.** A host
   publishing a lying `9.9.9` makes this repo refuse to "downgrade" to its own
   canonical copy. It defends against a stale *honest* host — the failure core#41
   observed — not a dishonest one.
+- **`--family` mode does not work from a vendored copy.** The harness resolves
+  the canonical as `$(dirname $0)/../reference-implementations/reviewer-cli/…`,
+  which only exists in a core checkout, so a host running `--family` scores a
+  phantom row `FAIL file not found` on top of an otherwise clean fleet (`70
+  passed, 1 failed` — five real copies at 14 each). It does **not** affect CI,
+  which scores a single named file. Do not patch it here: file it upstream, per
+  the rule this whole change exists to enforce.
 
 ## Follow-ups (deliberately not in this migration)
 

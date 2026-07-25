@@ -161,9 +161,18 @@ instruction to describe it accurately when it is.
   provenance is never in a header, `change-gate` still says it is. This is the
   direct cost of the deferral both reviewers demanded, and it is tracked in
   migration 0015's follow-ups rather than left to be rediscovered.
-- **`opencode-workflow` remains a hole.** It ships a 9/14 unmarked copy and does
-  not arbitrate, so it can still clobber the shared path. This repo can only stop
-  causing the problem and stop trusting the result.
+- **The fleet converged inside a day, and the hole this closed against is gone.**
+  `opencode-workflow` adopted in its #19 during this change's review; all four
+  hosts and the shared path are now byte-identical to the canonical, 14/14 each.
+  The producer's marker check was justified by `opencode-workflow`'s unmarked
+  9/14 copy, and that copy no longer exists — but the check stays, because
+  convergence is a *state* and the check defends a *property*. It is undone by
+  any host reinstalling from an older checkout, and it costs one `grep`.
+
+  Worth recording as evidence about the method rather than this change: four
+  divergent copies of one file became one, across four repos, in under a day,
+  because core published a canonical with a marker and a harness and each host
+  adopted it independently. That is the core#33 pattern working a second time.
 - **Review discipline earned its keep, measurably.** Three rounds, two
   REQUEST-CHANGES rounds, and the change is materially different: one requirement
   dropped, one TDD row found to be untestable as written, one parameter removed,

@@ -161,9 +161,18 @@ true of the two-file manifest. Full transcripts in
 
 Suite: 571 → **599 PASS / 0 FAIL / 1 SKIP**.
 
-Two holes are named rather than implied — `opencode-workflow` has not adopted,
-and the `change-gate` spec still says "vendor header" where the implementation
-uses the manifest sidecar. Both are tracked in migration 0015's follow-ups.
+**The fleet converged during this change.** `opencode-workflow` adopted in its
+#19 while this was in review, so all four hosts and the shared path are now
+byte-identical to the canonical — 14/14 each, `32718bb9…`. Four divergent copies
+of one file became one, across four repos, in under a day. The producer's marker
+check stays regardless: convergence is a state, the check defends a property, and
+one host reinstalling from an older checkout undoes the former.
+
+Two things remain open and are tracked in migration 0015's follow-ups: the
+`change-gate` spec still says "vendor header" where the implementation uses the
+manifest sidecar, and the harness's `--family` mode cannot resolve the canonical
+from a vendored copy (a phantom `FAIL file not found` on an otherwise clean
+fleet; CI is unaffected, and it is to be fixed upstream rather than here).
 
 ## [1.1.0] — 2026-07-25
 
