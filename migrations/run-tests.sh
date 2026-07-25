@@ -4573,7 +4573,37 @@ test_migration_0014_arbitration() {
   _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
     "...and writes nothing rather than proceeding unlocked"
 
+  # ── Portability: a GNU-shaped `stat` must not defeat staleness detection ──
+  # `stat` is one of the sharpest BSD/GNU divergences. On GNU, `-f` means
+  # --file-system, so `stat -f %m <dir>` SUCCEEDS while printing a non-numeric
+  # value — a BSD-first `A || B` chain never falls through, the age arithmetic
+  # breaks, and the lock is never reclaimed. This shipped, passed on macOS, and
+  # was caught only by the ubuntu leg of the CI matrix.
+  #
+  # This fixture puts a GNU-shaped `stat` on PATH so the failure reproduces on
+  # EITHER platform. A portability bug that only one leg of the matrix can see
+  # is a portability bug half the contributors will keep reintroducing.
+  mkdir -p "$tmp/gnustub"
+  cat > "$tmp/gnustub/stat" <<'STUB'
+#!/usr/bin/env bash
+# Mimic GNU coreutils: -c is the real format flag; -f is --file-system and
+# prints filesystem info (non-numeric here), exiting 0 either way.
+case "${1:-}" in
+  -c) shift; fmt="${1:-}"; shift; [ "$fmt" = "%Y" ] && { date -r "${1:-}" +%s 2>/dev/null || echo 1; exit 0; }; echo 0; exit 0 ;;
+  -f) echo "  File: \"${3:-}\""; exit 0 ;;
+esac
+exit 1
+STUB
+  chmod +x "$tmp/gnustub/stat"
+  mkdir -p "$dst.lock"
+  _m0014a_mkgate "$src" "9.9.9"
+  PATH="$tmp/gnustub:$PATH" OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=0 \
+    bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" \
+    "stale lock is reclaimed under a GNU-shaped stat too (rc=$rc) — the BSD/GNU trap"
+
   # ── A stale lock is reclaimed with a warning, never a deadlock ────────────
+  mkdir -p "$dst.lock"
   OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=0 bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
   _m0014a_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" "a stale lock is reclaimed rather than deadlocking (rc=$rc)"
   grep -qi 'stale' "$tmp/out"; _m0014a_ok $? "...and the reclaim is warned about, so the degraded outcome is attributable"

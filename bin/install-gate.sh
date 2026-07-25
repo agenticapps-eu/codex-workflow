@@ -133,8 +133,21 @@ mkdir -p "$DEST_DIR" || { log "cannot create $DEST_DIR"; exit 1; }
 LOCK="$DST.lock"
 
 lock_age() {   # seconds since the lock dir was created; huge if unknowable
+  # `stat` is one of the sharpest BSD/GNU divergences, and chaining the two
+  # forms with `||` is NOT enough: on GNU, `-f` means --file-system, so
+  # `stat -f %m` SUCCEEDS on a directory and prints a non-numeric value. The
+  # BSD-first `||` chain therefore never falls through on Linux, the arithmetic
+  # below breaks on the garbage, and the lock is never judged stale — the
+  # installer times out into contention instead of reclaiming. Caught by the
+  # ubuntu leg of the CI matrix; macOS passed, which is exactly why the matrix
+  # exists.
+  #
+  # So: try each form, and VALIDATE the output is an integer before trusting it.
+  # Exit status alone does not tell you whether the flag meant what you wanted.
   local mt now
-  mt="$(stat -f %m "$LOCK" 2>/dev/null || stat -c %Y "$LOCK" 2>/dev/null)" || { printf '999999'; return; }
+  mt="$(stat -c %Y "$LOCK" 2>/dev/null)" || mt=""            # GNU coreutils
+  case "$mt" in ''|*[!0-9]*) mt="$(stat -f %m "$LOCK" 2>/dev/null)" || mt="" ;; esac   # BSD/macOS
+  case "$mt" in ''|*[!0-9]*) printf '999999'; return ;; esac  # unknowable -> treat as stale
   now="$(date +%s)"
   printf '%s' "$(( now - mt ))"
 }
