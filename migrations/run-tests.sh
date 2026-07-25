@@ -5000,9 +5000,14 @@ test_migration_0015_surfaces() {
   fi
 
   # ── CI: score the producer BEFORE the gate whose evidence it produces ──────
+  # Match the `run:` STEPS, never any mention. The workflow's header prose names
+  # bin/openspec-gate-ci.sh in a comment 60 lines above the step that invokes
+  # it, so a bare filename grep compares a comment against a step and reports a
+  # reversed order that does not exist. Caught by this row failing while the
+  # workflow was already correct.
   local cline gline
-  cline="$(grep -n 'reviewer-cli-conformance\.sh' "$wf" | head -1 | cut -d: -f1)"
-  gline="$(grep -n 'openspec-gate-ci\.sh' "$wf" | head -1 | cut -d: -f1)"
+  cline="$(grep -nE '^[[:space:]]*run:.*reviewer-cli-conformance\.sh' "$wf" | head -1 | cut -d: -f1)"
+  gline="$(grep -nE '^[[:space:]]*run:.*openspec-gate-ci\.sh' "$wf" | head -1 | cut -d: -f1)"
   if [ -n "$cline" ] && [ -n "$gline" ] && [ "$cline" -lt "$gline" ]; then
     echo "  ${GREEN}PASS${RESET} CI scores reviewer-cli (line $cline) before running the gate (line $gline)"
     PASS=$((PASS+1))

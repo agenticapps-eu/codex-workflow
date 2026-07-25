@@ -173,9 +173,26 @@ change), and `tasks.md` (the intended breakdown).
    HANGS without it (a 4-minute stall on first attempt); a hanging reviewer
    must never be able to stall an edit indefinitely.
 
+   The shared copy is preferred so one machine-wide install reaches every repo —
+   but ONLY if it carries a well-formed `# reviewer-cli-version:` marker, which
+   means exactly three dot-separated integers, the same thing the installer
+   means by it. A host that has not adopted core#42 writes an unmarked copy to
+   that shared path, and running it is how a review silently loses a vendor arm.
+   A marker that cannot be parsed is 0.0.0 to the installer, which would
+   overwrite it — so it must not be good enough to execute here either.
+
+   **The marker is a plain comment, and this check verifies nothing.** Anything
+   that can write the file can write the marker. It discriminates a canonical
+   copy from a pre-canonical one and does nothing else: not integrity, not a
+   signature. (The *installer* additionally compares markers to refuse
+   downgrades, which is a weak form of version provenance with its own stated
+   residual — a host publishing a lying `9.9.9` defeats it. That is a different
+   check with a different claim; do not merge the two in your head.)
+
    ```bash
    reviewer_cli="$HOME/.agenticapps/bin/reviewer-cli.sh"
-   [ -x "$reviewer_cli" ] || reviewer_cli="bin/reviewer-cli.sh"
+   grep -qE '^# reviewer-cli-version: [0-9]+\.[0-9]+\.[0-9]+[[:space:]]*$' \
+        "$reviewer_cli" 2>/dev/null || reviewer_cli="bin/reviewer-cli.sh"
 
    "$reviewer_cli" gemini   "$prompt_file" >/tmp/review-gemini.txt   2>/tmp/review-gemini.err   &
    "$reviewer_cli" claude   "$prompt_file" >/tmp/review-claude.txt   2>/tmp/review-claude.err   &
