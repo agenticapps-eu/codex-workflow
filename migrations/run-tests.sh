@@ -4402,6 +4402,135 @@ test_migration_0014_floors() {
   rm -rf "$tmp"
 }
 
+# test_migration_0014_arbitration — the installer cannot downgrade the shared gate
+#
+# Every AgenticApps host installs to ONE path,
+# ~/.agenticapps/bin/openspec-change-gate.sh. Without arbitration that is
+# last-writer-wins: a host still vendoring an older copy silently republishes it
+# over a newer one and reverts the fix for every agent on the machine. That is
+# the hazard issue #26 was filed about, and core's gate README makes refusing a
+# downgrade a MUST for every host.
+#
+# The logic lives in bin/install-gate.sh rather than inline in install.sh so it
+# can be driven directly with fixtures — the same reason §18 requires the gate
+# itself be demonstrable by direct invocation. Arbitration that can only be
+# exercised by running a full installer is arbitration nobody tests.
+# ─────────────────────────────────────────────────────────────────────────────
+_m0014a_ok() {  # _m0014a_ok <0|1> <label>
+  if [ "$1" = "0" ]; then echo "  ${GREEN}PASS${RESET} $2"; PASS=$((PASS+1));
+  else echo "  ${RED}FAIL${RESET} $2"; FAIL=$((FAIL+1)); fi
+}
+_m0014a_mkgate() { # _m0014a_mkgate <path> <version-or-empty> [marker-line-override]
+  { if [ -n "${3:-}" ]; then printf '#!/usr/bin/env bash\n%s\n' "$3"
+    elif [ -n "$2" ]; then printf '#!/usr/bin/env bash\n# gate-version: %s\n' "$2"
+    else printf '#!/usr/bin/env bash\n# no marker at all\n'; fi
+    printf 'echo "%s"\nexit 0\n' "${2:-unmarked}"; } > "$1"
+  chmod +x "$1"
+}
+
+test_migration_0014_arbitration() {
+  echo ""
+  echo "${YELLOW}=== Migration 0014 — installer version arbitration (shared gate) ===${RESET}"
+
+  local ig="$REPO_ROOT/bin/install-gate.sh"
+  if [ ! -x "$ig" ]; then
+    echo "  ${RED}FAIL${RESET} bin/install-gate.sh missing/not executable — arbitration is not implemented"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  local src="$tmp/src.sh" dst="$tmp/dest/openspec-change-gate.sh"
+  mkdir -p "$tmp/dest"
+  local rc before
+
+  # ── Refuse a strict downgrade, byte-for-byte ──────────────────────────────
+  _m0014a_mkgate "$src" "1.1.0"
+  _m0014a_mkgate "$dst" "1.3.0"
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "1.1.0 over installed 1.3.0 -> file left byte-for-byte unchanged"
+  grep -q '1.3.0' "$tmp/out" && grep -q '1.1.0' "$tmp/out"
+  _m0014a_ok $? "the refusal names BOTH versions"
+  grep -qi 'force\|OPENSPEC_GATE_FORCE\|--force' "$tmp/out"
+  _m0014a_ok $? "the refusal names the command to force it"
+
+  # ── Upgrade writes ────────────────────────────────────────────────────────
+  _m0014a_mkgate "$src" "1.4.0"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# gate-version: 1.4.0' "$dst"
+  _m0014a_ok $? "1.4.0 over installed 1.3.0 -> upgrade writes"
+
+  # ── Equal refreshes, so a truncated same-version copy is repairable ────────
+  : > "$dst"                       # simulate a truncated/corrupt install
+  _m0014a_mkgate "$src" "1.4.0"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# gate-version: 1.4.0' "$dst"
+  _m0014a_ok $? "equal version -> refreshes (repairs a truncated copy)"
+
+  # ── Unmarked installed == 0.0.0, so first adoption always proceeds ────────
+  _m0014a_mkgate "$dst" ""         # every pre-canonical copy looks like this
+  _m0014a_mkgate "$src" "1.2.0"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  grep -q '# gate-version: 1.2.0' "$dst"
+  _m0014a_ok $? "unmarked installed treated as 0.0.0 -> first adoption proceeds"
+
+  # ── Malformed markers are 0.0.0, not a mis-ordered comparison ─────────────
+  local m
+  for m in '# gate-version: 1.2' '# gate-version: 1.3.0-rc1' '# gate-version:'; do
+    _m0014a_mkgate "$dst" "" "$m"
+    _m0014a_mkgate "$src" "1.2.0"
+    bash "$ig" "$src" "$dst" >/dev/null 2>&1
+    grep -q '# gate-version: 1.2.0' "$dst"
+    _m0014a_ok $? "malformed installed marker '${m#\# gate-version: }' treated as 0.0.0 -> installs"
+  done
+
+  # A corrupt INCOMING marker is also 0.0.0 — and so is refused against a real
+  # installed version. Safe direction: a gate whose own provenance cannot be
+  # read must not displace one whose can.
+  _m0014a_mkgate "$dst" "1.5.0"
+  _m0014a_mkgate "$src" "" '# gate-version: not-a-version'
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" "$src" "$dst" >/dev/null 2>&1
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "malformed INCOMING marker is 0.0.0 -> refused against a real installed version"
+
+  # ── Fresh machine: destination directory does not exist at all ────────────
+  _m0014a_mkgate "$src" "1.2.0"
+  bash "$ig" "$src" "$tmp/brand-new/deeper/openspec-change-gate.sh" >/dev/null 2>&1
+  [ -x "$tmp/brand-new/deeper/openspec-change-gate.sh" ]
+  _m0014a_ok $? "fresh machine: creates the destination directory and installs"
+
+  # ── --dry-run decides without writing ─────────────────────────────────────
+  _m0014a_mkgate "$dst" "1.5.0"
+  _m0014a_mkgate "$src" "1.9.0"
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  bash "$ig" --dry-run "$src" "$dst" >"$tmp/out" 2>&1
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "--dry-run writes nothing"
+  grep -qi 'would' "$tmp/out"; _m0014a_ok $? "--dry-run reports the decision it would take"
+
+  # ── A held, not-yet-stale lock stops the installer ────────────────────────
+  # Bounded retry: retry to a declared max-wait, reclaim past a declared
+  # staleness threshold, otherwise give up non-zero. Naming the model matters —
+  # under unbounded retry this case is unreachable, and under single-attempt
+  # fail-fast the serialise case is fiction.
+  mkdir -p "$dst.lock"
+  _m0014a_mkgate "$src" "9.9.9"
+  before="$(shasum -a 256 "$dst" | awk '{print $1}')"
+  OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=9999 bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "a held, not-yet-stale lock -> exits non-zero (rc=$rc)"
+  _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
+    "...and writes nothing rather than proceeding unlocked"
+
+  # ── A stale lock is reclaimed with a warning, never a deadlock ────────────
+  OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=0 bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
+  _m0014a_ok "$([ "$rc" -eq 0 ] && echo 0 || echo 1)" "a stale lock is reclaimed rather than deadlocking (rc=$rc)"
+  grep -qi 'stale' "$tmp/out"; _m0014a_ok $? "...and the reclaim is warned about, so the degraded outcome is attributable"
+
+  rm -rf "$tmp"
+}
+
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
@@ -6866,6 +6995,7 @@ fi
 if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
   test_migration_0014
   test_migration_0014_floors
+  test_migration_0014_arbitration
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then

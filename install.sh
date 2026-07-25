@@ -214,9 +214,22 @@ echo "  ${GREEN}HOOK${RESET}   .codex/hooks.json PreToolUse -> hook-wrapper-open
 echo "  ${GREEN}HOOK${RESET}   .git/hooks/pre-commit             (agent-agnostic floor)"
 echo "  ${GREEN}CI${RESET}     .github/workflows/openspec-gate.yml"
 
+# The gate is installed through bin/install-gate.sh, which ARBITRATES BY
+# VERSION rather than blindly overwriting. All four AgenticApps hosts write
+# $AA_BIN/openspec-change-gate.sh, so a plain `install` here is last-writer-wins:
+# running an older host's installer afterwards silently republishes its copy and
+# reverts the fix for every agent on the machine. That is the hazard issue #26
+# was filed about, and core's gate README makes honouring `# gate-version:` a
+# MUST for every host. It runs even under --dry-run, where it reports the
+# decision it would take and writes nothing.
+"$SCAFFOLDER_ROOT/bin/install-gate.sh" \
+  $([ "$DRY_RUN" -eq 1 ] && echo --dry-run) \
+  "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" \
+  "$AA_BIN/openspec-change-gate.sh" \
+  || echo "  ${YELLOW}WARN${RESET}   gate arbitration could not complete — see the message above"
+
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$AA_BIN" "$AA_GIT_HOOKS"
-  install -m 0755 "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" "$AA_BIN/openspec-change-gate.sh"
   install -m 0755 "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh"         "$AA_BIN/reviewer-cli.sh"
   # Stage the pre-commit at a stable global path so the per-project setup skill
   # can install it into any repo without needing this scaffolder checked out.
