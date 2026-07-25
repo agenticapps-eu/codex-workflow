@@ -4917,6 +4917,104 @@ test_migration_0015_arbitration() {
   rm -rf "$tmp"
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# test_migration_0015_surfaces — the producer, and CI, must not trust drift
+#
+# Two surfaces, one reason. The producer resolves the SHARED wrapper first so a
+# single machine-wide install reaches every repo — but opencode-workflow still
+# ships an unmarked 9/14 copy and does not arbitrate, so that path can still be
+# clobbered by a host this repo does not control. And CI scores the wrapper
+# before any review it produces is trusted, because a drifted CONSUMER fails
+# loudly while a drifted PRODUCER reports clean.
+#
+# WELL-FORMED, not merely present. The installer treats anything that is not
+# three dot-separated integers as 0.0.0 and overwrites it. A producer that
+# accepted `1.2.a` would execute a file the installer considers unversioned —
+# the two checks must mean the same thing by "marker".
+# ─────────────────────────────────────────────────────────────────────────────
+test_migration_0015_surfaces() {
+  echo ""
+  echo "${YELLOW}=== Migration 0015 — producer resolution + CI conformance step ===${RESET}"
+
+  local skill="$REPO_ROOT/skills/codex-openspec-change-review/SKILL.md"
+  local wf="$REPO_ROOT/.github/workflows/openspec-gate.yml"
+
+  # ── Producer: the resolution snippet must marker-check, and well-formedly ──
+  # Extracted and EXECUTED, not pattern-matched. A regex over prose proves the
+  # skill mentions a marker; running the snippet proves it discriminates.
+  local snippet tmp rc chosen
+  tmp="$(mktemp -d)"
+  snippet="$(sed -n '/^   reviewer_cli=/,/^$/p' "$skill" | sed 's/^   //')"
+  if [ -z "$snippet" ]; then
+    echo "  ${RED}FAIL${RESET} could not extract the reviewer_cli resolution snippet from the skill"
+    FAIL=$((FAIL+1)); rm -rf "$tmp"; return
+  fi
+
+  _m0015s_resolve() { # _m0015s_resolve <shared-marker-line-or-DELETE> -> echoes the chosen path
+    local marker="$1"
+    mkdir -p "$tmp/home/.agenticapps/bin" "$tmp/repo/bin"
+    printf '#!/usr/bin/env bash\necho SHARED\n' > "$tmp/home/.agenticapps/bin/reviewer-cli.sh"
+    if [ "$marker" != "DELETE" ]; then
+      printf '#!/usr/bin/env bash\n%s\necho SHARED\n' "$marker" > "$tmp/home/.agenticapps/bin/reviewer-cli.sh"
+    else
+      rm -f "$tmp/home/.agenticapps/bin/reviewer-cli.sh"
+    fi
+    [ -f "$tmp/home/.agenticapps/bin/reviewer-cli.sh" ] && chmod +x "$tmp/home/.agenticapps/bin/reviewer-cli.sh"
+    printf '#!/usr/bin/env bash\necho REPO\n' > "$tmp/repo/bin/reviewer-cli.sh"
+    chmod +x "$tmp/repo/bin/reviewer-cli.sh"
+    ( cd "$tmp/repo" && HOME="$tmp/home" bash -c "$snippet"$'\n''printf "%s" "$reviewer_cli"' 2>/dev/null )
+  }
+
+  # A well-formed marker: the shared copy wins, so one install reaches every repo.
+  chosen="$(_m0015s_resolve '# reviewer-cli-version: 1.0.0')"
+  case "$chosen" in *".agenticapps/bin/reviewer-cli.sh") rc=0 ;; *) rc=1 ;; esac
+  _m0014a_ok "$rc" "producer prefers a WELL-FORMED marked shared copy (chose ${chosen:-<none>})"
+
+  # Unmarked: the pre-canonical copy every non-adopting host writes.
+  chosen="$(_m0015s_resolve '# no marker here')"
+  case "$chosen" in bin/reviewer-cli.sh|*"/repo/bin/reviewer-cli.sh") rc=0 ;; *) rc=1 ;; esac
+  _m0014a_ok "$rc" "producer falls back to repo-local when the shared copy is UNMARKED (chose ${chosen:-<none>})"
+
+  # Malformed: absent and malformed are distinct states, and both mean 0.0.0.
+  local m
+  for m in '# reviewer-cli-version: 1.2' '# reviewer-cli-version: 1.2.a' '# reviewer-cli-version: 1.3.0-rc1' '# reviewer-cli-version:'; do
+    chosen="$(_m0015s_resolve "$m")"
+    case "$chosen" in bin/reviewer-cli.sh|*"/repo/bin/reviewer-cli.sh") rc=0 ;; *) rc=1 ;; esac
+    _m0014a_ok "$rc" "producer rejects a MALFORMED shared marker '${m#\# reviewer-cli-version: }' (chose ${chosen:-<none>})"
+  done
+
+  # No shared copy at all — a fresh machine, or one that never ran install.sh.
+  chosen="$(_m0015s_resolve DELETE)"
+  case "$chosen" in bin/reviewer-cli.sh|*"/repo/bin/reviewer-cli.sh") rc=0 ;; *) rc=1 ;; esac
+  _m0014a_ok "$rc" "producer falls back to repo-local when no shared copy exists (chose ${chosen:-<none>})"
+
+  # The denial must stay scoped. A marker is a plain comment; the producer's
+  # check DISCRIMINATES canonical from pre-canonical and verifies nothing. The
+  # skill has to say so, or a later reader mistakes it for a control it is not.
+  if grep -qiE 'not (integrity|a signature)|plain comment' "$skill"; then
+    echo "  ${GREEN}PASS${RESET} the skill states the marker check discriminates rather than verifies"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} the skill does not say a marker is a plain comment — it will be read as integrity"
+    FAIL=$((FAIL+1))
+  fi
+
+  # ── CI: score the producer BEFORE the gate whose evidence it produces ──────
+  local cline gline
+  cline="$(grep -n 'reviewer-cli-conformance\.sh' "$wf" | head -1 | cut -d: -f1)"
+  gline="$(grep -n 'openspec-gate-ci\.sh' "$wf" | head -1 | cut -d: -f1)"
+  if [ -n "$cline" ] && [ -n "$gline" ] && [ "$cline" -lt "$gline" ]; then
+    echo "  ${GREEN}PASS${RESET} CI scores reviewer-cli (line $cline) before running the gate (line $gline)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} CI does not score the wrapper before the gate (conformance=${cline:-absent}, gate=${gline:-absent})"
+    echo "         A drifted producer reports clean while degrading the evidence the gate accepts."
+    FAIL=$((FAIL+1))
+  fi
+
+  rm -rf "$tmp"
+}
+
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
@@ -7386,6 +7484,7 @@ if [ -z "$FILTER" ] || [ "$FILTER" = "0014" ]; then
   test_migration_0014_arbitration
   test_migration_0015
   test_migration_0015_arbitration
+  test_migration_0015_surfaces
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
