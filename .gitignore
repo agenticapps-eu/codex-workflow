@@ -21,3 +21,4 @@ session-handoff.md
 # artifact maintained by hand). The spec slot itself (openspec/) IS committed —
 # only the regenerable command surface is ignored.
 .codex/skills/openspec-*/
+.gstack/
