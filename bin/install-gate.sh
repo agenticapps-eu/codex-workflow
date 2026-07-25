@@ -1,8 +1,31 @@
 #!/usr/bin/env bash
-# install-gate.sh — version-arbitrating installer for the shared §18 change-gate.
+# install-gate.sh — version-arbitrating installer for the shared §18 artifacts.
 #
 # Usage:
-#   install-gate.sh [--dry-run] <source-gate> <destination-path>
+#   install-gate.sh [--dry-run] [--marker <name>] <source> <destination-path>
+#
+# --marker names the version comment to arbitrate on. It defaults to
+# `gate-version`, so every pre-existing call site means exactly what it did
+# before this flag existed.
+#
+# TWO ARTIFACTS, ONE IMPLEMENTATION. The §18 gate CONSUMES review evidence;
+# reviewer-cli.sh PRODUCES it, and both are installed to paths shared by all
+# four AgenticApps hosts. Core published the consumer first and left the
+# producer unarbitrated, and core#41 is what that cost: a sibling installer
+# delivered the correctly-arbitrated 1.2.2 gate and, in the SAME run,
+# blind-installed a 3-arm reviewer-cli over the 4-arm one. The gate survived
+# because it had a marker and every host compared it.
+#
+# The second artifact is therefore handled by parameterising this script rather
+# than by copying it. A second copy would duplicate the comparison, the lock,
+# the GNU/BSD `stat` handling and the atomic write, and a fix applied to one
+# copy and not the other is divergence at the exact surface this exists to
+# un-diverge — the same shape as core#41, one directory over.
+#
+# The operator-facing label is DERIVED from the marker (`gate-version` -> gate,
+# `reviewer-cli-version` -> reviewer-cli), not passed as a second flag. A
+# parameter whose only effect is log wording is one more thing a caller can pass
+# wrongly, for no behaviour.
 #
 # Exit: 0 = installed, or deliberately declined (refuse-downgrade is a DECISION,
 #         not a failure)
@@ -70,7 +93,18 @@
 set -u
 
 DRY_RUN=0
-case "${1:-}" in --dry-run) DRY_RUN=1; shift ;; esac
+MARKER="gate-version"
+while [ "$#" -gt 0 ]; do
+  case "${1:-}" in
+    --dry-run) DRY_RUN=1; shift ;;
+    --marker)  MARKER="${2:-}"; shift 2 || shift ;;
+    *)         break ;;
+  esac
+done
+
+# gate-version -> gate, reviewer-cli-version -> reviewer-cli. A marker that does
+# not end in -version logs under its own name, which is honest rather than wrong.
+LABEL="${MARKER%-version}"
 
 SRC="${1:-}"
 DST="${2:-}"
@@ -79,15 +113,16 @@ LOCK_STALE="${OPENSPEC_GATE_LOCK_STALE:-300}"  # seconds after which a lock is s
 
 log() { printf 'install-gate: %s\n' "$*" >&2; }
 
-[ -n "$SRC" ] && [ -n "$DST" ] || { log "usage: install-gate.sh [--dry-run] <source-gate> <destination-path>"; exit 1; }
-[ -f "$SRC" ] || { log "source gate not found: $SRC"; exit 1; }
+[ -n "$MARKER" ] || { log "--marker requires a name (e.g. gate-version, reviewer-cli-version)"; exit 1; }
+[ -n "$SRC" ] && [ -n "$DST" ] || { log "usage: install-gate.sh [--dry-run] [--marker <name>] <source> <destination-path>"; exit 1; }
+[ -f "$SRC" ] || { log "source $LABEL not found: $SRC"; exit 1; }
 
 # ── Marker parsing ───────────────────────────────────────────────────────────
 # Anything that is not exactly three dot-separated integers is 0.0.0.
-gate_version() {
+artifact_version() {
   local v
   [ -f "$1" ] || { printf '0.0.0'; return; }
-  v="$(grep -m1 '^# gate-version:' "$1" 2>/dev/null | sed 's/^# gate-version:[[:space:]]*//' | tr -d '[:space:]')"
+  v="$(grep -m1 "^# $MARKER:" "$1" 2>/dev/null | sed "s/^# $MARKER:[[:space:]]*//" | tr -d '[:space:]')"
   case "$v" in
     ''|*[!0-9.]*)  printf '0.0.0'; return ;;
     .*|*.|*..*)    printf '0.0.0'; return ;;
@@ -107,15 +142,15 @@ version_cmp() {
   if [ "$top" = "$1" ]; then printf 'gt'; else printf 'lt'; fi
 }
 
-INCOMING="$(gate_version "$SRC")"
-INSTALLED="$(gate_version "$DST")"
+INCOMING="$(artifact_version "$SRC")"
+INSTALLED="$(artifact_version "$DST")"
 CMP="$(version_cmp "$INCOMING" "$INSTALLED")"
 
 if [ "$CMP" = "lt" ]; then
-  log "REFUSING to downgrade the shared change-gate."
+  log "REFUSING to downgrade the shared $LABEL."
   log "  installed: $INSTALLED   at $DST"
   log "  incoming:  $INCOMING   from $SRC"
-  log "  Every AgenticApps host writes this one path, so overwriting a newer gate"
+  log "  Every AgenticApps host writes this one path, so overwriting a newer $LABEL"
   log "  would revert the fix for every agent on this machine."
   log "  If you genuinely intend to roll back, force it deliberately:"
   log "      install -m 0755 '$SRC' '$DST'"
@@ -123,7 +158,7 @@ if [ "$CMP" = "lt" ]; then
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
-  log "would install $INCOMING over ${INSTALLED} at $DST ($([ "$CMP" = eq ] && echo refresh || echo upgrade)); --dry-run, nothing written"
+  log "would install $LABEL $INCOMING over ${INSTALLED} at $DST ($([ "$CMP" = eq ] && echo refresh || echo upgrade)); --dry-run, nothing written"
   exit 0
 fi
 
@@ -186,7 +221,7 @@ if [ "$acquired" -ne 1 ]; then
 fi
 
 # Re-read under the lock: the value we compared above may be stale by now.
-INSTALLED="$(gate_version "$DST")"
+INSTALLED="$(artifact_version "$DST")"
 if [ "$(version_cmp "$INCOMING" "$INSTALLED")" = "lt" ]; then
   log "REFUSING to downgrade (another installer wrote $INSTALLED while we waited)."
   exit 0
@@ -196,5 +231,5 @@ TMP="$(mktemp "$DEST_DIR/.gate.XXXXXX")" || { log "cannot create a temp file in 
 cat "$SRC" > "$TMP" && chmod 0755 "$TMP" && mv -f "$TMP" "$DST" || {
   rm -f "$TMP"; log "failed to install $SRC -> $DST"; exit 1;
 }
-log "installed gate-version $INCOMING at $DST ($([ "$CMP" = eq ] && echo refresh || echo upgrade), was ${INSTALLED})"
+log "installed $MARKER $INCOMING at $DST ($([ "$CMP" = eq ] && echo refresh || echo upgrade), was ${INSTALLED})"
 exit 0
