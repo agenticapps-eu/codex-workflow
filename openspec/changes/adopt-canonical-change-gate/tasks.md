@@ -138,7 +138,7 @@ which is not a RED at all.
 - [x] 7.3 Live floor proof: attempt a real `git commit` of a code file under an
       unsatisfied change; capture the refusal and `git rev-parse HEAD` before and
       after.
-- [ ] 7.4 Stage-2 independent code review (`superpowers:requesting-code-review`).
+- [x] 7.4 Stage-2 independent code review (`superpowers:requesting-code-review`).
       `openspec validate` does not discharge this.
 - [x] 7.5 `/cso` — the gate is the enforcement trust boundary and this change
       closes a live bypass. Write `SECURITY.md` into the change directory.

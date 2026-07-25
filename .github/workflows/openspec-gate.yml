@@ -57,7 +57,21 @@ jobs:
         # count: the harness grows as core adds rows, and a hardcoded number
         # would read like verification while verifying less than the instrument
         # offers.
-        run: bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
+        #
+        # `env -u OPENSPEC_GATE_SELF` is REQUIRED, not tidiness. Workflow-level
+        # env is inherited by every run: step, and one harness row seeds its
+        # fixture with reviewers `claude` and `codex`. With codex ambient the
+        # gate correctly excludes that review, the row sees one reviewer and
+        # blocks, and a perfectly conformant gate scores 27/28 — turning every
+        # PR red for a reason that lives entirely in the measurement. The
+        # predictable response to permanently-red CI is to disable the workflow,
+        # which is the trained-`--no-verify` failure this whole floor exists to
+        # avoid.
+        #
+        # `OPENSPEC_GATE_SELF: ""` via step env would NOT do: it leaves the
+        # variable set-but-empty, which a `set -u` consumer without `:-` treats
+        # differently from unset. `env -u` is unambiguous.
+        run: env -u OPENSPEC_GATE_SELF bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
 
       - name: Run the change gate over every active change
         # The driver re-checks conformance itself, so that non-CI callers get

@@ -4,7 +4,15 @@
 # Usage:
 #   install-gate.sh [--dry-run] <source-gate> <destination-path>
 #
-# Exit: 0 = installed (or deliberately declined), 1 = could not arbitrate.
+# Exit: 0 = installed, or deliberately declined (refuse-downgrade is a DECISION,
+#         not a failure)
+#       1 = broken install — bad arguments, unreadable source, un-creatable
+#           destination, or a failed write. Something is actually wrong.
+#       2 = lock contention — another installer holds the lock and it is not
+#           stale. Retryable; nothing is wrong with this machine.
+#
+# The split exists so a caller can be loud about 1 and tolerant of 2. Collapsing
+# them means a genuinely failed install reads the same as two installers racing.
 #
 # ─────────────────────────────────────────────────────────────────────────────
 # WHY THIS EXISTS
@@ -131,8 +139,16 @@ lock_age() {   # seconds since the lock dir was created; huge if unknowable
   printf '%s' "$(( now - mt ))"
 }
 
+# The trap is installed BEFORE the acquisition loop, guarded on `acquired`, so an
+# interrupt in the window between mkdir succeeding and the trap being registered
+# cannot leak the lock. Registering it after `mkdir` leaves exactly that window
+# open; the next run would reclaim it via staleness, but only after the operator
+# waits out the threshold for no reason.
 acquired=0
 waited=0
+cleanup() { [ "$acquired" -eq 1 ] && rm -rf "$LOCK"; [ -n "${TMP:-}" ] && rm -f "$TMP"; return 0; }
+trap cleanup EXIT INT TERM
+
 while [ "$waited" -le "$LOCK_WAIT" ]; do
   if mkdir "$LOCK" 2>/dev/null; then acquired=1; break; fi
   if [ "$(lock_age)" -ge "$LOCK_STALE" ]; then
@@ -152,9 +168,9 @@ if [ "$acquired" -ne 1 ]; then
   log "  Another installer is mid-write. NOT proceeding unlocked and NOT skipping —"
   log "  a silently skipped install looks exactly like a successful one, and would"
   log "  leave you believing the gate was arbitrated when it was not."
-  exit 1
+  log "  Retry in a moment; exit 2 means contention, not breakage."
+  exit 2
 fi
-trap 'rm -rf "$LOCK"' EXIT INT TERM
 
 # Re-read under the lock: the value we compared above may be stale by now.
 INSTALLED="$(gate_version "$DST")"

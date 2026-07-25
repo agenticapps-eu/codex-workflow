@@ -225,8 +225,22 @@ echo "  ${GREEN}CI${RESET}     .github/workflows/openspec-gate.yml"
 "$SCAFFOLDER_ROOT/bin/install-gate.sh" \
   $([ "$DRY_RUN" -eq 1 ] && echo --dry-run) \
   "$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh" \
-  "$AA_BIN/openspec-change-gate.sh" \
-  || echo "  ${YELLOW}WARN${RESET}   gate arbitration could not complete — see the message above"
+  "$AA_BIN/openspec-change-gate.sh"
+gate_rc=$?
+case "$gate_rc" in
+  0) : ;;   # installed, or deliberately declined a downgrade — both fine
+  2) echo "  ${YELLOW}WARN${RESET}   another installer holds the gate lock; shared gate left as-is."
+     echo "           Re-run install.sh in a moment. This is contention, not breakage." ;;
+  *) # A real failure. Say so loudly: the shared gate is the copy the pre-commit
+     # and PreToolUse surfaces prefer, so leaving it un-upgraded silently means
+     # every repo on this machine keeps enforcing with whatever was there before,
+     # while the rest of the install reports success.
+     echo "  ${RED}FAIL${RESET}   the shared change-gate was NOT installed (exit $gate_rc)."
+     echo "           $AA_BIN/openspec-change-gate.sh still holds its previous contents."
+     echo "           Every repo on this machine keeps enforcing with that copy. Fix the"
+     echo "           cause above and re-run, or install deliberately:"
+     echo "             install -m 0755 '$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh' '$AA_BIN/openspec-change-gate.sh'" ;;
+esac
 
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$AA_BIN" "$AA_GIT_HOOKS"

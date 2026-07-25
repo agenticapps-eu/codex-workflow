@@ -4191,7 +4191,10 @@ test_migration_0014() {
 
   # ── Leg 1: CONFORMANCE — zero failing rows, whatever the row count is ──────
   local out rows_failed rows_total
-  out="$(bash "$harness" "$gate" 2>&1)"
+  # env -u: a developer who exports OPENSPEC_GATE_SELF=codex in their shell would
+  # otherwise get a false conformance FAIL from the same leak this change fixes
+  # everywhere else.
+  out="$(env -u OPENSPEC_GATE_SELF bash "$harness" "$gate" 2>&1)"
   rows_failed="$(printf '%s' "$out" | sed -n 's/.*TOTAL: [0-9]* passed, \([0-9]*\) failed.*/\1/p' | tail -1)"
   rows_total="$(printf '%s' "$out" | sed -n 's/.*── \([0-9]*\) passed, [0-9]* failed, [0-9]* inconclusive of \([0-9]*\) rows.*/\2/p' | tail -1)"
   if [ "${rows_failed:-x}" = "0" ]; then
@@ -4365,6 +4368,13 @@ test_migration_0014_floors() {
   grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$ci"; _m0014f_ok $? "CI driver defaults OPENSPEC_GATE_SELF to codex"
   grep -qE 'OPENSPEC_GATE_SELF: *codex' "$REPO_ROOT/.github/workflows/openspec-gate.yml"
   _m0014f_ok $? "the CI workflow sets OPENSPEC_GATE_SELF: codex in its job env"
+  # ...AND the conformance step must nullify it. Workflow-level env is inherited
+  # by every run: step, so the step that scores the gate would otherwise run with
+  # codex ambient and fail a CONFORMANT gate at 27/28 — turning every PR red and
+  # training people to disable the workflow. Asserting only that the variable is
+  # SET passes while the workflow is broken.
+  grep -qE 'env -u OPENSPEC_GATE_SELF .*change-gate-conformance' "$REPO_ROOT/.github/workflows/openspec-gate.yml"
+  _m0014f_ok $? "the CI workflow's conformance step runs the harness with OPENSPEC_GATE_SELF unset"
   grep -qE 'OPENSPEC_GATE_SELF=.*codex' "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"
   _m0014f_ok $? "the PreToolUse wrapper defaults OPENSPEC_GATE_SELF to codex"
   # CI must NOT resolve the shared path: a runner has no ~/.agenticapps/bin/,
@@ -4426,8 +4436,11 @@ test_migration_0014_floors() {
   install -m 0755 "$gate" "$tmp/bin/openspec-change-gate.sh"   # the repo-local fallback target
   printf '#!/usr/bin/env bash\n# no marker here\nexit 0\n' > "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
   chmod +x "$tmp/fakehome/.agenticapps/bin/openspec-change-gate.sh"
+  # env -u OPENSPEC_CHANGE_GATE: an exported override resolves BEFORE the shared
+  # path, so the "shared copy was rejected" warning would never emit and this
+  # assertion would measure the wrong branch.
   ( cd "$tmp" && git reset -q && git add main.go \
-      && HOME="$tmp/fakehome" OPENSPEC_BIN=true bash "$pc" ) >/dev/null 2>"$err"; rc=$?
+      && env -u OPENSPEC_CHANGE_GATE HOME="$tmp/fakehome" OPENSPEC_BIN=true bash "$pc" ) >/dev/null 2>"$err"; rc=$?
   _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: an UNMARKED shared gate is ignored — falls back to repo-local and still blocks (rc=$rc)"
   grep -qi 'marker\|unmarked\|falling back' "$err"; _m0014f_ok $? "floor: the fallback warns that the shared copy was rejected"
 
@@ -4551,7 +4564,12 @@ test_migration_0014_arbitration() {
   _m0014a_mkgate "$src" "9.9.9"
   before="$(shasum -a 256 "$dst" | awk '{print $1}')"
   OPENSPEC_GATE_LOCK_WAIT=1 OPENSPEC_GATE_LOCK_STALE=9999 bash "$ig" "$src" "$dst" >"$tmp/out" 2>&1; rc=$?
-  _m0014a_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "a held, not-yet-stale lock -> exits non-zero (rc=$rc)"
+  # Exit 2 SPECIFICALLY, not merely non-zero: contention and breakage must be
+  # distinguishable, or install.sh cannot be loud about a genuinely failed
+  # install while staying tolerant of two installers racing.
+  _m0014a_ok "$([ "$rc" -eq 2 ] && echo 0 || echo 1)" "a held, not-yet-stale lock -> exits 2 (contention, not breakage) (rc=$rc)"
+  bash "$ig" >/dev/null 2>&1; rc=$?
+  _m0014a_ok "$([ "$rc" -eq 1 ] && echo 0 || echo 1)" "bad arguments -> exits 1 (breakage, distinct from contention) (rc=$rc)"
   _m0014a_ok "$([ "$(shasum -a 256 "$dst" | awk '{print $1}')" = "$before" ] && echo 0 || echo 1)" \
     "...and writes nothing rather than proceeding unlocked"
 
