@@ -73,6 +73,21 @@ jobs:
         # differently from unset. `env -u` is unambiguous.
         run: env -u OPENSPEC_GATE_SELF bash tools/change-gate-conformance.sh bin/openspec-change-gate.sh
 
+      - name: Prove the review producer's wrapper is conformant
+        # The gate CONSUMES review evidence; bin/reviewer-cli.sh PRODUCES it.
+        # This step is before the gate for the same reason the gate's own
+        # conformance step is: a drifted CONSUMER fails loudly, while a drifted
+        # PRODUCER reports clean and quietly supplies less of the evidence the
+        # consumer then accepts. Core#41 is what that looks like — a wrapper
+        # that lost its `opencode` arm, a review recorded as "reviewer
+        # unavailable", and a change that proceeded with one fewer opinion.
+        #
+        # No `env -u OPENSPEC_GATE_SELF` here, unlike the gate's step: the
+        # wrapper never reads that variable, so unsetting it would be cargo cult.
+        # The harness stubs every vendor CLI on PATH in a mktemp dir — no real
+        # reviewer is invoked and nothing leaves the runner.
+        run: bash tools/reviewer-cli-conformance.sh bin/reviewer-cli.sh
+
       - name: Run the change gate over every active change
         # The driver re-checks conformance itself, so that non-CI callers get
         # the same guarantee. The duplication is deliberate and costs about a

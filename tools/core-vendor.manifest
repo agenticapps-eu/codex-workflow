@@ -1,6 +1,7 @@
 # core-vendor.manifest — provenance for files vendored from
 # agenticapps-eu/agenticapps-workflow-core. Machine-read by
-# test_migration_0014. Do NOT hand-edit: regenerate by re-vendoring.
+# test_migration_0014 and test_migration_0015. Do NOT hand-edit: regenerate by
+# re-vendoring.
 #
 # The vendored files are byte-identical to core and carry NO local header —
 # a header would itself break the byte-identity it claimed to record.
@@ -10,7 +11,20 @@
 # can advance BETWEEN two commands. Resolve it ONCE and vendor every file
 # from that one revision — a per-file rev-parse is how the gate and the
 # harness ended up from different commits on 2026-07-25.
+#
+# ONE commit covers EVERY file listed, and every file this repo vendors from
+# core is listed. Consistency among the entries present is not sufficient: a
+# manifest naming two of four files is internally consistent while recording
+# nothing about the two it omits.
+#
+# Advancing core_commit therefore means RE-VERIFYING the files already listed
+# at the new revision, not just appending the new ones. 750da2e -> 60cd83f was
+# verified this way: core#42 touched neither gate file, so both sha256s below
+# are unchanged and the single-commit claim stays true rather than becoming a
+# convenient fiction about files nobody re-checked.
 core_repo=agenticapps-eu/agenticapps-workflow-core
-core_commit=750da2e87a9a33b25addedea7b0d76a4346a81b9
+core_commit=60cd83f8d236b4ef8646976f547e17edafb53eeb
 file=bin/openspec-change-gate.sh sha256=11056079fc6b3aca67d2e28603a8a21b7cb6ae353a63a569833ca34798133208
 file=tools/change-gate-conformance.sh sha256=b3c2f6b284c5f8423ce583005358403734c9d133a92985671914ff17cdb4eae7
+file=bin/reviewer-cli.sh sha256=32718bb98dbb343946f13747cdb208c6bd112beeeeb84b01e0677af5354b7ec6
+file=tools/reviewer-cli-conformance.sh sha256=4e45150a2cc2c12c5d0a08e099e4a399858bf99ee5f4bf1434d62ca9279f6656

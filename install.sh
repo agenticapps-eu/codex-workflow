@@ -242,9 +242,35 @@ case "$gate_rc" in
      echo "             install -m 0755 '$SCAFFOLDER_ROOT/bin/openspec-change-gate.sh' '$AA_BIN/openspec-change-gate.sh'" ;;
 esac
 
+# The review PRODUCER's wrapper is the SAME shared-path hazard as the gate, and
+# it is not hypothetical. On 2026-07-25 a sibling host's installer delivered the
+# correctly-arbitrated 1.2.2 gate and, in the SAME run, blind-installed its
+# 3-arm reviewer-cli over this repo's 4-arm one. The `opencode` arm vanished and
+# the next review that asked for it got `unknown vendor` mid-run — recorded as
+# "reviewer unavailable" and waved through with one fewer opinion. The gate
+# survived that same run only because it carries a marker every host compares.
+# Same rule, same script, on `# reviewer-cli-version:` (core#41 / core#42).
+"$SCAFFOLDER_ROOT/bin/install-gate.sh" \
+  $([ "$DRY_RUN" -eq 1 ] && echo --dry-run) \
+  --marker reviewer-cli-version \
+  "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh" \
+  "$AA_BIN/reviewer-cli.sh"
+cli_rc=$?
+case "$cli_rc" in
+  0) : ;;   # installed, or deliberately declined a downgrade — both fine
+  2) echo "  ${YELLOW}WARN${RESET}   another installer holds the reviewer-cli lock; shared wrapper left as-is."
+     echo "           Re-run install.sh in a moment. This is contention, not breakage." ;;
+  *) # Not fatal to the gate, but say it plainly: reviews are the evidence the
+     # gate consumes, and a degraded producer reports clean while supplying less
+     # of it. A missing vendor arm surfaces mid-review as `unknown vendor`.
+     echo "  ${RED}FAIL${RESET}   the shared reviewer-cli was NOT installed (exit $cli_rc)."
+     echo "           $AA_BIN/reviewer-cli.sh still holds its previous contents. If that copy"
+     echo "           predates core#42 it may be missing a vendor arm, and the review that"
+     echo "           needs it will record 'reviewer unavailable' rather than fail loudly." ;;
+esac
+
 if [ "$DRY_RUN" -eq 0 ]; then
   mkdir -p "$AA_BIN" "$AA_GIT_HOOKS"
-  install -m 0755 "$SCAFFOLDER_ROOT/bin/reviewer-cli.sh"         "$AA_BIN/reviewer-cli.sh"
   # Stage the pre-commit at a stable global path so the per-project setup skill
   # can install it into any repo without needing this scaffolder checked out.
   install -m 0755 "$SCAFFOLDER_ROOT/bin/git-hooks/pre-commit"    "$AA_GIT_HOOKS/pre-commit"
