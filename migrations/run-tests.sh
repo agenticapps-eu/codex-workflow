@@ -3946,8 +3946,22 @@ test_migration_0013() {
     printf '' | ( cd "$tmp" && bash "$gate" ) >/dev/null 2>&1; rc=$?
     _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: empty stdin fails OPEN on parse error -> ALLOW (exit 0, got $rc)"
 
+    # The escape hatch, under the CANONICAL gate's documented deviation from
+    # §18's literal truth table: GSD_SKIP_REVIEWS is applied AFTER the validate
+    # check, so it bypasses the REVIEW clause but not a red spec delta. §18's
+    # row reads unconditionally; core narrowed it deliberately and pinned the
+    # narrowing with a harness row, because the hatch exists for an emergency
+    # review bypass, not for shipping a change whose delta does not parse.
+    #
+    # Migration 0013 asserted only the unconditional reading, with no
+    # OPENSPEC_BIN stub — so `validate` ran for real and failed, and the
+    # assertion passed only because the pre-canonical gate checked the hatch
+    # first. Both halves are now pinned, so neither can silently invert.
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true GSD_SKIP_REVIEWS=1 bash "$gate" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: GSD_SKIP_REVIEWS=1 over a GREEN validate is a documented override -> ALLOW (exit 0, got $rc)"
+
     printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && GSD_SKIP_REVIEWS=1 bash "$gate" ) >/dev/null 2>&1; rc=$?
-    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: GSD_SKIP_REVIEWS=1 is a documented override -> ALLOW (exit 0, got $rc)"
+    _m0013_ok "$([ $rc -eq 2 ] && echo 0 || echo 1)" "§18: GSD_SKIP_REVIEWS=1 does NOT override a RED validate -> BLOCK (exit 2, got $rc)"
     rm -rf "$tmp"
   fi
 
