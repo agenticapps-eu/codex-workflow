@@ -4115,6 +4115,148 @@ test_migration_0013() {
   fi
 }
 
+# ─────────────────────────────────────────────────────────────────────────────
+# test_gate_known_gaps (GAP-01) — pin the shared gate's KNOWN DEFECTS
+#
+# This repo ships bin/openspec-change-gate.sh byte-identical to the copy
+# opencode merged, because §18's design is ONE shared enforcement script. That
+# copy has four verified defects (docs/GATE-KNOWN-GAPS.md). They are not patched
+# here: patching locally would fork the shared script a fifth way, and
+# agenticapps-workflow-core owns the canonical fix.
+#
+# So this function asserts the defects are STILL PRESENT, exactly as documented,
+# and reports each as KNOWN-GAP rather than PASS. That is deliberate:
+#
+#   - A silent defect is the thing that bites. A pinned, reproduced, labelled
+#     one is tracked work.
+#   - The sha256 pin means the moment anyone re-syncs the gate, this FAILS and
+#     demands every reproduction be re-verified. A gap must never be assumed
+#     fixed because the script moved.
+#
+# When the canonical lands: re-run every case, flip each to a hard assertion in
+# test_migration_0013, and delete docs/GATE-KNOWN-GAPS.md.
+# ─────────────────────────────────────────────────────────────────────────────
+_gap() {  # _gap <expected-current-exit> <actual> <label>
+  if [ "$2" = "$1" ]; then
+    echo "  ${YELLOW}KNOWN-GAP${RESET} $3 (still exit $2, as recorded)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} $3 — behaviour CHANGED (expected exit $1, got $2)."
+    echo "         Re-verify docs/GATE-KNOWN-GAPS.md before trusting this."
+    FAIL=$((FAIL+1))
+  fi
+}
+
+test_gate_known_gaps() {
+  echo ""
+  echo "${YELLOW}=== Shared change-gate — pinned known gaps (docs/GATE-KNOWN-GAPS.md) ===${RESET}"
+
+  local gate="$REPO_ROOT/bin/openspec-change-gate.sh"
+  local doc="$REPO_ROOT/docs/GATE-KNOWN-GAPS.md"
+  local pinned="a32678b32c40fb0f2ba1740b9663c178687bf99ef10821c88a77c52c1bbdfdb0"
+
+  if [ ! -f "$doc" ]; then
+    echo "  ${RED}FAIL${RESET} docs/GATE-KNOWN-GAPS.md missing — the gaps are undocumented but still shipped"
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # 1. The fingerprint pin. A changed gate means someone re-synced (or patched
+  #    locally); either way every gap below must be re-verified by a human.
+  local actual; actual="$(shasum -a 256 "$gate" 2>/dev/null | cut -d' ' -f1)"
+  if [ "$actual" = "$pinned" ]; then
+    echo "  ${GREEN}PASS${RESET} gate fingerprint matches the pin in docs/GATE-KNOWN-GAPS.md"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} gate fingerprint CHANGED — expected $pinned, got ${actual:-<none>}."
+    echo "         The gate was re-synced or patched. Re-run every reproduction in"
+    echo "         docs/GATE-KNOWN-GAPS.md, flip the fixed ones to hard assertions in"
+    echo "         test_migration_0013, and update or delete that file. Do NOT just"
+    echo "         re-pin the hash."
+    FAIL=$((FAIL+1)); return
+  fi
+
+  # 2. Also pin that the doc still names all four, so a gap cannot be quietly
+  #    dropped from the record while it is still live in the script.
+  local n; n="$(grep -c '^### GAP-[1-4] ' "$doc" 2>/dev/null || echo 0)"
+  if [ "$n" = "4" ]; then
+    echo "  ${GREEN}PASS${RESET} all four gaps are still recorded in docs/GATE-KNOWN-GAPS.md"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} docs/GATE-KNOWN-GAPS.md records $n/4 gaps — one was dropped from the record"
+    FAIL=$((FAIL+1))
+  fi
+
+  local tmp; tmp="$(mktemp -d)"
+  ( cd "$tmp" && git init -q . )
+  mkdir -p "$tmp/openspec/changes/active-change" "$tmp/sub/dir" "$tmp/src/openspec"
+  local rc
+
+  # ── GAP-1: cwd-relative resolution -> fails open from a subdirectory ────────
+  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
+    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 2 ]; then
+    echo "  ${GREEN}PASS${RESET} control: from the repo root the gate still BLOCKS (exit 2)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} control: the gate no longer blocks from the repo root (exit $rc) — the gate is not working at all"
+    FAIL=$((FAIL+1))
+  fi
+
+  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
+    | ( cd "$tmp/sub/dir" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  _gap 0 "$rc" "GAP-1: same repo, same unreviewed change, run from sub/dir -> ALLOWS"
+
+  # ── GAP-2: the openspec/** exemption matches any component named openspec ──
+  printf '{"tool":"edit","tool_input":{"file_path":"src/openspec/app.ts"}}' \
+    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  _gap 0 "$rc" "GAP-2: src/openspec/app.ts is exempt (live bypass — ordinary source, not a change artifact)"
+
+  printf '{"tool":"edit","tool_input":{"file_path":"/tmp/openspec/evil.ts"}}' \
+    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  _gap 0 "$rc" "GAP-2: an absolute path OUTSIDE the repo under openspec/ is exempt"
+
+  # ── GAP-3: reviewer counting counts headings, not independent reviewers ────
+  printf '# r\n\n## Reviewer: gemini\nx\n\n## Reviewer: gemini\ny\n' \
+    > "$tmp/openspec/changes/active-change/REVIEWS.md"
+  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
+    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  _gap 0 "$rc" "GAP-3: two headings from ONE vendor satisfy the >=2 INDEPENDENT reviewers rule"
+
+  printf '# r\n\nExample:\n\n```markdown\n## Reviewer: gemini\n## Reviewer: claude\n```\n\nNo reviews were run.\n' \
+    > "$tmp/openspec/changes/active-change/REVIEWS.md"
+  printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
+    | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  _gap 0 "$rc" "GAP-3: headings inside a FENCED example block count as real reviews"
+  rm -f "$tmp/openspec/changes/active-change/REVIEWS.md"
+
+  # ── GAP-4: unparseable stdin reaches policy instead of failing open ────────
+  printf '' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  if [ "$rc" -eq 0 ]; then
+    echo "  ${GREEN}PASS${RESET} control: empty stdin fails OPEN (exit 0) — §18 parse-error rule holds here"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} control: empty stdin no longer fails open (exit $rc)"
+    FAIL=$((FAIL+1))
+  fi
+
+  printf 'not json at all' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+  _gap 2 "$rc" "GAP-4: whitespace-containing non-JSON reaches POLICY and blocks (§18 says fail open on parse error)"
+
+  rm -rf "$tmp"
+
+  # 3. The wrapper cannot paper over GAP-1 either — it does not cd to the repo
+  #    root before invoking the gate. Recorded so the fix lands in ONE place
+  #    (the canonical gate) rather than being scattered per host.
+  if ! grep -q 'cd "\$(git rev-parse --show-toplevel' \
+       "$REPO_ROOT/skills/agentic-apps-workflow/scripts/hook-wrapper-openspec-gate.sh"; then
+    echo "  ${YELLOW}KNOWN-GAP${RESET} GAP-1: the codex wrapper does not cd to the repo root either (fix belongs in the canonical gate, not here)"
+    PASS=$((PASS+1))
+  else
+    echo "  ${RED}FAIL${RESET} the wrapper now cds to the repo root — GAP-1 was patched per-host; confirm that is intended and update docs/GATE-KNOWN-GAPS.md"
+    FAIL=$((FAIL+1))
+  fi
+}
+
 test_drift() {
   echo ""
   echo "${YELLOW}=== Drift — SKILL.md version == latest migration to_version ===${RESET}"
@@ -4235,6 +4377,7 @@ test_repo_layout() {
     docs/WORKFLOW.md \
     docs/recipes/0001-planning-to-openspec.md \
     docs/decisions/0011-openspec-superpowers-adoption.md \
+    docs/GATE-KNOWN-GAPS.md \
     install.sh ; do
     if [ -f "$f" ]; then
       echo "  ${GREEN}PASS${RESET} $f exists"
@@ -6573,6 +6716,10 @@ fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "0013" ]; then
   test_migration_0013
+fi
+
+if [ -z "$FILTER" ] || [ "$FILTER" = "gate-gaps" ]; then
+  test_gate_known_gaps
 fi
 
 if [ -z "$FILTER" ] || [ "$FILTER" = "drift" ]; then
