@@ -23,8 +23,8 @@
 # are unchanged and the single-commit claim stays true rather than becoming a
 # convenient fiction about files nobody re-checked.
 core_repo=agenticapps-eu/agenticapps-workflow-core
-core_commit=60cd83f8d236b4ef8646976f547e17edafb53eeb
-file=bin/openspec-change-gate.sh sha256=11056079fc6b3aca67d2e28603a8a21b7cb6ae353a63a569833ca34798133208
-file=tools/change-gate-conformance.sh sha256=b3c2f6b284c5f8423ce583005358403734c9d133a92985671914ff17cdb4eae7
-file=bin/reviewer-cli.sh sha256=32718bb98dbb343946f13747cdb208c6bd112beeeeb84b01e0677af5354b7ec6
-file=tools/reviewer-cli-conformance.sh sha256=4e45150a2cc2c12c5d0a08e099e4a399858bf99ee5f4bf1434d62ca9279f6656
+core_commit=8fef2186722be5545d144834a600c8e543dc27d0
+file=bin/openspec-change-gate.sh sha256=518ac3c2899675d8a4a4db13bef2b58bd45dff78cdb52d0d22f6b14ddc09cadc
+file=tools/change-gate-conformance.sh sha256=99dc6548a41e6b8d8a9ed031c8bd8d7997f9af0dcbb2c3ab95d4e6afc9c35a09
+file=bin/reviewer-cli.sh sha256=6d9adc77dea3b878417a69da54f222589dc40bc6b50c0d60cd8873a9e2bd8b88
+file=tools/reviewer-cli-conformance.sh sha256=7f7dedbefa9a537d7662775204f839ea3c68308cd36adbf380d82904e0cd53ce
