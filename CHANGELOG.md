@@ -9,6 +9,32 @@ in every shipped artifact's frontmatter.
 
 ## [Unreleased]
 
+### Removed
+
+- **Knowledge capture (spec §15) — every live surface on this host.** Core
+  removed §15 at spec 1.2.0 and superseded ADR-0017; this host follows.
+  Gone: the `## Knowledge Capture — Ritual Tail` section in
+  `skills/agentic-apps-workflow/SKILL.md` (72 lines) and in the
+  `agents-md-additions.md` installer template (61 lines), the
+  `knowledge_capture` block in `.planning/config.json`, the
+  `knowledge_capture_trigger` key in `.planning/config.codex.json` and
+  `config-lifecycle.json`, and the `config-knowledge-capture.json` /
+  `obsidian-learnings-note.md` templates. AGENTS.md, the setup and update
+  skills, `docs/ENFORCEMENT-PLAN.md` and the standards checklist no longer
+  reference it; ADR-0008 carries a superseded banner.
+
+  **No migration.** A migration would install machinery to delete machinery;
+  installed projects are edited directly.
+
+- **Migrations `0007` and `0010`'s test bodies**, retired *with* the feature.
+  Both replayed their Apply blocks against the live shipped templates, so with
+  those templates deleted they could not be kept green. Each is now a
+  retirement check: the doc is retained as history (§08) and no
+  `knowledge_capture` payload may reappear under `skills/`. The migration docs
+  themselves — and every other reference inside `migrations/` — are
+  **untouched**; they are historical executables replayed for repos on old
+  versions. Suite: PASS 562, FAIL 0.
+
 ### Changed
 
 - **Re-vendored the §18 change-gate at core `750da2e` — `gate-version` 1.2.0 →

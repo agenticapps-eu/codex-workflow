@@ -108,9 +108,9 @@ holds in-flight deltas; `changes/archive/` is history. Full explainer:
 
 On any code-touching task the `agentic-apps-workflow` trigger skill
 activates, emits the canonical commitment ritual before any tool call,
-and carries the gate bindings, task-size routing, the stage-2
-change-review procedure, and the knowledge-capture ritual — read them
-there, not here. Project-specific bindings live in
+and carries the gate bindings, task-size routing, and the stage-2
+change-review procedure — read them there, not here. Project-specific
+bindings live in
 `.planning/config.codex.json`; gates that do not fire on this project are
 documented in `docs/ENFORCEMENT-PLAN.md`. Do not bypass a gate —
 accept-via-ADR is the override path.

@@ -83,17 +83,19 @@ did. See [`WORKFLOW.md`](WORKFLOW.md) for the full mapping and
      v0.9.0: the always-loaded `AGENTS.md` carries the §11 canonical
      block plus two short pointers (the trigger skill, and the
      session-handoff protocol), while the §02 gate table, task-size
-     routing, the session-handoff procedure, the §15 ritual tail and the
-     plan-review procedure live in the lazily-loaded trigger skill.
+     routing, the session-handoff procedure and the plan-review
+     procedure live in the lazily-loaded trigger skill.
      Gate *enforcement* is unaffected — the `PreToolUse` plan-review
      hook and `.planning/config.codex.json` are untouched; only prose
      moved. Migration `0012`; core ADR-0020.
-   - **§15 (knowledge capture)** — wired at all three ritual triggers
-     (handoff, plan completion, phase completion) in the trigger skill,
-     routed exclusively through the `knowledge_capture` block in
-     `.planning/config.json` with no hardcoded vault path, and skipping
-     silently when the block is absent, disabled, or the vault folder
-     does not exist. Migrations `0007` / `0010`.
+   - **§15 (knowledge capture)** — **RETIRED 2026-07-28.** Core removed
+     §15 at spec 1.2.0 and superseded ADR-0017, so there is no longer a
+     MUST to satisfy. This host's live surfaces were deleted with it (the
+     ritual tail in the trigger skill and the `AGENTS.md` additions
+     template, the `knowledge_capture` config block and its two templates,
+     and the `knowledge_capture_trigger` lifecycle key). Migrations `0007`
+     and `0010` are retained as history and are untouched; host ADR-0008
+     carries a superseded banner.
    - **§08 (migration format), as amended at v0.9.0** — satisfied by
      **replay**: setup walks the `0000`→latest chain step by step
      (`skills/setup-codex-agenticapps-workflow/SKILL.md`, Stage C), it

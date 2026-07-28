@@ -901,186 +901,49 @@ IGN
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Migration 0007 — Knowledge capture (spec §15) into the Obsidian vault.
-# Testable non-interactively: the config merge (resolve <repo-name>, preserve a
-# pre-existing key, codex-only create) + the AGENTS.md section insert/idempotency
-# + the version-bump round-trip. Uses the real shipped templates as source.
+# Migration 0007 — Knowledge capture (spec §15) — RETIRED 2026-07-28.
+#
+# Core removed §15 at spec 1.2.0 (core ADR-0025; host ADR-0008 superseded), so
+# the feature this migration installs no longer exists. The old body replayed
+# 0007's config merge and AGENTS.md insert against the LIVE shipped templates —
+# config-knowledge-capture.json, obsidian-learnings-note.md and the ritual-tail
+# section of agents-md-additions.md — all of which are now deleted, so it could
+# not be kept green and was retired WITH the feature.
+#
+# The migration doc is retained as history (§08: history is superseded, never
+# deleted). It can only fire for a repo below 0.4.0; every live repo is well
+# past that.
 # ─────────────────────────────────────────────────────────────────────────────
 
 test_migration_0007() {
   echo ""
-  echo "${YELLOW}=== Migration 0007 — Knowledge capture (spec §15) ===${RESET}"
+  echo "${YELLOW}=== Migration 0007 — Knowledge capture (spec §15) (RETIRED) ===${RESET}"
 
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "  ${YELLOW}SKIP${RESET} jq not available — config-merge test not run"
-    SKIP=$((SKIP+1)); return
-  fi
-
-  local kc_tpl agents_tpl
-  kc_tpl="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/config-knowledge-capture.json"
-  agents_tpl="$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md"
-
-  # Templates must ship (single source of truth for both fresh + migrated).
-  if [ -f "$kc_tpl" ] && [ -f "$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/obsidian-learnings-note.md" ]; then
-    echo "  ${GREEN}PASS${RESET} knowledge-capture templates ship (config block + note skeleton)"
+  if [ -f "$REPO_ROOT/migrations/0007-knowledge-capture.md" ]; then
+    echo "  ${GREEN}PASS${RESET} migration doc retained as history"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} knowledge-capture template(s) missing"
+    echo "  ${RED}FAIL${RESET} migration 0007 doc missing — history must be superseded, not deleted (§08)"
     FAIL=$((FAIL+1))
   fi
 
-  # The shipped block is host-neutral (no host-specific keys) and enabled.
-  if jq -e '.knowledge_capture | has("enabled") and has("note") and (keys | length == 2)' "$kc_tpl" >/dev/null 2>&1; then
-    echo "  ${GREEN}PASS${RESET} config block is host-neutral (only enabled + note)"
+  local stray
+  stray="$(grep -rl 'knowledge_capture' "$REPO_ROOT/skills" 2>/dev/null | head -5)"
+  if [ -z "$stray" ]; then
+    echo "  ${GREEN}PASS${RESET} no knowledge_capture payload ships from skills/"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} config block carries unexpected/host-specific keys"
+    echo "  ${RED}FAIL${RESET} knowledge_capture payload reappeared (retired — core spec 1.2.0):"
+    printf '%s\n' "$stray" | sed 's/^/      /'
     FAIL=$((FAIL+1))
   fi
 
-  local tmp; tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
-  mkdir -p "$tmp/.planning"
-
-  local REPO_NAME="codex-workflow"
-  local KC
-  KC="$(jq -c --arg name "$REPO_NAME" \
-          '.knowledge_capture.note |= gsub("<repo-name>"; $name) | .knowledge_capture' \
-          "$kc_tpl")"
-
-  # --- Merge path: pre-existing config.json with a claude-written key survives.
-  cat > "$tmp/.planning/config.json" <<'JSON'
-{ "host": "claude", "hooks": { "post_phase": { "code_review": { "stage": 2 } } } }
-JSON
-
-  # Step 1 idempotency (pre): no knowledge_capture yet → needs apply.
-  assert_check "idempotency: config.json has no knowledge_capture → needs seed" \
-    "test -f .planning/config.json && jq -e '.knowledge_capture' .planning/config.json >/dev/null" \
-    "$tmp" "not-applied"
-
-  ( cd "$tmp" && jq --argjson kc "$KC" '. + {knowledge_capture: $kc}' \
-      .planning/config.json > .planning/config.json.tmp \
-      && mv .planning/config.json.tmp .planning/config.json )
-
-  assert_check "after merge: knowledge_capture present" \
-    "jq -e '.knowledge_capture.enabled == true' .planning/config.json >/dev/null" \
-    "$tmp" "applied"
-
-  # <repo-name> placeholder resolved to the real repo directory name.
-  if ( cd "$tmp" && jq -e '.knowledge_capture.note | endswith("/codex-workflow.md")' .planning/config.json >/dev/null ) \
-     && ! grep -qF '<repo-name>' "$tmp/.planning/config.json"; then
-    echo "  ${GREEN}PASS${RESET} <repo-name> resolved in note path; no placeholder left"
+  if [ -f "$REPO_ROOT/docs/decisions/0008-knowledge-capture.md" ] \
+     && grep -q '^> \*\*Superseded' "$REPO_ROOT/docs/decisions/0008-knowledge-capture.md"; then
+    echo "  ${GREEN}PASS${RESET} ADR-0008 retained and marked superseded"
     PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} <repo-name> not resolved (or placeholder remains)"
-    FAIL=$((FAIL+1))
-  fi
-
-  # Pre-existing claude key preserved by the merge (host-neutral coexistence).
-  if ( cd "$tmp" && jq -e '.hooks.post_phase.code_review.stage == 2 and .host == "claude"' .planning/config.json >/dev/null ); then
-    echo "  ${GREEN}PASS${RESET} pre-existing (claude) config keys preserved by merge"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} merge clobbered pre-existing config keys"
-    FAIL=$((FAIL+1))
-  fi
-
-  # --- Create path: codex-only repo (no config.json) gets a block-only file.
-  rm -f "$tmp/.planning/config.json"
-  ( cd "$tmp" && jq -n --argjson kc "$KC" '{knowledge_capture: $kc}' > .planning/config.json )
-  if ( cd "$tmp" && jq -e '(keys == ["knowledge_capture"])' .planning/config.json >/dev/null ); then
-    echo "  ${GREEN}PASS${RESET} codex-only create yields a block-only shared config.json"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} codex-only create produced unexpected keys"
-    FAIL=$((FAIL+1))
-  fi
-
-  # --- AGENTS.md section insert from the real template.
-  cat > "$tmp/AGENTS.md" <<'MD'
-# AGENTS.md — fixture
-
-<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
-
-## Session handoff
-
-Existing content.
-
-<!-- END: agentic-apps-workflow sections -->
-MD
-
-  # Step 2 idempotency (pre): section absent → needs insert.
-  assert_check "idempotency: AGENTS.md lacks Knowledge Capture section → needs insert" \
-    "grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' AGENTS.md" \
-    "$tmp" "not-applied"
-
-  local secfile; secfile="$tmp/section.txt"
-  awk '
-    /^## Knowledge Capture — Ritual Tail \(spec §15\)/ {f=1}
-    /^<!-- END: agentic-apps-workflow sections -->/    {f=0}
-    f
-  ' "$agents_tpl" > "$secfile"
-
-  ( cd "$tmp" && awk -v secfile="$secfile" '
-      /^<!-- END: agentic-apps-workflow sections -->/ && !ins {
-        while ((getline line < secfile) > 0) print line
-        ins=1
-      }
-      { print }
-    ' AGENTS.md > AGENTS.md.0007.tmp && mv AGENTS.md.0007.tmp AGENTS.md )
-
-  assert_check "after insert: Knowledge Capture section present in AGENTS.md" \
-    "grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' AGENTS.md" \
-    "$tmp" "applied"
-
-  # Section landed INSIDE the marker block (before the END marker).
-  if awk '/^## Knowledge Capture — Ritual Tail/{k=NR} /^<!-- END: agentic-apps-workflow sections -->/{e=NR} END{exit !(k>0 && e>0 && k<e)}' "$tmp/AGENTS.md"; then
-    echo "  ${GREEN}PASS${RESET} section sits inside the agentic-apps-workflow marker block"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} section landed outside the marker block"
-    FAIL=$((FAIL+1))
-  fi
-
-  # Config-routed, not hardcoded: the section names the shared .planning/config.json
-  # and explicitly steers away from the host-specific config.codex.json.
-  if grep -qF '.planning/config.json' "$tmp/AGENTS.md" \
-     && grep -qF 'config.codex.json' "$tmp/AGENTS.md"; then
-    echo "  ${GREEN}PASS${RESET} section routes destination via shared .planning/config.json"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} section does not disambiguate the config source"
-    FAIL=$((FAIL+1))
-  fi
-
-  # Host tag is codex in the Log-heading shape.
-  if grep -qF '(codex)' "$tmp/AGENTS.md"; then
-    echo "  ${GREEN}PASS${RESET} Log-entry heading carries the (codex) host tag"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} (codex) host tag missing from the section"
-    FAIL=$((FAIL+1))
-  fi
-
-  # --- Version-bump round-trip on a synthetic SKILL.md copy.
-  printf 'version: 0.4.0\nimplements_spec: 0.4.0\n' > "$tmp/SKILL.md"
-  ( cd "$tmp" && sed -i.0007.bak -E 's/^version: 0\.4\.0$/version: 0.5.0/' SKILL.md && rm -f SKILL.md.0007.bak )
-  assert_check "after Step 3: version bumped to 0.5.0" \
-    "grep -q '^version: 0.5.0\$' SKILL.md" "$tmp" "applied"
-  if grep -q '^implements_spec: 0.4.0$' "$tmp/SKILL.md"; then
-    echo "  ${GREEN}PASS${RESET} implements_spec untouched by version bump"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} implements_spec was altered"
-    FAIL=$((FAIL+1))
-  fi
-
-  # The ADR ships.
-  if [ -f "$REPO_ROOT/docs/decisions/0008-knowledge-capture.md" ]; then
-    echo "  ${GREEN}PASS${RESET} ADR-0008 (knowledge capture) ships"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} ADR-0008 missing"
+    echo "  ${RED}FAIL${RESET} ADR-0008 missing or not marked superseded"
     FAIL=$((FAIL+1))
   fi
 }
@@ -3656,16 +3519,16 @@ test_migration_0012() {
   fi
 
   # 7. The installer template is left ALONE. This host installs by replay, so the
-  # template is an input to the chain, not the end state — and migrations
-  # 0007/0008/0010 read their sections out of it. Slimming it breaks their replay
-  # (0010 would insert nothing, regressing D-06). A fresh install applies the
-  # heavy template early and this migration slims the result at the end of the
-  # same replay, so it lands slim either way.
-  if grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md" \
-     && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md"; then
-    echo "  ${GREEN}PASS${RESET} installer template left intact as the chain's input (0007/0008/0010 read it)"; PASS=$((PASS+1))
+  # template is an input to the chain, not the end state — and migration 0008
+  # reads its section out of it. Slimming it breaks that replay. A fresh install
+  # applies the heavy template early and this migration slims the result at the
+  # end of the same replay, so it lands slim either way.
+  # (0007/0010's ritual-tail section left the template with spec §15 at core
+  # 1.2.0; both migrations are retired — see their test bodies.)
+  if grep -q '^## Workflow Enforcement Hooks (MANDATORY)$' "$REPO_ROOT/skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md"; then
+    echo "  ${GREEN}PASS${RESET} installer template left intact as the chain's input (0008 reads it)"; PASS=$((PASS+1))
   else
-    echo "  ${RED}FAIL${RESET} installer template was slimmed — breaks 0007/0008/0010 replay (D-06)"; FAIL=$((FAIL+1))
+    echo "  ${RED}FAIL${RESET} installer template was slimmed — breaks 0008 replay"; FAIL=$((FAIL+1))
   fi
 
   # 8. Idempotent.
@@ -3696,11 +3559,12 @@ test_migration_0012() {
   # "Pre-execution Gate — Plan Review" NAME under 1.0.0. Matching either heading
   # keeps the real assertion (the procedure is in the skill) and drops the part
   # that was only ever a snapshot of what it was called that week.
+  # The §15 ritual tail was one of the relocated procedures until core spec
+  # 1.2.0 retired §15; it is no longer asserted (there is nothing to relocate).
   if grep -q '^## Session handoff$' "$skill" \
-     && grep -q '^## Knowledge Capture — Ritual Tail (spec §15)$' "$skill" \
      && grep -qE '^## (Pre-execution Gate — Plan Review \(spec §02\)|Stage 2 — Validate \+ multi-AI change review \(spec §17 / §18\))$' "$skill" \
      && grep -q '^## Instruction surface — eager vs lazy (spec §12)$' "$skill"; then
-    echo "  ${GREEN}PASS${RESET} handoff, §15 tail, change-review and §12 rationale in trigger skill"; PASS=$((PASS+1))
+    echo "  ${GREEN}PASS${RESET} handoff, change-review and §12 rationale in trigger skill"; PASS=$((PASS+1))
   else
     echo "  ${RED}FAIL${RESET} a relocated procedure is missing from the trigger skill"; FAIL=$((FAIL+1))
   fi
@@ -5096,8 +4960,6 @@ test_repo_layout() {
     skills/setup-codex-agenticapps-workflow/templates/workflow-config.md \
     skills/setup-codex-agenticapps-workflow/templates/agents-md-additions.md \
     skills/setup-codex-agenticapps-workflow/templates/config-hooks.json \
-    skills/setup-codex-agenticapps-workflow/templates/config-knowledge-capture.json \
-    skills/setup-codex-agenticapps-workflow/templates/obsidian-learnings-note.md \
     skills/setup-codex-agenticapps-workflow/templates/adr-db-security-acceptance.md \
     skills/setup-codex-agenticapps-workflow/templates/global-agents-additions.md \
     migrations/README.md \
@@ -6549,269 +6411,29 @@ test_validate_0009_anchor_determinism() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Migration 0010 — Heal 0007's knowledge-capture chain break (v0.4.0 -> 0.5.0)
+# Migration 0010 — Heal 0007's knowledge-capture chain break — RETIRED 2026-07-28.
 #
-# MIGR-10. 0007's pre-flight greps a scaffolder-relative path
-# (`skills/agentic-apps-workflow/SKILL.md`) no real target project has, so it
-# hard-aborts (exit 3) before writing anything — 0008/0009's own floor checks
-# then never reach a version the fleet ever recorded. 0010 re-delivers 0007's
-# Steps 1/2/4 payload (config.json seed, AGENTS.md ritual-tail, version
-# record — renumbered here to Steps 1/2/3, 0007's Step 3 scaffolder bump
-# dropped per D-03/MIGR-09) behind a corrected pre-flight that reads
-# `.codex/workflow-version.txt` exclusively, verbatim-reusing 0008's proven
-# floor-check pattern (D-01).
+# 0010 existed only to re-deliver 0007's payload behind a corrected pre-flight.
+# Core removed §15 at spec 1.2.0 (core ADR-0025; host ADR-0008 superseded), so
+# that payload no longer exists. The old body extracted 0010's Apply blocks and
+# ran them against a sandbox, asserting the knowledge_capture config seed and
+# the AGENTS.md ritual-tail section landed — both of which the migration sources
+# from live templates that are now deleted. Retired WITH the feature.
 #
-# RED-BEFORE / GREEN-AFTER (success criterion #1): this fixture is authored
-# BEFORE migrations/0010-heal-0007-knowledge-capture.md exists. Every
-# extraction below is gated by assert_extracted_shape (D-36) — with no
-# document to extract from, each gate reports an empty-extraction FAIL and
-# every downstream D-06/D-07 assertion reports via _m0010_fail rather than
-# silently vanishing. `bash migrations/run-tests.sh 0010` is expected to exit
-# NON-ZERO until Task 2 authors the migration. DO NOT stub 0010 to turn this
-# green early — that is Task 2's job (D-36: "non-empty is not the same as
-# correct").
+# Both migration docs are retained as history (§08). They can only fire for a
+# repo below 0.5.0; every live repo is well past that.
 # ─────────────────────────────────────────────────────────────────────────────
-
-# _m0010_ok <rc> <label> — PASS iff rc is 0. Mirrors _m0009_ok's convention
-# (file-scope, `_m0010_` prefix — shell has no function-local functions).
-_m0010_ok() {
-  if [ "$1" -eq 0 ]; then
-    echo "  ${GREEN}PASS${RESET} $2"
-    PASS=$((PASS+1))
-  else
-    echo "  ${RED}FAIL${RESET} $2"
-    FAIL=$((FAIL+1))
-  fi
-}
-
-# _m0010_fail <label> — unconditional FAIL, used when an extraction gate is
-# down so a case reports FAILED rather than silently disappearing.
-_m0010_fail() {
-  echo "  ${RED}FAIL${RESET} $1"
-  FAIL=$((FAIL+1))
-}
-
-# _m0010_apply <sandbox_dir> <codex_home> <block_text>
-# Runs an extracted Apply block against the sandbox with CODEX_HOME resolved
-# to the real repo root (0010's Apply blocks resolve
-# $CODEX_HOME/skills/setup-codex-agenticapps-workflow/templates/... and
-# `git rev-parse --show-toplevel`, so the sandbox is `git init`-ed and
-# CODEX_HOME points at this trusted repo, never at the developer's real
-# ~/.codex). Subshell-wrapped so a block that exits non-zero cannot terminate
-# the whole harness mid-suite (same discipline as _m0009_apply).
-_m0010_apply() {
-  ( cd "$1" && export CODEX_HOME="$2" && eval "$3" ) 2>&1
-}
-
-# _m0010_mk_version_sandbox <tmp> <name> <version>
-# WR-02: builds a scratch project root shaped like a REAL target project — a
-# `.git` directory (the pre-flight's `test -d .git` guard) plus
-# `.codex/workflow-version.txt` set to <version> — and DELIBERATELY NO local
-# `skills/` tree of any kind (D-07, mirrors `_m0009_mk_project`'s
-# no-scaffolder-tree shape, `run-tests.sh:3543-3559`). The version file is the
-# ONLY variable across the four sandboxes the floor-execution cases below
-# build, so a floor accept/reject can only be explained by the version-floor
-# regex itself. Prints the project root's path.
-_m0010_mk_version_sandbox() {
-  local p="$1/$2/proj"
-  mkdir -p "$p/.codex"
-  ( cd "$p" && git init -q )
-  printf '%s\n' "$3" > "$p/.codex/workflow-version.txt"
-  printf '%s\n' "$p"
-}
 
 test_migration_0010() {
   echo ""
-  echo "${YELLOW}=== Migration 0010 — Heal 0007 knowledge-capture chain break ===${RESET}"
+  echo "${YELLOW}=== Migration 0010 — Heal 0007 knowledge-capture chain break (RETIRED) ===${RESET}"
 
-  if ! command -v jq >/dev/null 2>&1; then
-    echo "  ${YELLOW}SKIP${RESET} jq not available — config-merge test not run"
-    SKIP=$((SKIP+1)); return
-  fi
-
-  local MIGRATION_0010="$REPO_ROOT/migrations/0010-heal-0007-knowledge-capture.md"
-
-  local tmp; tmp="$(mktemp -d)"
-  trap 'rm -rf "$tmp"' RETURN
-
-  # ── Extraction (TEST-01): 0010's own shell, pulled from 0010's own document,
-  # never hand-transcribed. Every extraction is gated by assert_extracted_shape
-  # (D-36) before it is executed or asserted-on.
-  local pf_block applies_to_block step1_apply step2_apply step3_apply
-  pf_block="$(extract_preflight_block "$MIGRATION_0010" 2>/dev/null)"
-  applies_to_block="$(awk '/^applies_to:/{f=1;next} f && /^[^ ]/{exit} f{print}' "$MIGRATION_0010")"
-  step1_apply="$(extract_step_block "$MIGRATION_0010" 1 Apply 2>/dev/null)"
-  step2_apply="$(extract_step_block "$MIGRATION_0010" 2 Apply 2>/dev/null)"
-  step3_apply="$(extract_step_block "$MIGRATION_0010" 3 Apply 2>/dev/null)"
-
-  local pf_ok=1 applies_ok=1 s1_ok=1 s2_ok=1 s3_ok=1
-  assert_extracted_shape "0010 Pre-flight" "$pf_block" '.codex/workflow-version.txt' || pf_ok=0
-  assert_extracted_shape "0010 applies_to" "$applies_to_block" '.planning/config.json' || applies_ok=0
-  assert_extracted_shape "0010 Step 1 Apply" "$step1_apply" '.planning/config.json' || s1_ok=0
-  assert_extracted_shape "0010 Step 2 Apply" "$step2_apply" 'AGENTS.md' || s2_ok=0
-  assert_extracted_shape "0010 Step 3 Apply" "$step3_apply" '.codex/workflow-version.txt' || s3_ok=0
-
-  local all_ok=1
-  [ "$pf_ok" = "1" ] && [ "$applies_ok" = "1" ] && [ "$s1_ok" = "1" ] \
-    && [ "$s2_ok" = "1" ] && [ "$s3_ok" = "1" ] || all_ok=0
-
-  # ── D-07 document contract: no executable surface of 0010 (pre-flight,
-  # applies_to, every Step Apply) names skills/agentic-apps-workflow — proves
-  # the original V-01-class bug is not re-introduced by copy-paste. Matched
-  # against the exact D-07 substring, NOT `skills/` broadly, which would
-  # false-positive on the legitimate
-  # skills/setup-codex-agenticapps-workflow/templates/... references 0010
-  # correctly retains from 0007's Steps 1/2.
-  local surface_bad=0
-  [ "$pf_ok" = "1" ] && { printf '%s' "$pf_block" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
-  [ "$applies_ok" = "1" ] && { printf '%s' "$applies_to_block" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
-  [ "$s1_ok" = "1" ] && { printf '%s' "$step1_apply" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
-  [ "$s2_ok" = "1" ] && { printf '%s' "$step2_apply" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
-  [ "$s3_ok" = "1" ] && { printf '%s' "$step3_apply" | grep -q 'skills/agentic-apps-workflow' && surface_bad=1; }
-  if [ "$all_ok" = "1" ]; then
-    _m0010_ok "$surface_bad" "D-07: no executable surface (pre-flight, applies_to, every Step Apply) names skills/agentic-apps-workflow"
+  if [ -f "$REPO_ROOT/migrations/0010-heal-0007-knowledge-capture.md" ]; then
+    echo "  ${GREEN}PASS${RESET} migration doc retained as history"
+    PASS=$((PASS+1))
   else
-    _m0010_fail "D-07: no executable surface names skills/agentic-apps-workflow — NOT ASSERTED: one or more extractions failed"
-  fi
-
-  # ── WR-02: EXECUTE the extracted pre-flight (pf_block) against four
-  # seeded-version sandboxes, proving 0010's version-floor regex correct BY
-  # EXECUTION — not merely present as text (closes the gap flagged in
-  # 11-VERIFICATION.md: "a mutation to 0010's version-floor regex ... would
-  # survive the test suite undetected"). Mirrors test_migration_0009's
-  # _m0009_apply-against-seeded-sandbox pattern for its own pre-flight
-  # (`run-tests.sh:4358-4412`). CODEX_HOME is pinned to REPO_ROOT (trusted,
-  # same as the Step 1/2/3 executions below) so both required templates
-  # resolve and are held CONSTANT across all four sandboxes — the version
-  # file is the SOLE variable, isolating the floor regex exactly as 0009's
-  # fixture isolates its mirror-guard cases from its own version gate.
-  if [ "$pf_ok" = "1" ]; then
-    local v03 v04 v05 v06 out rc
-    v03="$(_m0010_mk_version_sandbox "$tmp" floor03 "0.3.0")"
-    v04="$(_m0010_mk_version_sandbox "$tmp" floor04 "0.4.0")"
-    v05="$(_m0010_mk_version_sandbox "$tmp" floor05 "0.5.0")"
-    v06="$(_m0010_mk_version_sandbox "$tmp" floor06 "0.6.0")"
-
-    out="$(_m0010_apply "$v03" "$REPO_ROOT" "$pf_block")"; rc=$?
-    [ "$rc" -ne 0 ]
-    _m0010_ok $? "WR-02 floor (execution): 0.3.0 (below 0.4.0 floor) REJECTED by the extracted pre-flight — got exit=$rc"
-
-    out="$(_m0010_apply "$v04" "$REPO_ROOT" "$pf_block")"; rc=$?
-    [ "$rc" -eq 0 ]
-    _m0010_ok $? "WR-02 floor (execution): 0.4.0 (fresh install) ACCEPTED by the extracted pre-flight — got exit=$rc"
-
-    out="$(_m0010_apply "$v05" "$REPO_ROOT" "$pf_block")"; rc=$?
-    [ "$rc" -eq 0 ]
-    _m0010_ok $? "WR-02 floor (execution): 0.5.0 (idempotent re-apply) ACCEPTED by the extracted pre-flight — got exit=$rc"
-
-    out="$(_m0010_apply "$v06" "$REPO_ROOT" "$pf_block")"; rc=$?
-    [ "$rc" -ne 0 ]
-    _m0010_ok $? "WR-02 floor (execution): 0.6.0 (above 0010's slot) REJECTED by the extracted pre-flight — got exit=$rc"
-  else
-    _m0010_fail "WR-02 floor (execution): 0.3.0 REJECTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
-    _m0010_fail "WR-02 floor (execution): 0.4.0 ACCEPTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
-    _m0010_fail "WR-02 floor (execution): 0.5.0 ACCEPTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
-    _m0010_fail "WR-02 floor (execution): 0.6.0 REJECTED by the extracted pre-flight — NOT ASSERTED: pre-flight extraction failed"
-  fi
-
-  # ── D-06 delivery fixture: a 0.4.0 sandbox carrying NONE of 0007's
-  # artifacts, shaped like a real target project (D-07's no-local-skills/-tree
-  # shape — mirrors 0008's own no-scaffolder-tree fixture,
-  # `migrations/run-tests.sh:1651-1727`).
-  if [ "$all_ok" = "1" ]; then
-    local sbx="$tmp/sandbox"
-    mkdir -p "$sbx/.planning" "$sbx/.codex"
-    ( cd "$sbx" && git init -q )
-    printf '0.4.0\n' > "$sbx/.codex/workflow-version.txt"
-    cat > "$sbx/AGENTS.md" <<'MD'
-# AGENTS.md — 0010 sandbox fixture
-
-<!-- BEGIN: agentic-apps-workflow sections (do not remove this marker) -->
-
-## Session handoff
-
-Existing content.
-
-<!-- END: agentic-apps-workflow sections -->
-MD
-
-    # Self-guard 1 (D-07 shape): the sandbox really has no local skills/ tree.
-    if test ! -e "$sbx/skills"; then
-      _m0010_ok 0 "D-07 sandbox self-guard: no local skills/ directory (no-scaffolder-tree shape)"
-    else
-      _m0010_ok 1 "D-07 sandbox self-guard: no local skills/ directory (no-scaffolder-tree shape)"
-    fi
-
-    # Self-guard 2 (D-06 shape): none of 0007's artifacts are present yet —
-    # the clean pre-migration 0.4.0 state.
-    if ! grep -q '^## Knowledge Capture' "$sbx/AGENTS.md" \
-       && [ ! -f "$sbx/.planning/config.json" ]; then
-      _m0010_ok 0 "D-06 sandbox self-guard: carries none of 0007's artifacts before apply (clean 0.4.0 state)"
-    else
-      _m0010_ok 1 "D-06 sandbox self-guard: carries none of 0007's artifacts before apply (clean 0.4.0 state)"
-    fi
-
-    # Execute the extracted Step 1/2/3 Apply blocks, in order, against the
-    # sandbox. CODEX_HOME points at the real repo root (trusted, T-11-02) so
-    # the blocks' $CODEX_HOME/skills/setup-codex-agenticapps-workflow/templates/...
-    # reads resolve to the real templates.
-    local out rc
-    out="$(_m0010_apply "$sbx" "$REPO_ROOT" "$step1_apply")"; rc=$?
-    _m0010_ok "$rc" "Step 1 Apply executes cleanly against the 0.4.0 sandbox — got exit=$rc"
-    [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
-
-    out="$(_m0010_apply "$sbx" "$REPO_ROOT" "$step2_apply")"; rc=$?
-    _m0010_ok "$rc" "Step 2 Apply executes cleanly against the 0.4.0 sandbox — got exit=$rc"
-    [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
-
-    out="$(_m0010_apply "$sbx" "$REPO_ROOT" "$step3_apply")"; rc=$?
-    _m0010_ok "$rc" "Step 3 Apply executes cleanly against the 0.4.0 sandbox — got exit=$rc"
-    [ "$rc" -ne 0 ] && printf '%s\n' "$out" | sed 's/^/    /'
-
-    # D-06 assertions: payload delivered + version healed.
-    if ( cd "$sbx" && jq -e '.knowledge_capture.enabled == true' .planning/config.json >/dev/null 2>&1 ); then
-      _m0010_ok 0 "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3"
-    else
-      _m0010_ok 1 "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3"
-    fi
-
-    # WR-03: <repo-name> placeholder resolved in knowledge_capture.note — 0010's
-    # own Post-checks (migrations/0010-heal-0007-knowledge-capture.md:207-212)
-    # calls this "ALWAYS true on success"; mirrors test_migration_0007's
-    # identical assertion (run-tests.sh:838-845), adapted to this sandbox's
-    # real repo directory name ("sandbox", from `$tmp/sandbox`). Both halves
-    # required, same discipline as 0007's check: the resolved note path must
-    # END with "/sandbox.md" (not merely NOT contain the placeholder — a
-    # broken resolution that clobbers the whole note would still pass a
-    # placeholder-absence-only check).
-    if ( cd "$sbx" && jq -e '.knowledge_capture.note | endswith("/sandbox.md")' .planning/config.json >/dev/null 2>&1 ) \
-       && ! grep -qF '<repo-name>' "$sbx/.planning/config.json"; then
-      _m0010_ok 0 "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left"
-    else
-      _m0010_ok 1 "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left"
-    fi
-
-    if grep -q '^## Knowledge Capture — Ritual Tail (spec §15)' "$sbx/AGENTS.md"; then
-      _m0010_ok 0 "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3"
-    else
-      _m0010_ok 1 "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3"
-    fi
-
-    if [ "$(cat "$sbx/.codex/workflow-version.txt" 2>/dev/null)" = "0.5.0" ]; then
-      _m0010_ok 0 "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3"
-    else
-      _m0010_ok 1 "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3"
-    fi
-  else
-    _m0010_fail "D-07 sandbox self-guard: no local skills/ directory — NOT ASSERTED: one or more extractions failed"
-    _m0010_fail "D-06 sandbox self-guard: carries none of 0007's artifacts before apply — NOT ASSERTED: extraction failed"
-    _m0010_fail "Step 1 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
-    _m0010_fail "Step 2 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
-    _m0010_fail "Step 3 Apply executes cleanly against the 0.4.0 sandbox — NOT ASSERTED: extraction failed"
-    _m0010_fail "D-06: knowledge_capture.enabled is true in .planning/config.json after Steps 1-3 — NOT ASSERTED: extraction failed"
-    _m0010_fail "D-06/WR-03: <repo-name> resolved in knowledge_capture.note (ends with /sandbox.md); no placeholder left — NOT ASSERTED: extraction failed"
-    _m0010_fail "D-06: AGENTS.md carries the Knowledge Capture — Ritual Tail section after Steps 1-3 — NOT ASSERTED: extraction failed"
-    _m0010_fail "D-06: .codex/workflow-version.txt reads exactly 0.5.0 after Steps 1-3 — NOT ASSERTED: extraction failed"
+    echo "  ${RED}FAIL${RESET} migration 0010 doc missing — history must be superseded, not deleted (§08)"
+    FAIL=$((FAIL+1))
   fi
 }
 
