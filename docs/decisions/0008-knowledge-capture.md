@@ -1,6 +1,17 @@
+> **Superseded 2026-07-28.** Spec §15 was removed at core spec 1.2.0 and the
+> knowledge-capture ritual retired fleet-wide (core ADR-0025 supersedes
+> ADR-0017). This host's live surfaces are gone: the ritual tail in
+> `skills/agentic-apps-workflow/SKILL.md` and in the `agents-md-additions.md`
+> template, the `knowledge_capture` config block, the
+> `config-knowledge-capture.json` and `obsidian-learnings-note.md` templates,
+> and the `knowledge_capture_trigger` lifecycle key. Migrations `0007` and
+> `0010` are left untouched — they are historical executables replayed for
+> repos on old versions. Notes already written to the operator's vault are left
+> in place; nothing reads or updates them.
+
 # ADR-0008: Knowledge capture ritual tail — spec §15 on the Codex host
 
-**Status**: Accepted  **Date**: 2026-07-06  **Linear**: —
+**Status**: Superseded (2026-07-28, by core ADR-0025)  **Date**: 2026-07-06  **Linear**: —
 **Core contract**: `agenticapps-workflow-core/spec/15-knowledge-capture.md` (v0.7.0), core ADR-0017
 **Sibling host**: claude-workflow ADR-0038 (reference implementation)
 

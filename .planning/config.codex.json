@@ -138,8 +138,7 @@
       "fold": "$openspec-sync-specs",
       "entry": "$openspec-archive-change",
       "done_ness": "the spec delta is folded into openspec/specs/<capability>/spec.md AND openspec validate --all is green (§16)",
-      "produces_no_commit": true,
-      "knowledge_capture_trigger": true
+      "produces_no_commit": true
     },
     "ship": {
       "branch_close": {

@@ -38,7 +38,7 @@ ambiguity.
 | [0005](0005-adopt-observability-architecture.md) | Adopt core ADR-0014 observability architecture (generator layer via delegation) | Accepted |
 | [0006](0006-secret-scanner-gitleaks.md) | Secret scanner: stay on gitleaks (adopt core ADR-0015) | Accepted |
 | [0007](0007-bind-upstream-gsd.md) | Bind upstream GSD + Superpowers; stop re-porting | Accepted — subject moved to OpenSpec by 0011; the bind-upstream rule stands |
-| [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the Codex host | Accepted |
+| [0008](0008-knowledge-capture.md) | Knowledge capture ritual tail — spec §15 on the Codex host | Superseded by core ADR-0025 (§15 removed at core spec 1.2.0) |
 | [0009](0009-plan-review-gate.md) | Bind the plan-review pre-execution gate on the Codex host | Superseded by 0011 (gate retargeted, review kept) |
 | [0010](0010-region-aware-spec-11-placement.md) | Anchor the §11 block above a leading GitNexus region | Superseded by 0011 (GitNexus removed) |
 | [0011](0011-openspec-superpowers-adoption.md) | Adopt the OpenSpec + Superpowers front end (spec v1.0.0), retire the GSD planning engine | Accepted |

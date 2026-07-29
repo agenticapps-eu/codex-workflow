@@ -118,9 +118,10 @@ on).
   `$update-codex-agenticapps-workflow --migration 0010`, which — per
   the `--migration NNNN` flag's boundary-override behavior (see Flags
   table) — bypasses that boundary and re-applies `0010` idempotently,
-  delivering the missing `knowledge_capture` config block and the
-  AGENTS.md ritual-tail section without re-touching anything already
-  in place.
+  clearing the stuck slot without re-touching anything already in place.
+  (`0007`/`0010`'s payload was spec §15 knowledge capture, retired at core
+  spec 1.2.0. Both docs are retained as history; a repo this far behind
+  should be re-set-up rather than replayed.)
 
 ### Stage E — Atomic commit
 
@@ -194,7 +195,7 @@ discipline untouched. Three things about it differ from an ordinary step.
    inside `specs/`.
 
 2. **`.planning/` is moved, never deleted** — and on this host two files stay
-   behind: `.planning/config.json` (knowledge capture, §15) and
+   behind: `.planning/config.json` (shared, host-neutral) and
    `.planning/config.codex.json` (gate bindings) are runtime config, not
    history. The recipe's Step 1 note covers this.
 
