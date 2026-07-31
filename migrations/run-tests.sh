@@ -21,6 +21,19 @@
 set -uo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
+
+# Core's gate and reviewer wrapper are PINNED, not vendored (ADR-0047): bin/ is
+# a gitignored cache regenerated from tools/core-vendor.manifest. A fresh clone
+# — every CI runner — has neither file, and a dozen rows below drive them
+# directly. Materialise here rather than in ci.yml so EVERY caller is covered:
+# the first cut fixed only the workflow that happened to be red, and left the
+# same trap for anyone running this script from a clean checkout.
+# Non-fatal: the rows that need the artifacts fail loudly on their own, which is
+# a better diagnosis than the whole suite aborting before it starts.
+if [ -n "$REPO_ROOT" ] && [ -x "$REPO_ROOT/bin/materialise-core-artifacts.sh" ]; then
+  "$REPO_ROOT/bin/materialise-core-artifacts.sh" >/dev/null 2>&1 \
+    || echo "note: could not materialise core artifacts from the pin — gate rows will fail" >&2
+fi
 if [ -z "$REPO_ROOT" ]; then
   echo "error: run-tests.sh must be invoked from inside a git repo" >&2
   exit 1
