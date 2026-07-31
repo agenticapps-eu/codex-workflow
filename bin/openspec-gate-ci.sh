@@ -46,10 +46,23 @@ export OPENSPEC_GATE_SELF="${OPENSPEC_GATE_SELF:-codex}"
 GATE="$ROOT/bin/openspec-change-gate.sh"
 HARNESS="$ROOT/tools/change-gate-conformance.sh"
 
+# The gate is not vendored any more (ADR-0047): bin/ is a gitignored cache
+# materialised from the core pin. Materialise before scoring, so this surface
+# runs the bytes the installer would publish rather than whatever a checkout
+# happens to contain. Idempotent and a no-op once correct.
+#
+# Fails closed exactly as the vendored check did. Unlike the local hooks this
+# surface cannot be bypassed, so an unresolvable gate is a broken build, not a
+# reason to wave the change through.
+if ! "$ROOT/bin/materialise-core-artifacts.sh"; then
+  echo "openspec-gate-ci: FAIL — could not materialise the gate from the core pin" >&2
+  echo "  Diagnostics above. tools/core-vendor.manifest names the commit and the" >&2
+  echo "  sha256; nothing runs unless the bytes verify against it." >&2
+  exit 1
+fi
+
 if [ ! -x "$GATE" ]; then
-  echo "openspec-gate-ci: FAIL — no vendored gate at bin/openspec-change-gate.sh" >&2
-  echo "  CI fails closed here. Unlike the local hooks, this surface cannot be bypassed," >&2
-  echo "  so an absent gate is a broken build, not a reason to wave the change through." >&2
+  echo "openspec-gate-ci: FAIL — no gate at bin/openspec-change-gate.sh after materialising" >&2
   exit 1
 fi
 
@@ -75,9 +88,10 @@ echo "openspec-gate-ci: scoring the gate before trusting its verdict"
 # Core's gate README tells every host to set OPENSPEC_GATE_SELF and to run the
 # harness; followed literally, in one shell, those two instructions conflict.
 if ! env -u OPENSPEC_GATE_SELF bash "$HARNESS" "$GATE"; then
-  echo "openspec-gate-ci: FAIL — the vendored gate is not conformant with spec §18." >&2
-  echo "  Do NOT hand-patch it: a host-local fix is how five copies diverged (issue #32)." >&2
-  echo "  Re-vendor from agenticapps-workflow-core, or fix it there and add a harness row." >&2
+  echo "openspec-gate-ci: FAIL — the PINNED gate is not conformant with spec §18." >&2
+  echo "  Do NOT hand-patch it: bin/ is a cache regenerated from the pin, so an edit" >&2
+  echo "  there is erased on the next run and fixes nothing. Change it in" >&2
+  echo "  agenticapps-workflow-core alongside a harness row, then advance core_commit." >&2
   exit 1
 fi
 
@@ -88,13 +102,15 @@ if [ ! -d "openspec/changes" ]; then
 fi
 
 if "$GATE" --ci; then
-  echo "openspec-gate-ci: OK — every active change validates and is reviewed."
+  echo "openspec-gate-ci: OK — every active change validates (review evidence is advisory since gate 2.0.0)."
   exit 0
 fi
 
 echo "openspec-gate-ci: BLOCKED by the OpenSpec change-gate (§18)." >&2
-echo "  Every active change must pass 'openspec validate --all' AND carry REVIEWS.md" >&2
-echo "  with >= 2 '## Reviewer:' sections from DISTINCT vendors before code lands." >&2
-echo "  This check is whole-repo: an unreviewed change blocks the build even if this" >&2
+echo "  Since gate 2.0.0 the ONLY blocking condition is 'openspec validate --all'." >&2
+echo "  Review evidence is REPORTED, never enforced: a missing, stale or objecting" >&2
+echo "  REVIEWS.md prints a NOTE and the gate still exits 0. So this failure means a" >&2
+echo "  change does not validate — read the validator output above, not REVIEWS.md." >&2
+echo "  This check is whole-repo: an invalid change blocks the build even if this" >&2
 echo "  pull request did not touch it." >&2
 exit 1

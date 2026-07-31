@@ -3789,13 +3789,27 @@ test_migration_0013() {
     printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && bash "$gate" ) >/dev/null 2>&1; rc=$?
     _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: no openspec/ -> ALLOW (exit 0, got $rc)"
 
+    # GATE 2.0.0 CHANGED THIS TRUTH TABLE. Review evidence is now REPORTED,
+    # never enforced: missing, insufficient, stale and objecting reviews all
+    # print a NOTE and exit 0. The single blocking condition is
+    # `openspec validate --all` failing.
+    #
+    # These two rows asserted the opposite until 2026-07-31, and passed only
+    # because this host was pinned to gate 1.3.1 — three minor versions behind
+    # the release that made the change. They now assert what the shipped gate
+    # does, and the enforcement they used to cover moved to the validate-RED
+    # row below, which is the condition that actually blocks.
     mkdir -p "$tmp/openspec/changes/add-thing"
     printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-    _m0013_ok "$([ $rc -eq 2 ] && echo 0 || echo 1)" "§18: active change, validate green, 0 reviewers -> BLOCK (exit 2, got $rc)"
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: active change, validate green, 0 reviewers -> ALLOW with a NOTE (exit 0, got $rc)"
 
     printf '# r\n\n## Reviewer: gemini\nx\n' > "$tmp/openspec/changes/add-thing/REVIEWS.md"
     printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
-    _m0013_ok "$([ $rc -eq 2 ] && echo 0 || echo 1)" "§18: 1 reviewer is still below the >=2 floor -> BLOCK (exit 2, got $rc)"
+    _m0013_ok "$([ $rc -eq 0 ] && echo 0 || echo 1)" "§18: 1 reviewer is below the advisory floor -> still ALLOW (exit 0, got $rc)"
+
+    # The report must still SAY something, or "advisory" would mean "silent".
+    printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) 2>&1 >/dev/null | grep -q . && rc=0 || rc=1
+    _m0013_ok "$rc" "§18: an under-reviewed change still REPORTS on stderr (advisory is not silent)"
 
     printf '\n## Reviewer: claude\nx\n' >> "$tmp/openspec/changes/add-thing/REVIEWS.md"
     printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
@@ -3846,11 +3860,15 @@ test_migration_0013() {
 *** End Patch' '{tool_name:"apply_patch", tool_input:{command:$c}}')"
 
     local rc_bare rc_wrap out
-    printf '%s' "$payload" | ( cd "$tmp" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc_bare=$?
+    # Gate 2.0.0: an unreviewed change no longer blocks. To exercise the DENY
+    # path we must fail the one condition that still blocks — validate. Hence
+    # OPENSPEC_BIN=false (validate red) where this used to say true and rely on
+    # a missing REVIEWS.md. Same plumbing under test, current trigger.
+    printf '%s' "$payload" | ( cd "$tmp" && OPENSPEC_BIN=false bash "$gate" ) >/dev/null 2>&1; rc_bare=$?
     _m0013_ok "$([ $rc_bare -eq 0 ] && echo 0 || echo 1)" \
       "adapter rationale: the BARE gate fails open on a raw apply_patch payload (exit 0, got $rc_bare) — this is why the wrapper exists"
 
-    out="$(printf '%s' "$payload" | ( cd "$tmp" && OPENSPEC_BIN=true OPENSPEC_CHANGE_GATE="$gate" bash "$wrapper" ) 2>/dev/null)"; rc_wrap=$?
+    out="$(printf '%s' "$payload" | ( cd "$tmp" && OPENSPEC_BIN=false OPENSPEC_CHANGE_GATE="$gate" bash "$wrapper" ) 2>/dev/null)"; rc_wrap=$?
     if [ "$rc_wrap" -eq 0 ] && printf '%s' "$out" | jq -e '.hookSpecificOutput.permissionDecision == "deny"' >/dev/null 2>&1; then
       _m0013_ok 0 "adapter: the WRAPPER denies the same payload via valid permissionDecision JSON (exit 0 + deny body)"
     else
@@ -3893,8 +3911,8 @@ test_migration_0013() {
 
     mkdir -p "$tmp/openspec/changes/add-thing"
     ( cd "$tmp" && echo y > b.txt && git add b.txt \
-      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m "unreviewed" ) >/dev/null 2>&1; rc=$?
-    _m0013_ok "$([ $rc -ne 0 ] && echo 0 || echo 1)" "floor: pre-commit BLOCKS code staged under an unreviewed active change (non-zero, got $rc)"
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=false git commit -q -m "invalid change" ) >/dev/null 2>&1; rc=$?
+    _m0013_ok "$([ $rc -ne 0 ] && echo 0 || echo 1)" "floor: pre-commit BLOCKS code staged under an INVALID active change (non-zero, got $rc)"
 
     # Authoring the change itself must never be blocked.
     ( cd "$tmp" && git reset -q HEAD b.txt; echo z > openspec/changes/add-thing/proposal.md \
@@ -4155,7 +4173,7 @@ test_migration_0014() {
   # GAP-1 — $ROOT resolution, not $PWD. The PreToolUse hook's cwd is the
   # session's, so a cwd-relative gate fails open from anywhere below the root.
   printf '{"tool":"edit","tool_input":{"file_path":"main.go"}}' \
-    | ( cd "$tmp/sub/dir" && OPENSPEC_BIN=true bash "$gate" ) >/dev/null 2>&1; rc=$?
+    | ( cd "$tmp/sub/dir" && OPENSPEC_BIN=false bash "$gate" ) >/dev/null 2>&1; rc=$?
   if [ "$rc" -eq 2 ]; then
     echo "  ${GREEN}PASS${RESET} GAP-1: blocks a code edit from a subdirectory (gate resolves \$ROOT, not \$PWD)"
     PASS=$((PASS+1))
@@ -4291,9 +4309,9 @@ test_migration_0014_floors() {
   local head_before head_after
   head_before="$(git -C "$tmp" rev-parse HEAD)"
   ( cd "$tmp" && git add main.go \
-      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=true git commit -q -m code ) >/dev/null 2>&1; rc=$?
+      && OPENSPEC_CHANGE_GATE="$gate" OPENSPEC_BIN=false git commit -q -m code ) >/dev/null 2>&1; rc=$?
   head_after="$(git -C "$tmp" rev-parse HEAD)"
-  _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: commit of code under an unreviewed change is REFUSED (rc=$rc)"
+  _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: commit of code under an INVALID change is REFUSED (rc=$rc)"
   _m0014f_ok "$([ "$head_before" = "$head_after" ] && echo 0 || echo 1)" "floor: HEAD did not move"
 
   # Only openspec/ staged -> allowed, and reached via mode dispatch rather than
@@ -4323,7 +4341,7 @@ test_migration_0014_floors() {
   # path, so the "shared copy was rejected" warning would never emit and this
   # assertion would measure the wrong branch.
   ( cd "$tmp" && git reset -q && git add main.go \
-      && env -u OPENSPEC_CHANGE_GATE HOME="$tmp/fakehome" OPENSPEC_BIN=true bash "$pc" ) >/dev/null 2>"$err"; rc=$?
+      && env -u OPENSPEC_CHANGE_GATE HOME="$tmp/fakehome" OPENSPEC_BIN=false bash "$pc" ) >/dev/null 2>"$err"; rc=$?
   _m0014f_ok "$([ "$rc" -ne 0 ] && echo 0 || echo 1)" "floor: an UNMARKED shared gate is ignored — falls back to repo-local and still blocks (rc=$rc)"
   grep -qi 'marker\|unmarked\|falling back' "$err"; _m0014f_ok $? "floor: the fallback warns that the shared copy was rejected"
 

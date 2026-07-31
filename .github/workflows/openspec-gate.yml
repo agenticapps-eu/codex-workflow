@@ -52,6 +52,21 @@ jobs:
       - name: Install the OpenSpec CLI
         run: npm i -g @fission-ai/openspec
 
+      - name: Materialise core artifacts from the pin
+        # Since ADR-0047 this host does not vendor the gate or the wrapper — it
+        # pins them in tools/core-vendor.manifest and regenerates bin/ from the
+        # pin. Do it once here so every step below scores and runs exactly what
+        # install.sh would publish.
+        #
+        # --check afterwards is not belt-and-braces: with the file missing,
+        # core's change-gate-conformance.sh prints "SKIP (not found)" and
+        # "TOTAL: 0 passed, 0 failed" and exits 0 — a silent green for a gate
+        # that is not there. Prove the bytes exist before scoring them.
+        run: |
+          set -euo pipefail
+          bash bin/materialise-core-artifacts.sh
+          bash bin/materialise-core-artifacts.sh --check
+
       - name: Prove the gate itself is conformant
         # Every declared row must pass. The bar is zero failures, not a fixed
         # count: the harness grows as core adds rows, and a hardcoded number
