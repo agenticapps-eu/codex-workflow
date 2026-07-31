@@ -23,3 +23,10 @@ session-handoff.md
 # only the regenerable command surface is ignored.
 .codex/skills/openspec-*/
 .gstack/
+
+# Core's artifacts are PINNED, not vendored (ADR-0047). bin/ is a cache
+# regenerated from tools/core-vendor.manifest by bin/materialise-core-artifacts.sh
+# and hash-verified against it. Never committed: a committed copy is a copy that
+# drifts, and these two spent a release stale at gate 1.3.1 / wrapper 1.1.0.
+bin/openspec-change-gate.sh
+bin/reviewer-cli.sh

@@ -214,6 +214,35 @@ echo "  ${GREEN}HOOK${RESET}   .codex/hooks.json PreToolUse -> hook-wrapper-open
 echo "  ${GREEN}HOOK${RESET}   .git/hooks/pre-commit             (agent-agnostic floor)"
 echo "  ${GREEN}CI${RESET}     .github/workflows/openspec-gate.yml"
 
+# ── where the bytes come from (ADR-0047, ported from claude-workflow) ────────
+# This repo does NOT vendor the gate or the wrapper. tools/core-vendor.manifest
+# records WHICH core revision it trusts and WHAT each file must hash to;
+# materialise-core-artifacts.sh turns that into verified bytes at bin/, and
+# install-gate.sh then arbitrates and publishes them as before.
+#
+# bin/ is a CACHE, not source: the two files are gitignored and regenerated
+# from the pin, so they cannot drift. Vendoring is what this replaced — the
+# runtime never read the committed copies (the project hook resolves
+# ~/.agenticapps/bin first), so they existed only to feed this script, and on
+# 2026-07-31 they were gate 1.3.1 against core's 2.0.0 and wrapper 1.1.0
+# against 1.2.0. Arbitration meant that was never destructive, only silently
+# useless — but a fresh machine installed from this host alone got the
+# ENFORCING gate.
+#
+# It stays at bin/ rather than a temp dir because several things depend on that
+# path: the setup skill's templates/*.sh are symlinks into bin/, and migration
+# 0013 installs a target repo's copies from that stable installed path.
+#
+# Fails CLOSED. An installer that cannot verify what it is about to publish
+# into a directory shared by every agent on this machine must stop.
+if ! "$SCAFFOLDER_ROOT/bin/materialise-core-artifacts.sh"; then
+  echo "  ${RED}FAIL${RESET}   could not materialise core's artifacts from the pin."
+  echo "           Nothing was published. Fix the pin or the source, then re-run."
+  echo "           Offline with no core checkout? Clone core beside this repo, or"
+  echo "           set CORE_CHECKOUT=/path/to/agenticapps-workflow-core."
+  exit 1
+fi
+
 # The gate is installed through bin/install-gate.sh, which ARBITRATES BY
 # VERSION rather than blindly overwriting. All four AgenticApps hosts write
 # $AA_BIN/openspec-change-gate.sh, so a plain `install` here is last-writer-wins:

@@ -1,30 +1,61 @@
-# core-vendor.manifest — provenance for files vendored from
-# agenticapps-eu/agenticapps-workflow-core. Machine-read by
-# test_migration_0014 and test_migration_0015. Do NOT hand-edit: regenerate by
-# re-vendoring.
+# core-vendor.manifest — the pin. Names ONE commit of
+# agenticapps-eu/agenticapps-workflow-core and a sha256 per file. Machine-read
+# by bin/resolve-core-artifact.sh, by install.sh, and by test_migration_0014 /
+# test_migration_0015. Do NOT hand-edit a sha: re-pin by recomputing every
+# entry at the new commit.
 #
-# The vendored files are byte-identical to core and carry NO local header —
-# a header would itself break the byte-identity it claimed to record.
+# The files this repo still carries are byte-identical to core and carry NO
+# local header — a header would itself break the byte-identity it records.
 #
 # core_commit is a COMMIT, not a branch: a core checkout is a live
 # workspace and may sit mid-change on a feature branch, and origin/main
-# can advance BETWEEN two commands. Resolve it ONCE and vendor every file
+# can advance BETWEEN two commands. Resolve it ONCE and take every file
 # from that one revision — a per-file rev-parse is how the gate and the
 # harness ended up from different commits on 2026-07-25.
 #
-# ONE commit covers EVERY file listed, and every file this repo vendors from
+# ONE commit covers EVERY file listed, and every file this repo takes from
 # core is listed. Consistency among the entries present is not sufficient: a
-# manifest naming two of four files is internally consistent while recording
+# manifest naming three of five files is internally consistent while recording
 # nothing about the two it omits.
 #
 # Advancing core_commit therefore means RE-VERIFYING the files already listed
 # at the new revision, not just appending the new ones. 750da2e -> 60cd83f was
-# verified this way: core#42 touched neither gate file, so both sha256s below
-# are unchanged and the single-commit claim stays true rather than becoming a
+# verified this way: core#42 touched neither gate file, so both sha256s were
+# unchanged and the single-commit claim stayed true rather than becoming a
 # convenient fiction about files nobody re-checked.
+#
+# ── two categories, deliberately different (ADR-0047, ported from claude) ────
+#
+# RESOLVED — install.sh publishes these into the shared ~/.agenticapps/bin/
+#   through bin/install-gate.sh. They are NOT vendored here any more. Vendoring
+#   them is what this change removed: the runtime never read the copies — the
+#   project hook resolves ~/.agenticapps/bin first — so they existed only to
+#   feed the installer, and they drifted. On 2026-07-31 this repo still carried
+#   gate 1.3.1 against core's 2.0.0 and wrapper 1.1.0 against 1.2.0, having
+#   missed the release in which reviews stopped being enforced.
+#
+# VENDORED — still on disk, each for a reason it cannot be resolved:
+#   resolve-core-artifact.sh is the bootstrap and cannot resolve itself; the
+#   two conformance harnesses are executed from the repo by CI. Pinned anyway,
+#   and the tests compare the bytes on disk to the bytes named here.
+#
+# ── the pin ──────────────────────────────────────────────────────────────────
+#
+# 6cd3b9c is core's main at the merge of core PR #47. It carries gate 2.0.0 and
+# wrapper 1.2.0.
+#
+# The previous pin, 636f106, is why both harnesses below changed: this repo had
+# been scoring a 2.0.0-era gate with a 636f106-era harness. A stale harness
+# certifies a stale gate, so the harnesses moved to the same commit as the
+# artifacts they score rather than being left behind again.
 core_repo=agenticapps-eu/agenticapps-workflow-core
-core_commit=636f1062a80c09ca9006a4ee487bbe336f10f253
-file=bin/openspec-change-gate.sh sha256=60d421fad71439f33796556bdbb514a0896b7752f593ba4466f09ef038434385
-file=tools/change-gate-conformance.sh sha256=c611c904c79ad0e9df80422c9d490ff2980281255a45a335f7318e8b7b29d57e
-file=bin/reviewer-cli.sh sha256=6d9adc77dea3b878417a69da54f222589dc40bc6b50c0d60cd8873a9e2bd8b88
-file=tools/reviewer-cli-conformance.sh sha256=7f7dedbefa9a537d7662775204f839ea3c68308cd36adbf380d82904e0cd53ce
+core_commit=6cd3b9c40eb409ab1b256e3b9e8d50c7268538ab
+
+# RESOLVED at install time — not vendored in this repo.
+file=bin/openspec-change-gate.sh sha256=4ad996cb7f95ebc45c35177eaad70781c23f166fb14283dc693a8ecc31476780
+file=bin/reviewer-cli.sh sha256=9a26ebcda9f8c7e3839778337c1b56a4a421610735c08b8b5de1bb528397b11a
+
+# VENDORED on disk — pinned so the copies are checkable against a fixed commit.
+file=bin/resolve-core-artifact.sh sha256=1274598c07c0853b91c08d9b27da85d46cc754eff57b9c456cb79f293caf11ac
+file=tools/change-gate-conformance.sh sha256=e99ca5eded430925107c53a78d992d4df01599ee16dc47fdffab9aae0853d316
+file=tools/reviewer-cli-conformance.sh sha256=cee2ab002e5261df8c504e56b2cde0d0e4c14df7a897ec5ac498b3b4ea3fdc14
