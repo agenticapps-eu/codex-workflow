@@ -41,15 +41,25 @@
 #
 # ── the pin ──────────────────────────────────────────────────────────────────
 #
-# 6cd3b9c is core's main at the merge of core PR #47. It carries gate 2.0.0 and
-# wrapper 1.2.0.
+# ef030d0 is core's main at the merge of core PR #49. It carries gate 2.0.0 and
+# wrapper 1.2.0 — both unchanged from the previous pin — plus core spec 1.4.0 /
+# §20: a conformance harness that scored nothing is no longer green. A named
+# target that is absent, empty or unreadable is reported as
+# `UNSCOREABLE <label> — <reason>` and fails, instead of printing
+# `SKIP (not found)` / `TOTAL: 0 passed, 0 failed` and exiting 0.
 #
-# The previous pin, 636f106, is why both harnesses below changed: this repo had
-# been scoring a 2.0.0-era gate with a 636f106-era harness. A stale harness
-# certifies a stale gate, so the harnesses moved to the same commit as the
-# artifacts they score rather than being left behind again.
+# That is the same failure this repo already knew about from the other end. The
+# pin before last, 636f106, had this repo scoring a 2.0.0-era gate with a
+# 636f106-era harness — a stale harness certifies a stale gate. §20 closes the
+# neighbouring hole: a harness that scores NO gate at all now says so.
+#
+# All five entries below were re-verified at ef030d0. Three are byte-identical
+# to 6cd3b9c; the two vendored harnesses changed, their sha256s were recomputed
+# from this commit, and the copies on disk were replaced with those bytes.
+# Advancing core_commit means re-checking every file already listed, not only
+# the ones expected to move.
 core_repo=agenticapps-eu/agenticapps-workflow-core
-core_commit=6cd3b9c40eb409ab1b256e3b9e8d50c7268538ab
+core_commit=ef030d0430e6c0df6dc13ab567baab3f9e006dbe
 
 # RESOLVED at install time — not vendored in this repo.
 file=bin/openspec-change-gate.sh sha256=4ad996cb7f95ebc45c35177eaad70781c23f166fb14283dc693a8ecc31476780
@@ -57,5 +67,5 @@ file=bin/reviewer-cli.sh sha256=9a26ebcda9f8c7e3839778337c1b56a4a421610735c08b8b
 
 # VENDORED on disk — pinned so the copies are checkable against a fixed commit.
 file=bin/resolve-core-artifact.sh sha256=1274598c07c0853b91c08d9b27da85d46cc754eff57b9c456cb79f293caf11ac
-file=tools/change-gate-conformance.sh sha256=e99ca5eded430925107c53a78d992d4df01599ee16dc47fdffab9aae0853d316
-file=tools/reviewer-cli-conformance.sh sha256=cee2ab002e5261df8c504e56b2cde0d0e4c14df7a897ec5ac498b3b4ea3fdc14
+file=tools/change-gate-conformance.sh sha256=9ddfd5d641464920a4240c656384db722b3b7738768b09cc2a0beb2a2c3aeb21
+file=tools/reviewer-cli-conformance.sh sha256=f5161c8b7025e889eec0c78c3b0d6091d51e630ee2b5585d6e7c721089855011
