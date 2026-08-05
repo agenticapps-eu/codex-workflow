@@ -9,6 +9,9 @@
 #   bash install.sh --dry-run        # show what would happen
 #   bash install.sh --skip-upstream  # install only the AgenticApps skills
 #                                    # (do not bind OpenSpec / Superpowers)
+#   bash install.sh --install-prereqs # authorise installing a missing
+#                                    # prerequisite without being asked
+#                                    # (env: AGENTICAPPS_INSTALL_PREREQS=1)
 #
 # Idempotent — re-running with no changes produces "already linked"
 # log lines and exits 0. Refuses to clobber non-symlink directories
@@ -39,6 +42,16 @@ fi
 MODE="symlink"
 DRY_RUN=0
 SKIP_UPSTREAM=0
+# spec §21 — the opt-in that authorises a consent-requiring install unattended.
+# Both spellings are fixed by the section rather than chosen here: the
+# non-interactive report has to name the flag that authorises the install, and
+# four hosts inventing four spellings is the divergence §21 exists to remove.
+INSTALL_PREREQS=0
+case "${AGENTICAPPS_INSTALL_PREREQS:-0}" in 1|true|yes) INSTALL_PREREQS=1 ;; esac
+# Set when a step the operator asked for did not happen. §21: an installer that
+# silently omits a step exits 0 having done less than the operator believes,
+# and a zero exit is what an automated caller reads.
+SKIPPED=0
 
 for arg in "$@"; do
   case "$arg" in
@@ -46,8 +59,9 @@ for arg in "$@"; do
     --symlink)       MODE="symlink" ;;
     --dry-run)       DRY_RUN=1     ;;
     --skip-upstream) SKIP_UPSTREAM=1 ;;
+    --install-prereqs) INSTALL_PREREQS=1 ;;
     -h|--help)
-      sed -n '2,14p' "$0"
+      sed -n '2,17p' "$0"
       exit 0
       ;;
     *)
@@ -56,6 +70,44 @@ for arg in "$@"; do
       ;;
   esac
 done
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Consent (spec §21)
+# ─────────────────────────────────────────────────────────────────────────────
+# A write that can change software this workflow did not install is offered,
+# never performed unasked. Installing a package into npm's global namespace is
+# that kind of write: it can upgrade or replace something every other project
+# on the machine resolves. Provisioning this repo, and writing into
+# ~/.agenticapps/, are not — the operator asked for those by running this.
+#
+# Returns 0 if the operator accepted, 1 otherwise. Only an explicit y/yes
+# counts. Empty input, anything unrecognised, and end-of-input all decline,
+# because a declined install is recoverable by re-running and an unwanted
+# global install is not.
+prereq_consent() { # $1 = prerequisite name, $2 = the command that installs it
+  local reply
+  if [ "$INSTALL_PREREQS" -eq 1 ]; then
+    echo "${YELLOW}note:${RESET} installing $1 — authorised by --install-prereqs"
+    echo "      $2"
+    return 0
+  fi
+  if [ ! -t 0 ]; then
+    echo "${YELLOW}warn:${RESET} $1 is missing, and there is no terminal to ask on."
+    echo "      it would be installed with: $2"
+    echo "      to authorise that unattended, re-run with --install-prereqs"
+    echo "      or set AGENTICAPPS_INSTALL_PREREQS=1."
+    return 1
+  fi
+  echo "${YELLOW}note:${RESET} $1 is not installed. This installer can install it with:"
+  echo "      $2"
+  echo "      That changes a global package other projects on this machine resolve."
+  printf '      install it now? [y/N] '
+  IFS= read -r reply || reply=""
+  case "$(printf '%s' "$reply" | tr '[:upper:]' '[:lower:]')" in
+    y|yes) return 0 ;;
+    *) echo "      declined." ; return 1 ;;
+  esac
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Resolve paths
@@ -72,6 +124,19 @@ if [ ! -d "$SCAFFOLDER_ROOT/skills/agentic-apps-workflow" ]; then
   echo "${RED}error:${RESET} install.sh must be run from the codex-workflow root."
   echo "       expected: $SCAFFOLDER_ROOT/skills/agentic-apps-workflow/"
   exit 1
+fi
+
+# git is a declared prerequisite. §21 requires reporting a missing one BY NAME,
+# with what will not work without it — and git is a system runtime, so it is
+# reported and never offered: installing one is platform-dependent in ways a
+# shell script handles badly. Without this check the failure surfaces further
+# down as git's own "command not found", which names the symptom.
+if ! command -v git >/dev/null 2>&1; then
+  echo "${YELLOW}warn:${RESET} 'git' not found on PATH."
+  echo "      the vendor/agenticapps-shared submodule refresh and this repo's own"
+  echo "      pre-commit wiring will be skipped. Skill installation still works."
+  echo "      git is a system runtime — install it with your OS package manager."
+  SKIPPED=1
 fi
 
 # Codex installed?
@@ -326,15 +391,33 @@ if [ "$SKIP_UPSTREAM" -eq 0 ]; then
   echo "  (generates the openspec/ spec slot + the six \$openspec-* skills under .codex/skills/)"
 
   if [ "$DRY_RUN" -eq 0 ]; then
-    # The openspec CLI is the front end's core dependency — auto-install it.
+    # The openspec CLI is this front end's core dependency, and it used to be
+    # installed automatically on that reasoning. Being a dependency is not the
+    # question §21 asks: `npm i -g` mutates a namespace shared with software
+    # this workflow did not install, so it is offered and never performed
+    # unasked. Instructing without installing would also be conformant; asking
+    # is the option the operator most likely wants.
     if ! command -v openspec >/dev/null 2>&1; then
-      if command -v npm >/dev/null 2>&1; then
-        echo "${YELLOW}note:${RESET} openspec CLI not found — installing @fission-ai/openspec globally..."
-        npm i -g @fission-ai/openspec \
-          || echo "${YELLOW}warn:${RESET} openspec install failed — run manually: npm i -g @fission-ai/openspec"
+      OPENSPEC_INSTALL="npm i -g @fission-ai/openspec"
+      if ! command -v npm >/dev/null 2>&1; then
+        echo "${YELLOW}warn:${RESET} openspec CLI and npm are both absent."
+        echo "      npm is a system runtime — this installer will not install it."
+        echo "      Install Node.js, then: $OPENSPEC_INSTALL"
+        SKIPPED=1
+      elif prereq_consent "openspec" "$OPENSPEC_INSTALL"; then
+        if npm i -g @fission-ai/openspec; then
+          echo "  ${GREEN}OK${RESET}     installed openspec (@fission-ai/openspec, global)"
+        else
+          rc=$?
+          echo "${RED}error:${RESET} $OPENSPEC_INSTALL failed (exit $rc)." >&2
+          echo "      openspec is still absent — this is not being treated as installed." >&2
+          SKIPPED=1
+        fi
       else
-        echo "${YELLOW}warn:${RESET} openspec CLI and npm both absent — install Node, then:"
-        echo "      npm i -g @fission-ai/openspec"
+        SKIPPED=1
+        echo "      skipped: the openspec/ slot will not be generated. Complete it later with:"
+        echo "        $OPENSPEC_INSTALL"
+        echo "        openspec init --tools codex --profile core"
       fi
     fi
 
@@ -385,6 +468,14 @@ echo "  the gap in the meantime."
 echo ""
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "${YELLOW}dry-run only${RESET} — no changes written."
+elif [ "$SKIPPED" -eq 1 ]; then
+  # §21 — completed work and skipped work are reported as different things, and
+  # the exit status says which happened. Reporting alone is not sufficient: a
+  # zero exit is what an automated caller reads.
+  echo "${YELLOW}done, with skipped steps.${RESET} The skills are installed; the steps"
+  echo "named above did not run. Re-run this installer once their prerequisites"
+  echo "are present."
+  exit 1
 else
   echo "${GREEN}done.${RESET} Restart Codex (or open a fresh session) to pick up everything."
   echo ""
